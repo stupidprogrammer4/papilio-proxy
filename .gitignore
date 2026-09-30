@@ -1,0 +1,24 @@
+# Runtime secrets and local state
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+data/
+backups/
+
+# Python / Go build output
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+bin/
+coverage.xml
+*.egg-info/
+
+# Documentation is kept locally, never committed.
+docs/
+*.md
