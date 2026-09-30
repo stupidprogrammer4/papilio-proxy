@@ -4,19 +4,23 @@ from datetime import UTC, datetime
 from unittest import IsolatedAsyncioTestCase, TestCase
 from unittest.mock import AsyncMock, patch
 
-from aiogram.types import CallbackQuery, Chat, Message, PhotoSize, User
+from aiogram.types import Animation, CallbackQuery, Chat, Message, PhotoSize, User
 
 from bot.core.config import Settings
 from bot.presentation.ui import (
+    ANIMATION_PATH,
     BANNER_PATH,
     LOGO_PATH,
     PAGE_SIZE,
     _home_keyboard,
     _home_text,
+    _order_keyboard,
     _plan_card,
     _plans_keyboard,
     _plans_text,
     _protocol_keyboard,
+    _section_keyboard,
+    _show_home,
     _show_view,
     _show_welcome,
     _subscription_card,
@@ -29,6 +33,7 @@ class PresentationTests(TestCase):
     def test_brand_assets_are_available(self) -> None:
         self.assertTrue(BANNER_PATH.is_file())
         self.assertTrue(LOGO_PATH.is_file())
+        self.assertEqual(ANIMATION_PATH.name, "papilio-intro-v2.mp4")
 
     def test_dynamic_plan_uses_rial_storage_and_toman_display(self) -> None:
         plan = Plan("sample", "پلن آزمایشی", 42, 30, 1_234_560)
@@ -36,15 +41,30 @@ class PresentationTests(TestCase):
         self.assertEqual(plan.price_toman, 123_456)
 
     def test_navigation_has_customer_actions(self) -> None:
-        home_labels = [button.text for row in _home_keyboard().inline_keyboard for button in row]
+        home = _home_keyboard().inline_keyboard
+        home_labels = [button.text for row in home for button in row]
         plan_labels = [
             button.text
             for row in _plans_keyboard([Plan("sample", "پلن", 1, 1, 10)]).inline_keyboard
             for button in row
         ]
-        self.assertIn("مشاهدهٔ پلن‌ها", home_labels)
-        self.assertIn("دربارهٔ پاپیلیو", home_labels)
+        self.assertIn("پلن‌ها", home_labels)
+        self.assertIn("درباره", home_labels)
         self.assertEqual(len(plan_labels), 2)
+        self.assertEqual(home[0][0].style, "primary")
+        self.assertEqual(home[1][0].style, "success")
+        self.assertIsNone(home[2][0].style)
+        self.assertEqual(_protocol_keyboard("sample").inline_keyboard[0][0].style, "primary")
+        self.assertIsNone(_protocol_keyboard("sample").inline_keyboard[1][0].style)
+        self.assertEqual(_order_keyboard().inline_keyboard[0][0].style, "primary")
+        section = _section_keyboard("پلن‌ها", "plans").inline_keyboard[0]
+        self.assertEqual(
+            [(button.text, button.style) for button in section],
+            [
+                ("پلن‌ها", "primary"),
+                ("خانه", None),
+            ],
+        )
 
     def test_user_and_admin_text_is_html_escaped(self) -> None:
         plan = Plan("sample", "<b>پلن & تست</b>", 42, 21, 1_234_560)
@@ -72,8 +92,15 @@ class PresentationTests(TestCase):
         self.assertNotIn("پلن 0", text)
         self.assertIn("7 روز", text)
         self.assertEqual(PAGE_SIZE, 6)
-        self.assertIn("⬅️ قبلی", labels)
-        self.assertNotIn("بعدی ➡️", labels)
+        self.assertIn("قبلی", labels)
+        self.assertNotIn("بعدی", labels)
+
+    def test_plan_button_truncates_long_title(self) -> None:
+        plan = Plan("sample", "عنوان بسیار طولانی برای نمایش در دکمهٔ تلگرام", 1, 30, 100_000)
+        button = _plans_keyboard([plan]).inline_keyboard[0][0]
+        self.assertLessEqual(len(button.text), 36)
+        self.assertTrue(button.text.endswith("…"))
+        self.assertIn(plan.title, _plans_text([plan], 0))
 
     def test_pending_request_is_not_described_as_active(self) -> None:
         plan = Plan("sample", "پلن", 42, 30, 1_234_560)
@@ -107,14 +134,43 @@ class PresentationTests(TestCase):
 
 
 class PhotoNavigationTests(IsolatedAsyncioTestCase):
-    async def test_start_sends_one_banner_with_dashboard_keyboard(self) -> None:
+    async def test_home_from_text_restores_one_visual_dashboard(self) -> None:
+        message = Message(
+            message_id=1,
+            date=datetime.now(UTC),
+            chat=Chat(id=1, type="private"),
+            text="صفحهٔ پلن‌ها",
+        )
+        callback = CallbackQuery(
+            id="query",
+            from_user=User(id=1, is_bot=False, first_name="پویا"),
+            chat_instance="instance",
+            message=message,
+            data="home",
+        )
+        with (
+            patch("bot.presentation.ui.ANIMATION_PATH", BANNER_PATH),
+            patch.object(Message, "edit_reply_markup", new_callable=AsyncMock) as clear_keyboard,
+            patch.object(Message, "answer_animation", new_callable=AsyncMock) as answer_animation,
+            patch.object(Message, "answer_photo", new_callable=AsyncMock) as answer_photo,
+            patch.object(Message, "answer", new_callable=AsyncMock) as answer,
+        ):
+            await _show_home(callback)
+        clear_keyboard.assert_awaited_once_with(reply_markup=None)
+        answer_animation.assert_awaited_once()
+        answer_photo.assert_not_awaited()
+        answer.assert_not_awaited()
+
+    async def test_start_falls_back_to_one_banner_with_dashboard_keyboard(self) -> None:
         message = Message(
             message_id=1,
             date=datetime.now(UTC),
             chat=Chat(id=1, type="private"),
         )
         with (
+            patch("bot.presentation.ui.ANIMATION_PATH", BANNER_PATH.with_name("missing-intro.mp4")),
             patch.object(Message, "answer_photo", new_callable=AsyncMock) as answer_photo,
+            patch.object(Message, "answer_animation", new_callable=AsyncMock) as answer_animation,
             patch.object(Message, "answer", new_callable=AsyncMock) as answer,
         ):
             await _show_welcome(message, "پویا")
@@ -123,6 +179,28 @@ class PhotoNavigationTests(IsolatedAsyncioTestCase):
         assert call is not None
         self.assertIn("پیش‌نمایش", call.kwargs["caption"])
         self.assertIsNotNone(call.kwargs["reply_markup"])
+        answer_animation.assert_not_awaited()
+        answer.assert_not_awaited()
+
+    async def test_start_uses_one_animation_when_available(self) -> None:
+        message = Message(
+            message_id=1,
+            date=datetime.now(UTC),
+            chat=Chat(id=1, type="private"),
+        )
+        with (
+            patch("bot.presentation.ui.ANIMATION_PATH", BANNER_PATH),
+            patch.object(Message, "answer_animation", new_callable=AsyncMock) as answer_animation,
+            patch.object(Message, "answer_photo", new_callable=AsyncMock) as answer_photo,
+            patch.object(Message, "answer", new_callable=AsyncMock) as answer,
+        ):
+            await _show_welcome(message, "پویا")
+        answer_animation.assert_awaited_once()
+        call = answer_animation.await_args
+        assert call is not None
+        self.assertIn("پیش‌نمایش", call.kwargs["caption"])
+        self.assertIsNotNone(call.kwargs["reply_markup"])
+        answer_photo.assert_not_awaited()
         answer.assert_not_awaited()
 
     async def test_photo_callback_opens_text_view_without_editing_caption(self) -> None:
@@ -170,3 +248,31 @@ class PhotoNavigationTests(IsolatedAsyncioTestCase):
             await _show_view(callback, _home_text("پویا"), _home_keyboard(), caption_ok=True)
         edit_caption.assert_awaited_once()
         answer.assert_not_awaited()
+
+    async def test_animation_callback_can_return_to_dashboard_in_caption(self) -> None:
+        message = Message(
+            message_id=1,
+            date=datetime.now(UTC),
+            chat=Chat(id=1, type="private"),
+            animation=Animation(
+                file_id="animation",
+                file_unique_id="unique",
+                width=1,
+                height=1,
+                duration=1,
+            ),
+        )
+        callback = CallbackQuery(
+            id="query",
+            from_user=User(id=1, is_bot=False, first_name="پویا"),
+            chat_instance="instance",
+            message=message,
+            data="home",
+        )
+        with (
+            patch.object(Message, "edit_caption", new_callable=AsyncMock) as edit_caption,
+            patch.object(Message, "edit_text", new_callable=AsyncMock) as edit_text,
+        ):
+            await _show_view(callback, _home_text("پویا"), _home_keyboard(), caption_ok=True)
+        edit_caption.assert_awaited_once()
+        edit_text.assert_not_awaited()

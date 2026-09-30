@@ -31,6 +31,7 @@ PAGE_SIZE = 6
 ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets"
 BANNER_PATH = ASSETS_DIR / "papilio-banner-v2.png"
 LOGO_PATH = ASSETS_DIR / "papilio-logo-v2.png"
+ANIMATION_PATH = ASSETS_DIR / "papilio-intro-v2.mp4"
 
 
 def _key(code: str) -> str:
@@ -48,7 +49,13 @@ def _home_text(name: str) -> str:
 
 
 async def _show_welcome(message: Message, name: str) -> None:
-    if BANNER_PATH.is_file():
+    if ANIMATION_PATH.is_file():
+        await message.answer_animation(
+            FSInputFile(ANIMATION_PATH),
+            caption=_home_text(name),
+            reply_markup=_home_keyboard(),
+        )
+    elif BANNER_PATH.is_file():
         await message.answer_photo(
             FSInputFile(BANNER_PATH),
             caption=_home_text(name),
@@ -102,15 +109,36 @@ def _subscription_card(record: Subscription, plan: Plan | None) -> str:
 def _home_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="مشاهدهٔ پلن‌ها", callback_data="plans")],
-            [InlineKeyboardButton(text="درخواست‌ها و سرویس‌های من", callback_data="subscriptions")],
+            [InlineKeyboardButton(text="پلن‌ها", callback_data="plans", style="primary")],
             [
-                InlineKeyboardButton(text="راهنمای اتصال", callback_data="guide"),
+                InlineKeyboardButton(
+                    text="سرویس‌های من",
+                    callback_data="subscriptions",
+                    style="success",
+                )
+            ],
+            [
+                InlineKeyboardButton(text="راهنما", callback_data="guide"),
                 InlineKeyboardButton(text="پشتیبانی", callback_data="support"),
             ],
-            [InlineKeyboardButton(text="دربارهٔ پاپیلیو", callback_data="about")],
+            [InlineKeyboardButton(text="درباره", callback_data="about")],
         ]
     )
+
+
+def _section_keyboard(action: str, callback_data: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=action, callback_data=callback_data, style="primary"),
+                InlineKeyboardButton(text="خانه", callback_data="home"),
+            ]
+        ]
+    )
+
+
+def _short_title(title: str) -> str:
+    return title if len(title) <= 24 else title[:23].rstrip() + "…"
 
 
 def _plans_keyboard(plans: list[Plan], page: int = 0) -> InlineKeyboardMarkup:
@@ -118,7 +146,7 @@ def _plans_keyboard(plans: list[Plan], page: int = 0) -> InlineKeyboardMarkup:
     rows = [
         [
             InlineKeyboardButton(
-                text=f"{plan.title} · {_toman(plan.price_toman)}",
+                text=f"جزئیات · {_short_title(plan.title)}",
                 callback_data=f"plan:{_key(plan.code)}",
             )
         ]
@@ -126,9 +154,9 @@ def _plans_keyboard(plans: list[Plan], page: int = 0) -> InlineKeyboardMarkup:
     ]
     navigation: list[InlineKeyboardButton] = []
     if page:
-        navigation.append(InlineKeyboardButton(text="⬅️ قبلی", callback_data=f"plans:{page - 1}"))
+        navigation.append(InlineKeyboardButton(text="قبلی", callback_data=f"plans:{page - 1}"))
     if (page + 1) * PAGE_SIZE < len(plans):
-        navigation.append(InlineKeyboardButton(text="بعدی ➡️", callback_data=f"plans:{page + 1}"))
+        navigation.append(InlineKeyboardButton(text="بعدی", callback_data=f"plans:{page + 1}"))
     if navigation:
         rows.append(navigation)
     rows.append([InlineKeyboardButton(text="خانه", callback_data="home")])
@@ -139,8 +167,19 @@ def _protocol_keyboard(plan_code: str) -> InlineKeyboardMarkup:
     key = _key(plan_code)
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="ثبت درخواست · VLESS", callback_data=f"order:{key}:vless")],
-            [InlineKeyboardButton(text="ثبت درخواست · VMess", callback_data=f"order:{key}:vmess")],
+            [
+                InlineKeyboardButton(
+                    text="ثبت درخواست · VLESS",
+                    callback_data=f"order:{key}:vless",
+                    style="primary",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="ثبت درخواست · VMess",
+                    callback_data=f"order:{key}:vmess",
+                )
+            ],
             [InlineKeyboardButton(text="بازگشت به پلن‌ها", callback_data="plans")],
         ]
     )
@@ -149,7 +188,13 @@ def _protocol_keyboard(plan_code: str) -> InlineKeyboardMarkup:
 def _order_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="پیگیری درخواست", callback_data="subscriptions")],
+            [
+                InlineKeyboardButton(
+                    text="پیگیری درخواست",
+                    callback_data="subscriptions",
+                    style="primary",
+                )
+            ],
             [
                 InlineKeyboardButton(text="پلن‌ها", callback_data="plans"),
                 InlineKeyboardButton(text="خانه", callback_data="home"),
@@ -188,15 +233,27 @@ async def _show_view(
     message = callback.message
     if not isinstance(message, Message):
         return
-    if message.photo:
+    if message.photo or message.animation:
         if caption_ok:
             await message.edit_caption(caption=text, reply_markup=keyboard)
         else:
-            # Text views can exceed Telegram's photo-caption limit.
+            # Text views can exceed Telegram's media-caption limit.
             await message.edit_reply_markup(reply_markup=None)
             await message.answer(text, reply_markup=keyboard)
     else:
         await message.edit_text(text, reply_markup=keyboard)
+
+
+async def _show_home(callback: CallbackQuery) -> None:
+    message = callback.message
+    if not isinstance(message, Message):
+        return
+    name = callback.from_user.first_name
+    if message.photo or message.animation:
+        await _show_view(callback, _home_text(name), _home_keyboard(), caption_ok=True)
+    else:
+        await message.edit_reply_markup(reply_markup=None)
+        await _show_welcome(message, name)
 
 
 def build_router(service: SubscriptionService, settings: Settings) -> Router:
@@ -236,7 +293,7 @@ def build_router(service: SubscriptionService, settings: Settings) -> Router:
 
     @router.message(Command("help"))
     async def help_command(message: Message) -> None:
-        await message.answer(_guide_text(), reply_markup=_home_keyboard())
+        await message.answer(_guide_text(), reply_markup=_section_keyboard("پلن‌ها", "plans"))
 
     @router.message(Command("plans"))
     async def plans_command(message: Message) -> None:
@@ -244,7 +301,7 @@ def build_router(service: SubscriptionService, settings: Settings) -> Router:
         if not available_plans:
             await message.answer(
                 f"{RTL}<b>پلنی برای نمایش نیست.</b>\n{RTL}فهرست بعداً به‌روز می‌شود.",
-                reply_markup=_home_keyboard(),
+                reply_markup=_section_keyboard("پشتیبانی", "support"),
             )
             return
         await message.answer(
@@ -256,18 +313,14 @@ def build_router(service: SubscriptionService, settings: Settings) -> Router:
     async def subscriptions_command(message: Message) -> None:
         if message.from_user:
             await message.answer(
-                await subscription_text(message.from_user.id), reply_markup=_home_keyboard()
+                await subscription_text(message.from_user.id),
+                reply_markup=_section_keyboard("پلن‌ها", "plans"),
             )
 
     @router.callback_query(F.data == "home")
     async def home(callback: CallbackQuery) -> None:
         await callback.answer()
-        await _show_view(
-            callback,
-            _home_text(callback.from_user.first_name),
-            _home_keyboard(),
-            caption_ok=True,
-        )
+        await _show_home(callback)
 
     @router.callback_query((F.data == "plans") | F.data.startswith("plans:"))
     async def plans(callback: CallbackQuery) -> None:
@@ -282,7 +335,7 @@ def build_router(service: SubscriptionService, settings: Settings) -> Router:
             await _show_view(
                 callback,
                 f"{RTL}<b>پلنی برای نمایش نیست.</b>\n{RTL}فهرست بعداً به‌روز می‌شود.",
-                _home_keyboard(),
+                _section_keyboard("پشتیبانی", "support"),
             )
             return
         page = min(int(raw_page), (len(available_plans) - 1) // PAGE_SIZE)
@@ -343,12 +396,16 @@ def build_router(service: SubscriptionService, settings: Settings) -> Router:
     @router.callback_query(F.data == "subscriptions")
     async def subscriptions(callback: CallbackQuery) -> None:
         await callback.answer()
-        await _show_view(callback, await subscription_text(callback.from_user.id), _home_keyboard())
+        await _show_view(
+            callback,
+            await subscription_text(callback.from_user.id),
+            _section_keyboard("پلن‌ها", "plans"),
+        )
 
     @router.callback_query(F.data == "guide")
     async def guide(callback: CallbackQuery) -> None:
         await callback.answer()
-        await _show_view(callback, _guide_text(), _home_keyboard())
+        await _show_view(callback, _guide_text(), _section_keyboard("پلن‌ها", "plans"))
 
     @router.callback_query(F.data == "support")
     async def support(callback: CallbackQuery) -> None:
@@ -361,7 +418,7 @@ def build_router(service: SubscriptionService, settings: Settings) -> Router:
             )
         else:
             text = f"{RTL}<b>پشتیبانی</b>\n\n{RTL}راه ارتباطی هنوز تنظیم نشده است."
-        await _show_view(callback, text, _home_keyboard())
+        await _show_view(callback, text, _section_keyboard("سرویس‌های من", "subscriptions"))
 
     @router.callback_query(F.data == "about")
     async def about(callback: CallbackQuery) -> None:
@@ -376,9 +433,9 @@ def build_router(service: SubscriptionService, settings: Settings) -> Router:
             await callback.message.answer_photo(
                 FSInputFile(LOGO_PATH),
                 caption=text,
-                reply_markup=_home_keyboard(),
+                reply_markup=_section_keyboard("پلن‌ها", "plans"),
             )
             return
-        await _show_view(callback, text, _home_keyboard())
+        await _show_view(callback, text, _section_keyboard("پلن‌ها", "plans"))
 
     return router
