@@ -19,6 +19,10 @@ bin/
 coverage.xml
 *.egg-info/
 
-# Documentation is kept locally, never committed.
+# Internal planning stays local; README files are public project documentation.
 docs/
-*.md
+AGENTS.md
+START-HERE.fa.md
+PROJECT-BRIEF.md
+TASKS.md
+proxy/PROTOCOL-POLICY.md
