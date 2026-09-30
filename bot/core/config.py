@@ -25,6 +25,8 @@ class Settings:
     database_url: str
     admin_ids: frozenset[int]
     support_username: str | None
+    kpay_api_base_url: str | None
+    credential_encryption_key: str | None
 
     @classmethod
     def from_environment(cls, *, require_token: bool = True) -> Settings:
@@ -39,4 +41,6 @@ class Settings:
             database_url=database_url,
             admin_ids=_admin_ids(os.getenv("ADMIN_IDS") or os.getenv("ADMIN_TELEGRAM_IDS")),
             support_username=os.getenv("SUPPORT_USERNAME", "").lstrip("@") or None,
+            kpay_api_base_url=os.getenv("KPAY_API_BASE_URL", "").rstrip("/") or None,
+            credential_encryption_key=os.getenv("CREDENTIAL_ENCRYPTION_KEY", "").strip() or None,
         )

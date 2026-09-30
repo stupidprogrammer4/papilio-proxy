@@ -37,6 +37,17 @@ class PlanModel(Base):
     )
 
 
+class EncryptedCredentialModel(Base):
+    __tablename__ = "encrypted_credentials"
+
+    name: Mapped[str] = mapped_column(String(128), primary_key=True)
+    ciphertext: Mapped[str] = mapped_column(String(4096))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.current_timestamp())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.current_timestamp(), onupdate=func.current_timestamp()
+    )
+
+
 class SubscriptionModel(Base):
     __tablename__ = "subscriptions"
 
