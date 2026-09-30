@@ -18,6 +18,7 @@ from bot.presentation.ui import (
     _plans_text,
     _protocol_keyboard,
     _show_view,
+    _show_welcome,
     _subscription_card,
     build_router,
 )
@@ -41,8 +42,8 @@ class PresentationTests(TestCase):
             for row in _plans_keyboard([Plan("sample", "پلن", 1, 1, 10)]).inline_keyboard
             for button in row
         ]
-        self.assertIn("🪄 انتخاب پلن", home_labels)
-        self.assertIn("🦋 دربارهٔ پاپیلیو", home_labels)
+        self.assertIn("مشاهدهٔ پلن‌ها", home_labels)
+        self.assertIn("دربارهٔ پاپیلیو", home_labels)
         self.assertEqual(len(plan_labels), 2)
 
     def test_user_and_admin_text_is_html_escaped(self) -> None:
@@ -90,7 +91,7 @@ class PresentationTests(TestCase):
         )
         text = _subscription_card(record, plan)
         self.assertIn("پرداخت تأیید نشده", text)
-        self.assertIn("لینک اتصال ندارد", text)
+        self.assertNotIn("فعال", text)
         self.assertIn("123٬456 تومان", text)
 
     def test_public_commands_have_handlers(self) -> None:
@@ -106,6 +107,24 @@ class PresentationTests(TestCase):
 
 
 class PhotoNavigationTests(IsolatedAsyncioTestCase):
+    async def test_start_sends_one_banner_with_dashboard_keyboard(self) -> None:
+        message = Message(
+            message_id=1,
+            date=datetime.now(UTC),
+            chat=Chat(id=1, type="private"),
+        )
+        with (
+            patch.object(Message, "answer_photo", new_callable=AsyncMock) as answer_photo,
+            patch.object(Message, "answer", new_callable=AsyncMock) as answer,
+        ):
+            await _show_welcome(message, "پویا")
+        answer_photo.assert_awaited_once()
+        call = answer_photo.await_args
+        assert call is not None
+        self.assertIn("پیش‌نمایش", call.kwargs["caption"])
+        self.assertIsNotNone(call.kwargs["reply_markup"])
+        answer.assert_not_awaited()
+
     async def test_photo_callback_opens_text_view_without_editing_caption(self) -> None:
         message = Message(
             message_id=1,
@@ -129,3 +148,25 @@ class PhotoNavigationTests(IsolatedAsyncioTestCase):
         clear_keyboard.assert_awaited_once_with(reply_markup=None)
         answer.assert_awaited_once()
         edit_text.assert_not_awaited()
+
+    async def test_photo_callback_can_return_to_dashboard_in_caption(self) -> None:
+        message = Message(
+            message_id=1,
+            date=datetime.now(UTC),
+            chat=Chat(id=1, type="private"),
+            photo=[PhotoSize(file_id="photo", file_unique_id="unique", width=1, height=1)],
+        )
+        callback = CallbackQuery(
+            id="query",
+            from_user=User(id=1, is_bot=False, first_name="پویا"),
+            chat_instance="instance",
+            message=message,
+            data="home",
+        )
+        with (
+            patch.object(Message, "edit_caption", new_callable=AsyncMock) as edit_caption,
+            patch.object(Message, "answer", new_callable=AsyncMock) as answer,
+        ):
+            await _show_view(callback, _home_text("پویا"), _home_keyboard(), caption_ok=True)
+        edit_caption.assert_awaited_once()
+        answer.assert_not_awaited()

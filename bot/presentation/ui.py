@@ -5,7 +5,7 @@ from html import escape
 from pathlib import Path
 
 from aiogram import F, Router
-from aiogram.enums import ChatAction, ChatType
+from aiogram.enums import ChatType
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
     CallbackQuery,
@@ -29,8 +29,8 @@ from bot.services.subscriptions import (
 RTL = "\u200f"
 PAGE_SIZE = 6
 ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets"
-BANNER_PATH = ASSETS_DIR / "papilio-banner.png"
-LOGO_PATH = ASSETS_DIR / "papilio-logo.png"
+BANNER_PATH = ASSETS_DIR / "papilio-banner-v2.png"
+LOGO_PATH = ASSETS_DIR / "papilio-logo-v2.png"
 
 
 def _key(code: str) -> str:
@@ -40,21 +40,22 @@ def _key(code: str) -> str:
 
 def _home_text(name: str) -> str:
     return (
-        f"{RTL}سلام {escape(name)} 👋\n\n"
-        f"{RTL}<b>به پاپیلیو خوش اومدی 🦋</b>\n"
-        f"{RTL}اینجا می‌تونی پلن‌های موجود رو ببینی و درخواست‌ها و سرویس‌هات رو پیگیری کنی.\n\n"
-        f"{RTL}از منوی زیر شروع کن:"
+        f"{RTL}<b>پاپیلیو</b>\n"
+        f"{RTL}سلام {escape(name)}، خوش آمدی.\n\n"
+        f"{RTL}پلن‌ها و وضعیت درخواست‌هایت را از همین‌جا ببین.\n"
+        f"{RTL}<i>نسخهٔ پیش‌نمایش · پرداخت و تحویل سرویس هنوز فعال نیست.</i>"
     )
 
 
 async def _show_welcome(message: Message, name: str) -> None:
-    if message.bot is not None:
-        await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_PHOTO)
     if BANNER_PATH.is_file():
-        await message.answer_photo(FSInputFile(BANNER_PATH), caption=f"{RTL}<b>پاپیلیو 🦋</b>")
-    if message.bot is not None:
-        await message.bot.send_chat_action(message.chat.id, ChatAction.TYPING)
-    await message.answer(_home_text(name), reply_markup=_home_keyboard())
+        await message.answer_photo(
+            FSInputFile(BANNER_PATH),
+            caption=_home_text(name),
+            reply_markup=_home_keyboard(),
+        )
+    else:
+        await message.answer(_home_text(name), reply_markup=_home_keyboard())
 
 
 def _toman(value: int) -> str:
@@ -70,46 +71,44 @@ def _size(value: int) -> str:
 def _plan_card(plan: Plan) -> str:
     return (
         f"{RTL}<b>{escape(plan.title)}</b>\n"
-        f"{RTL}📦 {plan.traffic_gb} گیگابایت  ·  🗓 {plan.duration_days} روز\n"
-        f"{RTL}💳 {_toman(plan.price_toman)}"
+        f"{RTL}{plan.traffic_gb} گیگابایت · {plan.duration_days} روز\n"
+        f"{RTL}{_toman(plan.price_toman)}"
     )
 
 
 def _subscription_card(record: Subscription, plan: Plan | None) -> str:
     state = {
-        SubscriptionStatus.ACTIVE: "🟢 فعال",
-        SubscriptionStatus.PENDING_PAYMENT: "🟡 درخواست ثبت‌شده؛ پرداخت تأیید نشده",
-        SubscriptionStatus.EXPIRED: "⚪️ منقضی شده",
-        SubscriptionStatus.SUSPENDED: "🔴 متوقف شده",
+        SubscriptionStatus.ACTIVE: "فعال",
+        SubscriptionStatus.PENDING_PAYMENT: "ثبت اولیه · پرداخت تأیید نشده",
+        SubscriptionStatus.EXPIRED: "منقضی‌شده",
+        SubscriptionStatus.SUSPENDED: "متوقف‌شده",
     }[record.status]
     if record.status == SubscriptionStatus.PENDING_PAYMENT:
         return (
             f"{RTL}<b>{escape(plan.title) if plan else 'پلن آرشیوی'}</b> · {state}\n"
             f"{RTL}شناسهٔ پیگیری: <code>{escape(record.id[:8])}</code>\n"
-            f"{RTL}مبلغ ثبت‌شده: {_toman(record.price_rial // 10)}\n"
-            f"{RTL}این درخواست هنوز سرویس فعال یا لینک اتصال ندارد."
+            f"{RTL}مبلغ: {_toman(record.price_rial // 10)}"
         )
     expiry = (
         record.expires_at.astimezone().strftime("%Y/%m/%d") if record.expires_at else "ثبت نشده"
     )
     return (
         f"{RTL}<b>{escape(plan.title) if plan else 'پلن آرشیوی'}</b> · {state}\n"
-        f"{RTL}📊 مصرف: {_size(record.traffic_used_bytes)} از {_size(record.traffic_limit_bytes)}\n"
-        f"{RTL}✨ مانده: <b>{_size(record.traffic_remaining_bytes)}</b>\n"
-        f"{RTL}🗓 انقضا: {expiry}"
+        f"{RTL}مصرف: {_size(record.traffic_used_bytes)} از {_size(record.traffic_limit_bytes)}\n"
+        f"{RTL}مانده: {_size(record.traffic_remaining_bytes)} · انقضا: {expiry}"
     )
 
 
 def _home_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🪄 انتخاب پلن", callback_data="plans")],
-            [InlineKeyboardButton(text="📊 سرویس‌های من", callback_data="subscriptions")],
+            [InlineKeyboardButton(text="مشاهدهٔ پلن‌ها", callback_data="plans")],
+            [InlineKeyboardButton(text="درخواست‌ها و سرویس‌های من", callback_data="subscriptions")],
             [
-                InlineKeyboardButton(text="📚 راهنمای اتصال", callback_data="guide"),
-                InlineKeyboardButton(text="💬 پشتیبانی", callback_data="support"),
+                InlineKeyboardButton(text="راهنمای اتصال", callback_data="guide"),
+                InlineKeyboardButton(text="پشتیبانی", callback_data="support"),
             ],
-            [InlineKeyboardButton(text="🦋 دربارهٔ پاپیلیو", callback_data="about")],
+            [InlineKeyboardButton(text="دربارهٔ پاپیلیو", callback_data="about")],
         ]
     )
 
@@ -119,7 +118,7 @@ def _plans_keyboard(plans: list[Plan], page: int = 0) -> InlineKeyboardMarkup:
     rows = [
         [
             InlineKeyboardButton(
-                text=f"{plan.title} · {plan.traffic_gb} گیگ · {_toman(plan.price_toman)}",
+                text=f"{plan.title} · {_toman(plan.price_toman)}",
                 callback_data=f"plan:{_key(plan.code)}",
             )
         ]
@@ -132,7 +131,7 @@ def _plans_keyboard(plans: list[Plan], page: int = 0) -> InlineKeyboardMarkup:
         navigation.append(InlineKeyboardButton(text="بعدی ➡️", callback_data=f"plans:{page + 1}"))
     if navigation:
         rows.append(navigation)
-    rows.append([InlineKeyboardButton(text="↩️ خانه", callback_data="home")])
+    rows.append([InlineKeyboardButton(text="خانه", callback_data="home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -140,9 +139,21 @@ def _protocol_keyboard(plan_code: str) -> InlineKeyboardMarkup:
     key = _key(plan_code)
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="انتخاب VLESS", callback_data=f"order:{key}:vless")],
-            [InlineKeyboardButton(text="انتخاب VMess", callback_data=f"order:{key}:vmess")],
-            [InlineKeyboardButton(text="↩️ بازگشت به پلن‌ها", callback_data="plans")],
+            [InlineKeyboardButton(text="ثبت درخواست · VLESS", callback_data=f"order:{key}:vless")],
+            [InlineKeyboardButton(text="ثبت درخواست · VMess", callback_data=f"order:{key}:vmess")],
+            [InlineKeyboardButton(text="بازگشت به پلن‌ها", callback_data="plans")],
+        ]
+    )
+
+
+def _order_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="پیگیری درخواست", callback_data="subscriptions")],
+            [
+                InlineKeyboardButton(text="پلن‌ها", callback_data="plans"),
+                InlineKeyboardButton(text="خانه", callback_data="home"),
+            ],
         ]
     )
 
@@ -151,32 +162,39 @@ def _plans_text(plans: list[Plan], page: int) -> str:
     pages = max(1, (len(plans) + PAGE_SIZE - 1) // PAGE_SIZE)
     visible = plans[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
     return (
-        f"{RTL}<b>پلن‌های موجود</b> · صفحهٔ {page + 1} از {pages}\n"
-        f"{RTL}مبلغ‌ها به تومان نمایش داده می‌شوند.\n\n"
+        f"{RTL}<b>پلن‌ها</b> · صفحهٔ {page + 1} از {pages}\n\n"
         + "\n\n".join(_plan_card(plan) for plan in visible)
-        + f"\n\n{RTL}برای جزئیات و ثبت درخواست، روی پلن بزن."
+        + f"\n\n{RTL}<i>پرداخت و فعال‌سازی هنوز در دسترس نیست.</i>"
     )
 
 
 def _guide_text() -> str:
     return (
-        f"{RTL}<b>راهنمای اتصال</b> 📚\n\n"
-        f"{RTL}۱. پس از فعال‌شدن سرویس، لینک اشتراک اختصاصی‌ات را دریافت کن.\n"
-        f"{RTL}۲. لینک را در برنامه‌ای که از نوع اتصال سرویس پشتیبانی می‌کند وارد کن.\n"
-        f"{RTL}۳. برای دریافت تغییرات، اشتراک را در همان برنامه به‌روزرسانی کن.\n\n"
-        f"{RTL}🔒 لینک اشتراک شخصی است؛ آن را با دیگران به اشتراک نگذار.\n"
-        f"{RTL}تحویل خودکار لینک هنوز فعال نشده است."
+        f"{RTL}<b>راهنمای اتصال</b>\n\n"
+        f"{RTL}پس از فعال‌سازی، لینک اشتراک را در برنامهٔ سازگار وارد کن. "
+        f"برای دریافت تغییرات، اشتراک را در برنامه به‌روزرسانی کن.\n\n"
+        f"{RTL}لینک اختصاصی است؛ آن را در اختیار دیگران نگذار.\n"
+        f"{RTL}<i>تحویل لینک از طریق بات هنوز فعال نیست.</i>"
     )
 
 
-async def _show_view(callback: CallbackQuery, text: str, keyboard: InlineKeyboardMarkup) -> None:
+async def _show_view(
+    callback: CallbackQuery,
+    text: str,
+    keyboard: InlineKeyboardMarkup,
+    *,
+    caption_ok: bool = False,
+) -> None:
     message = callback.message
     if not isinstance(message, Message):
         return
     if message.photo:
-        # Text views can exceed Telegram's photo-caption limit.
-        await message.edit_reply_markup(reply_markup=None)
-        await message.answer(text, reply_markup=keyboard)
+        if caption_ok:
+            await message.edit_caption(caption=text, reply_markup=keyboard)
+        else:
+            # Text views can exceed Telegram's photo-caption limit.
+            await message.edit_reply_markup(reply_markup=None)
+            await message.answer(text, reply_markup=keyboard)
     else:
         await message.edit_text(text, reply_markup=keyboard)
 
@@ -195,13 +213,15 @@ def build_router(service: SubscriptionService, settings: Settings) -> Router:
     async def subscription_text(telegram_id: int) -> str:
         records = await service.list_subscriptions(telegram_id)
         if not records:
-            return f"{RTL}<b>سرویس‌های من</b>\n\n{RTL}هنوز درخواست یا سرویسی ثبت نشده است."
+            return f"{RTL}<b>درخواست‌ها و سرویس‌های من</b>\n\n{RTL}هنوز موردی ثبت نشده است."
         plans_by_code = {plan.code: plan for plan in await service.list_plans(active_only=False)}
         body = f"{RTL}<b>سرویس‌ها و درخواست‌های من</b>\n\n" + "\n\n".join(
             _subscription_card(item, plans_by_code.get(item.plan_code)) for item in records[:8]
         )
         if len(records) > 8:
             body += f"\n\n{RTL}۸ مورد تازه نمایش داده شد."
+        if any(item.status == SubscriptionStatus.PENDING_PAYMENT for item in records[:8]):
+            body += f"\n\n{RTL}<i>درخواست ثبت اولیه هنوز سرویس فعال ندارد.</i>"
         return body
 
     @router.message(CommandStart())
@@ -223,7 +243,7 @@ def build_router(service: SubscriptionService, settings: Settings) -> Router:
         available_plans = await service.list_plans()
         if not available_plans:
             await message.answer(
-                f"{RTL}<b>فعلاً پلن فعالی نمایش داده نمی‌شود.</b>\n{RTL}بعداً دوباره سر بزن.",
+                f"{RTL}<b>پلنی برای نمایش نیست.</b>\n{RTL}فهرست بعداً به‌روز می‌شود.",
                 reply_markup=_home_keyboard(),
             )
             return
@@ -242,7 +262,12 @@ def build_router(service: SubscriptionService, settings: Settings) -> Router:
     @router.callback_query(F.data == "home")
     async def home(callback: CallbackQuery) -> None:
         await callback.answer()
-        await _show_view(callback, _home_text(callback.from_user.first_name), _home_keyboard())
+        await _show_view(
+            callback,
+            _home_text(callback.from_user.first_name),
+            _home_keyboard(),
+            caption_ok=True,
+        )
 
     @router.callback_query((F.data == "plans") | F.data.startswith("plans:"))
     async def plans(callback: CallbackQuery) -> None:
@@ -256,7 +281,7 @@ def build_router(service: SubscriptionService, settings: Settings) -> Router:
         if not available_plans:
             await _show_view(
                 callback,
-                f"{RTL}<b>فعلاً پلن فعالی نمایش داده نمی‌شود.</b>\n{RTL}بعداً دوباره سر بزن.",
+                f"{RTL}<b>پلنی برای نمایش نیست.</b>\n{RTL}فهرست بعداً به‌روز می‌شود.",
                 _home_keyboard(),
             )
             return
@@ -282,9 +307,9 @@ def build_router(service: SubscriptionService, settings: Settings) -> Router:
         await callback.answer()
         await _show_view(
             callback,
-            f"{RTL}<b>جزئیات پلن</b>\n\n{_plan_card(plan)}\n\n"
-            f"{RTL}<b>نوع اتصال را انتخاب کن</b>\n"
-            f"{RTL}ثبت درخواست در حال حاضر پرداخت یا فعال‌سازی سرویس را انجام نمی‌دهد.",
+            f"{RTL}{_plan_card(plan)}\n\n"
+            f"{RTL}نوع اتصال را برای ثبت اولیهٔ درخواست انتخاب کن.\n"
+            f"{RTL}<i>این مرحله پرداخت یا فعال‌سازی نیست.</i>",
             _protocol_keyboard(plan.code),
         )
 
@@ -308,13 +333,11 @@ def build_router(service: SubscriptionService, settings: Settings) -> Router:
         await callback.answer("درخواست ثبت شد")
         await _show_view(
             callback,
-            f"{RTL}<b>درخواست ثبت شد</b> 📝\n\n"
-            f"{RTL}پلن: {escape(plan.title)} · {protocol.value.upper()}\n"
-            f"{RTL}مبلغ: {_toman(order.price_rial // 10)}\n"
-            f"{RTL}شناسهٔ پیگیری: <code>{escape(order.id[:8])}</code>\n\n"
-            f"{RTL}پرداخت در بات فعال نیست. این درخواست به معنی خرید، تأیید پرداخت یا فعال‌شدن سرویس نیست."
-            f"\n{RTL}برای پیگیری، از بخش «سرویس‌های من» استفاده کن.",
-            _home_keyboard(),
+            f"{RTL}<b>درخواست ثبت شد</b>\n\n"
+            f"{RTL}{escape(plan.title)} · {protocol.value.upper()} · {_toman(order.price_rial // 10)}\n"
+            f"{RTL}کد پیگیری: <code>{escape(order.id[:8])}</code>\n\n"
+            f"{RTL}<i>پرداخت و فعال‌سازی انجام نشده است.</i>",
+            _order_keyboard(),
         )
 
     @router.callback_query(F.data == "subscriptions")
@@ -330,23 +353,23 @@ def build_router(service: SubscriptionService, settings: Settings) -> Router:
     @router.callback_query(F.data == "support")
     async def support(callback: CallbackQuery) -> None:
         await callback.answer()
-        destination = (
-            f"@{escape(settings.support_username)}"
-            if settings.support_username
-            else "پشتیبانی هنوز تنظیم نشده است"
-        )
-        await _show_view(
-            callback, f"{RTL}<b>پشتیبانی</b> 💬\n\n{RTL}{destination}", _home_keyboard()
-        )
+        if settings.support_username:
+            destination = f"@{escape(settings.support_username)}"
+            text = (
+                f"{RTL}<b>پشتیبانی</b>\n\n"
+                f"{RTL}برای پیگیری، کد درخواستت را برای {destination} بفرست."
+            )
+        else:
+            text = f"{RTL}<b>پشتیبانی</b>\n\n{RTL}راه ارتباطی هنوز تنظیم نشده است."
+        await _show_view(callback, text, _home_keyboard())
 
-    # Handler registration continues with the about view below.
     @router.callback_query(F.data == "about")
     async def about(callback: CallbackQuery) -> None:
-        await callback.answer("🦋 پاپیلیو")
+        await callback.answer()
         text = (
-            f"{RTL}<b>پاپیلیو 🦋</b>\n\n"
-            f"{RTL}پنلی ساده برای دیدن پلن‌های موجود و پیگیری وضعیت درخواست و سرویس.\n"
-            f"{RTL}امکانات پرداخت و تحویل لینک هنوز در حال آماده‌سازی‌اند."
+            f"{RTL}<b>پاپیلیو</b>\n\n"
+            f"{RTL}انتخاب پلن و پیگیری وضعیت سرویس در یک گفت‌وگو.\n"
+            f"{RTL}<i>نسخهٔ فعلی پیش‌نمایش است؛ پرداخت و تحویل سرویس فعال نیست.</i>"
         )
         if isinstance(callback.message, Message) and LOGO_PATH.is_file():
             await callback.message.edit_reply_markup(reply_markup=None)

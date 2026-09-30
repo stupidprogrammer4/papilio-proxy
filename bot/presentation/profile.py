@@ -7,7 +7,7 @@ from aiogram.types import BotCommand, FSInputFile, InputProfilePhotoStatic
 
 from bot.models.branding import BotBranding
 
-LOGO_PATH = Path(__file__).resolve().parents[2] / "assets" / "papilio-logo.png"
+LOGO_PATH = Path(__file__).resolve().parents[2] / "assets" / "papilio-logo-v2.png"
 
 PUBLIC_COMMANDS = [
     BotCommand(command="start", description="صفحهٔ اصلی"),
