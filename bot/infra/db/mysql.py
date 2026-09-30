@@ -6,8 +6,15 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.mysql import insert
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from bot.infra.db.models import Base, PlanModel, SubscriptionModel, UserModel
+from bot.infra.db.models import (
+    Base,
+    BotBrandingModel,
+    PlanModel,
+    SubscriptionModel,
+    UserModel,
+)
 from bot.infra.db.pool import create_mysql_engine
+from bot.models.branding import DEFAULT_BRANDING, BotBranding
 from bot.services.subscriptions import (
     Plan,
     PlanRepository,
@@ -41,9 +48,42 @@ class MysqlSubscriptionRepository(SubscriptionRepository, PlanRepository):
     async def initialize(self) -> None:
         async with self._engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
+        statement = insert(BotBrandingModel).values(
+            id=1,
+            name=DEFAULT_BRANDING.name,
+            short_description=DEFAULT_BRANDING.short_description,
+            description=DEFAULT_BRANDING.description,
+        )
+        async with self._session_factory() as session, session.begin():
+            await session.execute(statement.prefix_with("IGNORE"))
 
     async def close(self) -> None:
         await self._engine.dispose()
+
+    async def get_branding(self) -> BotBranding:
+        statement = select(BotBrandingModel).where(BotBrandingModel.id == 1)
+        async with self._session_factory() as session:
+            record = await session.scalar(statement)
+        if record is None:
+            raise RuntimeError("Bot branding has not been initialized")
+        return BotBranding(
+            name=record.name,
+            short_description=record.short_description,
+            description=record.description,
+        )
+
+    async def save_branding(self, branding: BotBranding) -> None:
+        statement = (
+            update(BotBrandingModel)
+            .where(BotBrandingModel.id == 1)
+            .values(
+                name=branding.name,
+                short_description=branding.short_description,
+                description=branding.description,
+            )
+        )
+        async with self._session_factory() as session, session.begin():
+            await session.execute(statement)
 
     async def upsert_user(self, user: TelegramUser) -> None:
         statement = insert(UserModel).values(

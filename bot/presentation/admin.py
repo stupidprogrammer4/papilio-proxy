@@ -35,6 +35,7 @@ def _menu_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [_button("📋 مدیریت پلن‌ها", "ap:list:0")],
             [_button("➕ پلن جدید", "ap:new")],
+            [_button("🦋 هویت و توضیحات بات", "brand:menu")],
         ]
     )
 
@@ -172,7 +173,7 @@ def build_admin_router(service: AdminPlanService) -> Router:
             return
         await state.clear()
         await message.answer(
-            f"{RTL}<b>مرکز مدیریت پاپیلیو</b>\n{RTL}پلن‌ها را ببینید، بسازید یا ویرایش کنید.",
+            f"{RTL}<b>مرکز مدیریت پاپیلیو</b>\n{RTL}پلن‌ها و هویت بات را از اینجا مدیریت کنید.",
             reply_markup=_menu_keyboard(),
         )
 
