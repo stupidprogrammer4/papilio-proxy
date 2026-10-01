@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, patch
 
@@ -62,7 +61,8 @@ class UsageAlertTests(IsolatedAsyncioTestCase):
                 warning_result = await warning_handle.wait_result(timeout=5)
             self.assertFalse(node_result.is_err)
             self.assertFalse(warning_result.is_err)
-            reconciler.run_once.assert_awaited_once()
+            # The 2-second beat may also fire while the explicitly enqueued job runs.
+            reconciler.run_once.assert_awaited()
         finally:
             await bot.session.close()
 

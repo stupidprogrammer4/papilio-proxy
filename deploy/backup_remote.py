@@ -22,9 +22,8 @@ from pathlib import Path
 
 import paramiko
 from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes
-
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 ROOT = Path(__file__).resolve().parents[1]
 MAX_DUMP_BYTES = 64 * 1024 * 1024

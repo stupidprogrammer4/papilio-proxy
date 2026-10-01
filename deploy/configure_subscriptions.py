@@ -4,9 +4,8 @@ Run as root from /opt/papilio-proxy after staging subscriptions.conf.
 This script never prints or rewrites existing secret values.
 """
 
-from pathlib import Path
 import subprocess
-
+from pathlib import Path
 
 ROOT = Path("/opt/papilio-proxy")
 ENV = ROOT / ".env"
