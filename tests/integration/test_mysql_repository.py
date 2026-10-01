@@ -30,7 +30,8 @@ class MysqlRepositoryTests(IsolatedAsyncioTestCase):
         repository = MysqlSubscriptionRepository(os.environ["PAPILIO_TEST_DATABASE_URL"])
         payments = MysqlPaymentRepository(os.environ["PAPILIO_TEST_DATABASE_URL"])
         access_repository = MysqlAccessRepository(
-            os.environ["PAPILIO_TEST_DATABASE_URL"], Fernet.generate_key().decode()
+            os.environ["PAPILIO_TEST_DATABASE_URL"],
+            os.getenv("CREDENTIAL_ENCRYPTION_KEY") or Fernet.generate_key().decode()
         )
         code = "test_" + uuid4().hex
         owner = -(uuid4().int % 2**40 + 1)
