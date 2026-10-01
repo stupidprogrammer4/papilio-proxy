@@ -80,6 +80,7 @@ class SubscriptionService:
             traffic_used_bytes=0,
             expires_at=None,
             created_at=datetime.now(UTC),
+            duration_days=plan.duration_days,
         )
         await self.repository.create(record)
         return record

@@ -12,6 +12,7 @@ from bot.presentation.ui import (
     BANNER_PATH,
     LOGO_PATH,
     PAGE_SIZE,
+    _guide_text,
     _home_keyboard,
     _home_text,
     _order_keyboard,
@@ -48,21 +49,27 @@ class PresentationTests(TestCase):
             for row in _plans_keyboard([Plan("sample", "پلن", 1, 1, 10)]).inline_keyboard
             for button in row
         ]
-        self.assertIn("پلن‌ها", home_labels)
-        self.assertIn("درباره", home_labels)
+        self.assertIn("📦 مشاهدهٔ پلن‌ها", home_labels)
+        self.assertIn("🦋 دربارهٔ پاپیلیو", home_labels)
         self.assertEqual(len(plan_labels), 2)
         self.assertEqual(home[0][0].style, "primary")
         self.assertEqual(home[1][0].style, "success")
         self.assertIsNone(home[2][0].style)
-        self.assertEqual(_protocol_keyboard("sample").inline_keyboard[0][0].style, "primary")
-        self.assertIsNone(_protocol_keyboard("sample").inline_keyboard[1][0].style)
+        purchase = _protocol_keyboard("sample").inline_keyboard[0][0]
+        self.assertEqual(purchase.style, "success")
+        self.assertIn("هر دو لینک", purchase.text)
+        self.assertTrue((purchase.callback_data or "").endswith(":both"))
+        self.assertEqual(_plans_keyboard([Plan("p", "پلن", 1, 1, 10)]).inline_keyboard[0][0].style, "primary")
+        copy_button = _order_keyboard("order-123").inline_keyboard[0][0]
+        assert copy_button.copy_text is not None
+        self.assertEqual(copy_button.copy_text.text, "order-123")
         self.assertEqual(_order_keyboard().inline_keyboard[0][0].style, "primary")
         section = _section_keyboard("پلن‌ها", "plans").inline_keyboard[0]
         self.assertEqual(
             [(button.text, button.style) for button in section],
             [
-                ("پلن‌ها", "primary"),
-                ("خانه", None),
+                ("📦 پلن‌ها", "primary"),
+                ("🏠 خانه", None),
             ],
         )
 
@@ -92,14 +99,27 @@ class PresentationTests(TestCase):
         self.assertNotIn("پلن 0", text)
         self.assertIn("7 روز", text)
         self.assertEqual(PAGE_SIZE, 6)
-        self.assertIn("قبلی", labels)
-        self.assertNotIn("بعدی", labels)
+        self.assertIn("⬅️ قبلی", labels)
+        self.assertNotIn("بعدی ➡️", labels)
+
+    def test_welcome_caption_has_guidance_and_fits_media_limit(self) -> None:
+        text = _home_text("<&" * 1000)
+        self.assertLessEqual(len(text.encode("utf-16-le")) // 2, 1024)
+        for item in ("📦", "📊", "🧭", "💬", "پیش‌نمایش", "هنوز فعال نیست"):
+            self.assertIn(item, text)
+
+    def test_guide_explains_steps_and_warns_about_secrets(self) -> None:
+        text = _guide_text()
+        for item in ("۱️⃣", "۲️⃣", "۳️⃣", "۴️⃣", "مثل رمز", "هنوز فعال نیست"):
+            self.assertIn(item, text)
 
     def test_plan_button_truncates_long_title(self) -> None:
         plan = Plan("sample", "عنوان بسیار طولانی برای نمایش در دکمهٔ تلگرام", 1, 30, 100_000)
         button = _plans_keyboard([plan]).inline_keyboard[0][0]
         self.assertLessEqual(len(button.text), 36)
-        self.assertTrue(button.text.endswith("…"))
+        self.assertIn("…", button.text)
+        self.assertIn("🦋", button.text)
+        self.assertIn("10٬000 تومان", button.text)
         self.assertIn(plan.title, _plans_text([plan], 0))
 
     def test_pending_request_is_not_described_as_active(self) -> None:
@@ -120,6 +140,25 @@ class PresentationTests(TestCase):
         self.assertIn("پرداخت تأیید نشده", text)
         self.assertNotIn("فعال", text)
         self.assertIn("123٬456 تومان", text)
+
+    def test_paid_order_is_not_described_as_active_or_delivered(self) -> None:
+        plan = Plan("sample", "پلن", 42, 30, 1_234_560)
+        record = Subscription(
+            id="12345678-0000",
+            telegram_id=1,
+            plan_code=plan.code,
+            protocol=Protocol.VLESS,
+            status=SubscriptionStatus.PAID_AWAITING_PROVISIONING,
+            traffic_limit_bytes=plan.traffic_bytes,
+            traffic_used_bytes=0,
+            expires_at=None,
+            created_at=datetime.now(UTC),
+            price_rial=plan.price_rial,
+        )
+        text = _subscription_card(record, plan)
+        self.assertIn("پرداخت تأیید شد", text)
+        self.assertIn("لینک اتصال هنوز صادر نشده", text)
+        self.assertNotIn("مصرف:", text)
 
     def test_public_commands_have_handlers(self) -> None:
         settings = Settings(None, "mysql+aiomysql://", frozenset(), None, None, None)
