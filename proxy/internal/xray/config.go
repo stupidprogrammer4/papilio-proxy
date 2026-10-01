@@ -26,6 +26,10 @@ type User struct {
 	Email string
 }
 
+func (u User) Validate() error {
+	return validateUsers([]User{u})
+}
+
 // RealityServerConfig contains node-owned data. PrivateKey is a secret and
 // must be loaded by the deployment environment, never checked into source.
 type RealityServerConfig struct {

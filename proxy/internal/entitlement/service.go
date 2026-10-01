@@ -40,6 +40,7 @@ const (
 	Active         Decision = "active"
 	Expired        Decision = "expired"
 	QuotaExhausted Decision = "quota_exhausted"
+	UsageUnknown   Decision = "usage_unknown"
 )
 
 type Result struct {
@@ -48,21 +49,27 @@ type Result struct {
 	Usage  uint64
 }
 
-// Evaluate keeps only accounts with remaining quota and a future expiry. A
-// missing counter is deliberately treated as zero (new users); callers should
-// alert on missing counters for existing accounts rather than silently losing
-// traffic data.
 func Evaluate(now time.Time, entitlements []Entitlement, counters map[string]Counters) ([]xray.User, []Result, error) {
 	active := make([]xray.User, 0, len(entitlements))
 	results := make([]Result, 0, len(entitlements))
 	seen := make(map[string]struct{}, len(entitlements))
+	seenIDs := make(map[string]struct{}, len(entitlements))
 	for _, entitlement := range entitlements {
-		email := strings.TrimSpace(entitlement.XrayUser.Email)
+		if err := entitlement.XrayUser.Validate(); err != nil {
+			return nil, nil, err
+		}
+		email := entitlement.XrayUser.Email
+		id := strings.ToLower(entitlement.XrayUser.ID)
 		if _, duplicate := seen[email]; duplicate {
 			return nil, nil, errors.New("duplicate entitlement statistics identifier")
 		}
 		seen[email] = struct{}{}
-		usage, err := counters[email].Total()
+		if _, duplicate := seenIDs[id]; duplicate {
+			return nil, nil, errors.New("duplicate entitlement user ID")
+		}
+		seenIDs[id] = struct{}{}
+		counter, known := counters[email]
+		usage, err := counter.Total()
 		if err != nil {
 			return nil, nil, err
 		}
@@ -70,6 +77,8 @@ func Evaluate(now time.Time, entitlements []Entitlement, counters map[string]Cou
 		switch {
 		case entitlement.ExpiresAt.IsZero() || !entitlement.ExpiresAt.After(now):
 			result.Status = Expired
+		case !known:
+			result.Status = UsageUnknown
 		case entitlement.QuotaBytes == 0 || usage >= entitlement.QuotaBytes:
 			result.Status = QuotaExhausted
 		default:
