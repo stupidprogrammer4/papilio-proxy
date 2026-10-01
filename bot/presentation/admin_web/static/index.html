@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#080d18">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>Papilio — پنل مدیریت</title>
+  <link rel="icon" href="/admin/logo.png" type="image/png">
+  <link rel="stylesheet" href="/admin/assets/admin.css">
+  <script src="/admin/assets/admin.js" defer></script>
+</head>
+<body>
+  <div class="ambient ambient-one" aria-hidden="true"></div>
+  <div class="ambient ambient-two" aria-hidden="true"></div>
+
+  <section class="login-screen" id="login-screen" aria-labelledby="login-title">
+    <div class="login-intro">
+      <div class="brand brand-large"><img src="/admin/logo.png" alt=""><span>PAPILIO<span class="brand-dot">.</span></span></div>
+      <p class="eyebrow">COMMAND CENTER / پنل مالک</p>
+      <h1 id="login-title">همه‌چیز،<br><em>واضح و در کنترل.</em></h1>
+      <p class="login-lead">مدیریت پلن‌ها، سفارش‌ها، کاربران و تصویر کلی سرویس؛ در یک فضای خلوت و امن.</p>
+      <div class="login-footnote"><span class="pulse"></span> دسترسی فقط با حساب مدیر و اتصال امن HTTPS</div>
+    </div>
+    <form class="login-card" id="login-form" autocomplete="on">
+      <div class="card-kicker">ورود به پنل</div>
+      <h2>خوش آمدی، پویا 👋</h2>
+      <p>برای ادامه، اطلاعات حساب مدیریت را وارد کن.</p>
+      <label for="login-username">نام کاربری</label>
+      <input id="login-username" name="username" type="text" autocomplete="username" required minlength="3" maxlength="64" spellcheck="false" dir="ltr">
+      <label for="login-password">رمز عبور</label>
+      <input id="login-password" name="password" type="password" autocomplete="current-password" required minlength="8">
+      <button class="btn btn-primary btn-block" type="submit" id="login-submit">ورود امن <span aria-hidden="true">↖</span></button>
+      <p class="form-message" id="login-message" role="alert" aria-live="polite"></p>
+      <div class="login-card-footer">🛡️ نشست محدود، خروج امن، محافظت در برابر تلاش‌های ناموفق</div>
+    </form>
+  </section>
+
+  <div class="workspace" id="workspace" hidden>
+    <aside class="sidebar">
+      <div class="brand"><img src="/admin/logo.png" alt=""><span>PAPILIO<span class="brand-dot">.</span></span></div>
+      <div class="sidebar-label">مدیریت پاپیلیو</div>
+      <nav class="nav" aria-label="بخش‌های پنل">
+        <button type="button" class="nav-item active" data-view="overview"><span>◫</span> نمای کلی</button>
+        <button type="button" class="nav-item" data-view="plans"><span>◈</span> پلن‌ها</button>
+        <button type="button" class="nav-item" data-view="pricing"><span>⌁</span> قیمت‌گذاری</button>
+        <button type="button" class="nav-item" data-view="users"><span>♧</span> کاربران</button>
+        <button type="button" class="nav-item" data-view="orders"><span>▣</span> سفارش‌ها</button>
+        <button type="button" class="nav-item" data-view="payments"><span>◇</span> پرداخت‌ها</button>
+        <button type="button" class="nav-item" data-view="branding"><span>✦</span> برند و متن بات</button>
+        <button type="button" class="nav-item" data-view="system"><span>⛭</span> وضعیت سیستم</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="sidebar-note"><span class="pulse pulse-amber"></span><div><strong>وضعیت پایلوت</strong><small>فروش تا اتصال نود قفل است</small></div></div>
+        <button type="button" id="logout" class="logout">↩ <span>خروج از حساب</span></button>
+      </div>
+    </aside>
+
+    <div class="main-wrap">
+      <header class="topbar">
+        <div class="topbar-path">پنل مدیریت <span>/</span> <strong id="path-title">نمای کلی</strong></div>
+        <div class="topbar-actions"><span class="today" id="today"></span><span class="user-chip">● <span id="admin-name">مدیر</span></span></div>
+      </header>
+      <main class="content" id="content" tabindex="-1">
+        <div class="page-heading"><div><span class="eyebrow">PAPILIO / OVERVIEW</span><h1 id="page-title">نمای کلی</h1><p id="page-subtitle">وضعیت کسب‌وکار و سرویس در یک نگاه</p></div><button type="button" class="btn btn-quiet" id="refresh">↻ به‌روزرسانی</button></div>
+        <div id="view-root" aria-live="polite"></div>
+      </main>
+      <footer class="footer"><span>🦋 Papilio Admin</span><span>اطلاعات حساس فقط در همین نشست نمایش داده می‌شوند.</span></footer>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toasts" role="status" aria-live="polite"></div>
+</body>
+</html>
