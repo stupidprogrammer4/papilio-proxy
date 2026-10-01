@@ -6,7 +6,13 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from unittest import IsolatedAsyncioTestCase
 
-from bot.models.node import ActiveNodeAccess, IssuedNodeLinks, NodeSnapshot, PendingProvision
+from bot.models.node import (
+    ActiveNodeAccess,
+    IssuedNodeLinks,
+    NodeAccount,
+    NodeSnapshot,
+    PendingProvision,
+)
 from bot.services.access import AccessService
 from bot.services.node import NodeReconciler, node_email
 from tests.unit.test_access import MemoryAccessRepository
@@ -29,7 +35,12 @@ class FakeRepository:
 
     async def list_active_node_access(self) -> list[ActiveNodeAccess]:
         if self.access.access.subscription_id == ORDER_ID:
-            return [ActiveNodeAccess(self.access.access, "آزمایش")]
+            access = self.access.access
+            return [ActiveNodeAccess(NodeAccount(
+                access.subscription_id, access.traffic_limit_bytes,
+                access.uplink_bytes, access.downlink_bytes,
+                access.expires_at, access.last_measured_at,
+            ), "آزمایش")]
         return []
 
     async def mark_expired(self, subscription_id: str) -> None:
@@ -66,6 +77,34 @@ class FakeNode:
 
 
 class NodeReconciliationTests(IsolatedAsyncioTestCase):
+    async def test_idle_counters_refresh_only_after_one_minute(self) -> None:
+        class CountingRepository(MemoryAccessRepository):
+            calls = 0
+
+            async def record_usage(
+                self, subscription_id: str, uplink_bytes: int,
+                downlink_bytes: int, measured_at: datetime,
+            ) -> bool:
+                self.calls += 1
+                return await super().record_usage(
+                    subscription_id, uplink_bytes, downlink_bytes, measured_at
+                )
+
+        access_repo = CountingRepository()
+        repository = FakeRepository(access_repo)
+        node = FakeNode()
+        node.started = datetime.now(UTC) - timedelta(seconds=61)
+        node.snapshot = replace(node.snapshot, measured_at=node.started)
+        reconciler = NodeReconciler(repository, AccessService(access_repo), node)
+        await reconciler.run_once()
+        repository.pending = []
+        node.snapshot = replace(node.snapshot, measured_at=node.started + timedelta(seconds=1))
+        await reconciler.run_once()
+        self.assertEqual(access_repo.calls, 0)
+        node.snapshot = replace(node.snapshot, measured_at=node.started + timedelta(seconds=61))
+        await reconciler.run_once()
+        self.assertEqual(access_repo.calls, 1)
+
     async def test_paid_order_is_issued_once_then_usage_and_quota_are_reconciled(self) -> None:
         access_repo = MemoryAccessRepository()
         repository = FakeRepository(access_repo)

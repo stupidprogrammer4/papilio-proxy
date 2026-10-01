@@ -18,7 +18,7 @@ from bot.infra.db.models import (
 )
 from bot.infra.db.pool import create_mysql_engine
 from bot.models.access import ProvisionDelivery, SubscriptionAccess, UsageAlert
-from bot.models.node import ActiveNodeAccess, PendingProvision
+from bot.models.node import ActiveNodeAccess, NodeAccount, PendingProvision
 from bot.models.subscriptions import SubscriptionStatus
 from bot.services.access import AccessUnavailable
 
@@ -220,18 +220,37 @@ class MysqlAccessRepository:
         ]
 
     async def list_active_node_access(self) -> list[ActiveNodeAccess]:
+        # This runs every two seconds: never load or decrypt subscription secrets here.
         statement = (
-            select(SubscriptionAccessModel, SubscriptionModel, PlanModel.title)
+            select(
+                SubscriptionAccessModel.subscription_id,
+                SubscriptionAccessModel.uplink_bytes,
+                SubscriptionAccessModel.downlink_bytes,
+                SubscriptionAccessModel.last_measured_at,
+                SubscriptionModel.traffic_limit_bytes,
+                SubscriptionModel.expires_at,
+                SubscriptionModel.plan_code,
+                PlanModel.title,
+            )
             .join(SubscriptionModel, SubscriptionAccessModel.subscription_id == SubscriptionModel.id)
             .outerjoin(PlanModel, PlanModel.code == SubscriptionModel.plan_code)
             .where(SubscriptionModel.status == SubscriptionStatus.ACTIVE.value)
         )
         async with self._session_factory() as session:
             rows = (await session.execute(statement)).all()
-        return [
-            ActiveNodeAccess(self._access(access, order), title or order.plan_code)
-            for access, order, title in rows
-        ]
+        result: list[ActiveNodeAccess] = []
+        for subscription_id, up, down, measured_at, limit, expires_at, code, title in rows:
+            if expires_at is None:
+                raise AccessUnavailable("Active subscription has no expiry")
+            result.append(ActiveNodeAccess(
+                NodeAccount(
+                    str(subscription_id), int(limit), int(up), int(down),
+                    expires_at.replace(tzinfo=UTC),
+                    measured_at.replace(tzinfo=UTC) if measured_at is not None else None,
+                ),
+                str(title or code),
+            ))
+        return result
 
     async def mark_expired(self, subscription_id: str) -> None:
         async with self._session_factory() as session, session.begin():

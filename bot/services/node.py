@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
@@ -8,6 +10,8 @@ from typing import Protocol
 
 from bot.models.node import ActiveNodeAccess, IssuedNodeLinks, NodeSnapshot, PendingProvision
 from bot.services.access import AccessService, AccessUnavailable
+
+logger = logging.getLogger(__name__)
 
 
 def node_email(subscription_id: str) -> str:
@@ -49,11 +53,13 @@ class NodeReconciler:
     access: AccessService
     node: PrivateNode
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    _last_report: float = 0.0
 
     async def run_once(self) -> None:
         if self._lock.locked():
             return
         async with self._lock:
+            started = time.monotonic()
             await self.node.heartbeat()
             pending = await self.repository.list_pending_paid()
             expected = {node_email(item.subscription_id) for item in pending}
@@ -81,9 +87,12 @@ class NodeReconciler:
                     issued.snapshot.measured_at,
                 )
 
+            provisioned_at = time.monotonic()
             active = await self.repository.list_active_node_access()
             expected.update(node_email(item.access.subscription_id) for item in active)
             snapshots = {item.email: item for item in await self.node.usage()}
+            fetched_at = time.monotonic()
+            persisted = 0
             for item in active:
                 access = item.access
                 email = node_email(access.subscription_id)
@@ -101,10 +110,19 @@ class NodeReconciler:
                     snapshot = issued.snapshot
                 if snapshot.email != email:
                     raise ProvisioningError("Node returned the wrong account counter")
-                if (
+                fresh = (
                     access.last_measured_at is None
                     or snapshot.measured_at > access.last_measured_at
-                ):
+                )
+                changed = (
+                    snapshot.uplink_bytes != access.uplink_bytes
+                    or snapshot.downlink_bytes != access.downlink_bytes
+                )
+                refresh_due = (
+                    access.last_measured_at is None
+                    or snapshot.measured_at - access.last_measured_at >= timedelta(minutes=1)
+                )
+                if fresh and (changed or refresh_due):
                     try:
                         exhausted = await self.access.record_usage(
                             access.subscription_id,
@@ -114,6 +132,7 @@ class NodeReconciler:
                         )
                     except AccessUnavailable as exc:
                         raise ProvisioningError("Node counter cannot be persisted") from exc
+                    persisted += 1
                 else:
                     exhausted = (
                         snapshot.uplink_bytes + snapshot.downlink_bytes
@@ -126,3 +145,17 @@ class NodeReconciler:
             for email, snapshot in snapshots.items():
                 if email not in expected and not snapshot.revoked:
                     await self.node.remove(email)
+
+            finished = time.monotonic()
+            if finished - started >= 1.5 or finished - self._last_report >= 60:
+                log = logger.warning if finished - started >= 1.5 else logger.info
+                log(
+                    "Node reconciliation: active=%d pending=%d persisted=%d "
+                    "provision_ms=%.0f fetch_ms=%.0f apply_ms=%.0f total_ms=%.0f",
+                    len(active), len(pending), persisted,
+                    (provisioned_at - started) * 1000,
+                    (fetched_at - provisioned_at) * 1000,
+                    (finished - fetched_at) * 1000,
+                    (finished - started) * 1000,
+                )
+                self._last_report = finished

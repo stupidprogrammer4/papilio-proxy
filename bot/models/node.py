@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from bot.models.access import SubscriptionAccess
-
 
 @dataclass(frozen=True, slots=True)
 class PendingProvision:
@@ -16,8 +14,20 @@ class PendingProvision:
 
 
 @dataclass(frozen=True, slots=True)
+class NodeAccount:
+    """Only the counters and limits needed by the frequent node sync."""
+
+    subscription_id: str
+    traffic_limit_bytes: int
+    uplink_bytes: int
+    downlink_bytes: int
+    expires_at: datetime
+    last_measured_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
 class ActiveNodeAccess:
-    access: SubscriptionAccess
+    access: NodeAccount
     title: str
 
 
