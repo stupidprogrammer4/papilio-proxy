@@ -4,8 +4,11 @@ from unittest import IsolatedAsyncioTestCase, TestCase
 from unittest.mock import AsyncMock
 
 from aiogram import Bot
+from aiogram.exceptions import TelegramRetryAfter
+from aiogram.methods import SetMyName
+from aiogram.types import BotDescription, BotName, BotShortDescription
 
-from bot.models.branding import DEFAULT_BRANDING, BrandingValidationError
+from bot.models.branding import DEFAULT_BRANDING, BrandingValidationError, validate_branding
 from bot.presentation.admin_branding import _branding_text
 from bot.presentation.profile import PUBLIC_COMMANDS, sync_bot_photo, sync_bot_profile
 from bot.services.branding import BrandingService
@@ -35,6 +38,33 @@ class BrandingServiceTests(IsolatedAsyncioTestCase):
 
 
 class ProfileSyncTests(IsolatedAsyncioTestCase):
+    async def test_unchanged_profile_does_not_call_rate_limited_setters(self) -> None:
+        bot = AsyncMock(spec=Bot)
+        bot.get_my_name.return_value = BotName(name=DEFAULT_BRANDING.name)
+        bot.get_my_short_description.return_value = BotShortDescription(
+            short_description=DEFAULT_BRANDING.short_description
+        )
+        bot.get_my_description.return_value = BotDescription(
+            description=DEFAULT_BRANDING.description
+        )
+        bot.get_my_commands.return_value = PUBLIC_COMMANDS
+        await sync_bot_profile(bot, DEFAULT_BRANDING)
+        bot.set_my_name.assert_not_awaited()
+        bot.set_my_short_description.assert_not_awaited()
+        bot.set_my_description.assert_not_awaited()
+        bot.set_my_commands.assert_not_awaited()
+
+    async def test_name_rate_limit_does_not_block_other_fields(self) -> None:
+        bot = AsyncMock(spec=Bot)
+        bot.set_my_name.side_effect = TelegramRetryAfter(
+            method=SetMyName(name=DEFAULT_BRANDING.name), message="limited", retry_after=60
+        )
+        with self.assertRaises(TelegramRetryAfter):
+            await sync_bot_profile(bot, DEFAULT_BRANDING)
+        bot.set_my_short_description.assert_awaited_once()
+        bot.set_my_description.assert_awaited_once()
+        bot.set_my_commands.assert_awaited_once()
+
     async def test_profile_sync_sets_descriptions_and_real_commands(self) -> None:
         bot = AsyncMock(spec=Bot)
 
@@ -60,6 +90,15 @@ class ProfileSyncTests(IsolatedAsyncioTestCase):
 
 
 class BrandingPresentationTests(TestCase):
+    def test_default_profile_is_valid_and_honest(self) -> None:
+        validate_branding(DEFAULT_BRANDING)
+        self.assertLessEqual(len(DEFAULT_BRANDING.description.encode("utf-16-le")) // 2, 512)
+        self.assertLessEqual(len(DEFAULT_BRANDING.short_description.encode("utf-16-le")) // 2, 120)
+        self.assertIn("پیش‌نمایش", DEFAULT_BRANDING.description)
+        self.assertIn("هنوز فعال نیست", DEFAULT_BRANDING.description)
+        for icon in ("📦", "📊", "🧭"):
+            self.assertIn(icon, DEFAULT_BRANDING.description)
+
     def test_admin_preview_escapes_profile_text(self) -> None:
         from bot.models.branding import BotBranding
 

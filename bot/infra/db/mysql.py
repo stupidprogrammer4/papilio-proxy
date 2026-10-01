@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, datetime
 
 from sqlalchemy import delete, select, update
@@ -10,7 +11,9 @@ from bot.infra.db.models import (
     Base,
     BotBrandingModel,
     PlanModel,
+    PlanVisualModel,
     SubscriptionModel,
+    SubscriptionTermsModel,
     UserModel,
 )
 from bot.infra.db.pool import create_mysql_engine
@@ -107,20 +110,25 @@ class MysqlSubscriptionRepository(SubscriptionRepository, PlanRepository):
         return [self._subscription(record) for record in records]
 
     async def list(self, *, active_only: bool = True) -> list[Plan]:
-        statement = select(PlanModel)
+        statement = select(PlanModel, PlanVisualModel.emoji).outerjoin(
+            PlanVisualModel, PlanVisualModel.plan_code == PlanModel.code
+        )
         if active_only:
             statement = statement.where(PlanModel.is_active.is_(True))
         statement = statement.order_by(PlanModel.sort_order, PlanModel.code)
         async with self._session_factory() as session:
-            result = await session.scalars(statement)
-            records = result.all()
-        return [self._plan(record) for record in records]
+            records = (await session.execute(statement)).all()
+        return [self._plan(record, emoji) for record, emoji in records]
 
     async def get(self, code: str) -> Plan | None:
-        statement = select(PlanModel).where(PlanModel.code == code)
+        statement = (
+            select(PlanModel, PlanVisualModel.emoji)
+            .outerjoin(PlanVisualModel, PlanVisualModel.plan_code == PlanModel.code)
+            .where(PlanModel.code == code)
+        )
         async with self._session_factory() as session:
-            record = await session.scalar(statement)
-        return self._plan(record) if record else None
+            record = (await session.execute(statement)).one_or_none()
+        return self._plan(*record) if record else None
 
     async def save(self, plan: Plan) -> None:
         statement = insert(PlanModel).values(
@@ -140,8 +148,35 @@ class MysqlSubscriptionRepository(SubscriptionRepository, PlanRepository):
             is_active=statement.inserted.is_active,
             sort_order=statement.inserted.sort_order,
         )
+        visual = insert(PlanVisualModel).values(plan_code=plan.code, emoji=plan.emoji)
+        visual = visual.on_duplicate_key_update(emoji=visual.inserted.emoji)
         async with self._session_factory() as session, session.begin():
             await session.execute(statement)
+            await session.execute(visual)
+
+    async def update_prices(
+        self, new_prices_rial: Mapping[str, int], expected_prices_rial: Mapping[str, int]
+    ) -> None:
+        """Atomically update an explicitly checked catalog subset; existing orders keep snapshots."""
+        codes = set(new_prices_rial)
+        if not codes or codes != set(expected_prices_rial):
+            raise ValueError("Price update requires matching catalog codes")
+        if any(
+            isinstance(amount, bool) or amount <= 0 or amount % 10
+            for amount in new_prices_rial.values()
+        ):
+            raise ValueError("Prices must be positive rial amounts divisible by ten")
+        async with self._session_factory() as session, session.begin():
+            result = await session.scalars(
+                select(PlanModel).where(PlanModel.code.in_(codes)).with_for_update()
+            )
+            rows = {row.code: row for row in result.all()}
+            if set(rows) != codes or any(
+                rows[code].price_rial != expected_prices_rial[code] for code in codes
+            ):
+                raise ValueError("Catalog changed; prices were not updated")
+            for code in codes:
+                rows[code].price_rial = new_prices_rial[code]
 
     async def set_active(self, code: str, is_active: bool) -> None:
         statement = update(PlanModel).where(PlanModel.code == code).values(is_active=is_active)
@@ -154,7 +189,7 @@ class MysqlSubscriptionRepository(SubscriptionRepository, PlanRepository):
             await session.execute(statement)
 
     @staticmethod
-    def _plan(record: PlanModel) -> Plan:
+    def _plan(record: PlanModel, emoji: str | None = None) -> Plan:
         return Plan(
             code=record.code,
             title=record.title,
@@ -163,6 +198,7 @@ class MysqlSubscriptionRepository(SubscriptionRepository, PlanRepository):
             price_rial=record.price_rial,
             is_active=record.is_active,
             sort_order=record.sort_order,
+            emoji=emoji or "🦋",
         )
 
     async def create(self, subscription: Subscription) -> None:
@@ -178,8 +214,16 @@ class MysqlSubscriptionRepository(SubscriptionRepository, PlanRepository):
             expires_at=_to_database_datetime(subscription.expires_at),
             created_at=_to_database_datetime(subscription.created_at),
         )
+        if subscription.duration_days <= 0:
+            raise ValueError("A purchased duration snapshot is required")
         async with self._session_factory() as session, session.begin():
             session.add(model)
+            session.add(
+                SubscriptionTermsModel(
+                    subscription_id=subscription.id,
+                    duration_days=subscription.duration_days,
+                )
+            )
 
     @staticmethod
     def _subscription(record: SubscriptionModel) -> Subscription:

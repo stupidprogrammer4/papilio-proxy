@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, replace
+from unicodedata import category
 
 from bot.services.subscriptions import Plan, PlanRepository, UnknownPlanError
 
@@ -53,9 +54,20 @@ class AdminPlanService:
         duration_days: int,
         price_rial: int,
         sort_order: int,
+        emoji: str = "🦋",
         editing: bool = False,
     ) -> Plan:
         self._authorize(telegram_id)
+        return await self.save_validated_plan(
+            code=code, title=title, traffic_gb=traffic_gb, duration_days=duration_days,
+            price_rial=price_rial, sort_order=sort_order, emoji=emoji, editing=editing,
+        )
+
+    async def save_validated_plan(
+        self, *, code: str, title: str, traffic_gb: int, duration_days: int,
+        price_rial: int, sort_order: int, emoji: str = "🦋", editing: bool = False,
+    ) -> Plan:
+        """Validation/persistence shared by authenticated Telegram and web adapters."""
         code = code.strip()
         title = title.strip()
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", code):
@@ -74,6 +86,9 @@ class AdminPlanService:
             raise PlanValidationError("قیمت ریالی باید مثبت و مضرب ۱۰ باشد.")
         if isinstance(sort_order, bool) or not -100_000 <= sort_order <= 100_000:
             raise PlanValidationError("ترتیب نمایش باید بین ۱۰۰٬۰۰۰- و ۱۰۰٬۰۰۰ باشد.")
+        emoji = emoji.strip()
+        if not emoji or len(emoji) > 8 or not any(category(char) == "So" for char in emoji):
+            raise PlanValidationError("ایموجی باید یک نماد کوتاه و قابل‌نمایش باشد.")
         existing = await self.repository.get(code)
         if editing and existing is None:
             raise UnknownPlanError(code)
@@ -87,6 +102,7 @@ class AdminPlanService:
             price_rial=price_rial,
             is_active=existing.is_active if existing else False,
             sort_order=sort_order,
+            emoji=emoji,
         )
         await self.repository.save(plan)
         return plan

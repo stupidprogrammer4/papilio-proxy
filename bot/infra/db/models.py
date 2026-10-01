@@ -2,7 +2,17 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -35,6 +45,34 @@ class PlanModel(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.current_timestamp(), onupdate=func.current_timestamp()
     )
+
+
+class PlanVisualModel(Base):
+    """Per-plan visual settings, added without altering the existing plans table."""
+
+    __tablename__ = "plan_visuals"
+
+    plan_code: Mapped[str] = mapped_column(
+        String(64), ForeignKey("plans.code", ondelete="CASCADE"), primary_key=True
+    )
+    emoji: Mapped[str] = mapped_column(String(32))
+
+
+class PaymentAttemptModel(Base):
+    """A KPay transaction is bound to exactly one immutable order snapshot."""
+
+    __tablename__ = "payment_attempts"
+
+    order_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("subscriptions.id"), primary_key=True
+    )
+    authority: Mapped[str] = mapped_column(String(256), unique=True)
+    provider_transaction_id: Mapped[str] = mapped_column(String(128), unique=True)
+    amount_rial: Mapped[int] = mapped_column(BigInteger)
+    payment_url: Mapped[str] = mapped_column(String(2048))
+    status: Mapped[str] = mapped_column(String(32), default="pending")
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.current_timestamp())
 
 
 class BotBrandingModel(Base):
@@ -75,3 +113,56 @@ class SubscriptionModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime)
 
     user: Mapped[UserModel] = relationship(back_populates="subscriptions")
+
+
+class SubscriptionAccessModel(Base):
+    """Encrypted bearer token and node-issued links for one paid entitlement."""
+
+    __tablename__ = "subscription_access"
+
+    subscription_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("subscriptions.id"), primary_key=True
+    )
+    token_digest: Mapped[str] = mapped_column(String(64), unique=True)
+    token_ciphertext: Mapped[str] = mapped_column(Text)
+    vless_ciphertext: Mapped[str] = mapped_column(Text)
+    vmess_ciphertext: Mapped[str] = mapped_column(Text)
+    uplink_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    downlink_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    last_measured_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class ProvisionDeliveryModel(Base):
+    """Durable delivery notice; sending can retry without reprovisioning."""
+
+    __tablename__ = "provision_deliveries"
+
+    subscription_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("subscriptions.id"), primary_key=True
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    leased_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class SubscriptionTermsModel(Base):
+    """Immutable purchased duration, unaffected by later catalog edits."""
+
+    __tablename__ = "subscription_terms"
+
+    subscription_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("subscriptions.id"), primary_key=True
+    )
+    duration_days: Mapped[int] = mapped_column(Integer)
+
+
+class UsageAlertModel(Base):
+    """At-least-once Telegram warning with a durable, retryable claim."""
+
+    __tablename__ = "usage_alerts"
+    __table_args__ = (UniqueConstraint("subscription_id", "kind"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    subscription_id: Mapped[str] = mapped_column(String(36), ForeignKey("subscriptions.id"))
+    kind: Mapped[str] = mapped_column(String(32))
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    leased_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

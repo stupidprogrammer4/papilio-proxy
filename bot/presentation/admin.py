@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from hashlib import sha256
 from html import escape
+from typing import Literal
 
 from aiogram import F, Router
 from aiogram.enums import ChatType
@@ -26,15 +27,17 @@ def _key(code: str) -> str:
     return sha256(code.encode("utf-8")).hexdigest()[:20]
 
 
-def _button(text: str, data: str) -> InlineKeyboardButton:
-    return InlineKeyboardButton(text=text, callback_data=data)
+def _button(
+    text: str, data: str, style: Literal["primary", "success", "danger"] | None = None
+) -> InlineKeyboardButton:
+    return InlineKeyboardButton(text=text, callback_data=data, style=style)
 
 
 def _menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [_button("📋 مدیریت پلن‌ها", "ap:list:0")],
-            [_button("➕ پلن جدید", "ap:new")],
+            [_button("➕ پلن جدید", "ap:new", "success")],
             [_button("🦋 هویت و توضیحات بات", "brand:menu")],
         ]
     )
@@ -47,7 +50,7 @@ def _list_keyboard(plans: list[Plan], page: int) -> InlineKeyboardMarkup:
     rows = [
         [
             _button(
-                f"{'🟢' if plan.is_active else '⚪️'} {plan.title} · {plan.code}",
+                f"{'🟢' if plan.is_active else '⚪️'} {plan.emoji} {plan.title} · {plan.code}",
                 f"ap:plan:{_key(plan.code)}",
             )
         ]
@@ -60,7 +63,7 @@ def _list_keyboard(plans: list[Plan], page: int) -> InlineKeyboardMarkup:
         navigation.append(_button("بعدی ➡️", f"ap:list:{page + 1}"))
     if navigation:
         rows.append(navigation)
-    rows.append([_button("➕ پلن جدید", "ap:new")])
+    rows.append([_button("➕ پلن جدید", "ap:new", "success")])
     rows.append([_button("↩️ منوی مدیریت", "ap:menu")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -70,7 +73,13 @@ def _plan_keyboard(plan: Plan) -> InlineKeyboardMarkup:
     action = "⏸ غیرفعال‌کردن" if plan.is_active else "▶️ فعال‌کردن"
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [_button(action, f"ap:status:{_key(plan.code)}:{next_state}")],
+            [
+                _button(
+                    action,
+                    f"ap:status:{_key(plan.code)}:{next_state}",
+                    "danger" if plan.is_active else "success",
+                )
+            ],
             [_button("✏️ ویرایش پلن", f"ap:edit:{_key(plan.code)}")],
             [_button("↩️ همهٔ پلن‌ها", "ap:list:0")],
         ]
@@ -81,7 +90,7 @@ def _plan_text(plan: Plan) -> str:
     price = f"{plan.price_toman:,}".replace(",", "٬")
     state = "🟢 فعال و قابل نمایش به مشتری" if plan.is_active else "⚪️ غیرفعال"
     return (
-        f"{RTL}<b>{escape(plan.title)}</b>\n"
+        f"{RTL}{escape(plan.emoji)} <b>{escape(plan.title)}</b>\n"
         f"{RTL}کد: <code>{escape(plan.code)}</code>\n\n"
         f"{RTL}📦 {plan.traffic_gb} گیگابایت · 🗓 {plan.duration_days} روز\n"
         f"{RTL}💳 {price} تومان\n"
@@ -93,34 +102,34 @@ def _form_prompt(plan: Plan | None = None) -> str:
     if plan is None:
         return (
             f"{RTL}<b>پلن جدید</b>\n"
-            f"{RTL}اطلاعات را در ۶ خط، به این ترتیب بفرستید:\n"
-            f"{RTL}کد لاتین، عنوان، حجم به گیگابایت، مدت به روز، قیمت به ریال، ترتیب نمایش.\n\n"
-            "<code>M60\nپلن ۶۰ گیگ\n60\n30\n990000\n20</code>\n\n"
+            f"{RTL}اطلاعات را در ۷ خط بفرستید:\n"
+            f"{RTL}کد، عنوان، ایموجی، حجم (گیگابایت)، مدت (روز)، قیمت (ریال)، ترتیب.\n\n"
+            "<code>M60\nپلن ۶۰ گیگ\n⚡\n60\n30\n990000\n20</code>\n\n"
             f"{RTL}۹۹۰٬۰۰۰ ریال در بات ۹۹٬۰۰۰ تومان نمایش داده می‌شود.\n"
             f"{RTL}پلن تازه ابتدا غیرفعال می‌ماند. برای لغو /cancel را بفرستید."
         )
     return (
         f"{RTL}<b>ویرایش {escape(plan.title)}</b>\n"
         f"{RTL}کد <code>{escape(plan.code)}</code> ثابت می‌ماند.\n"
-        f"{RTL}۵ خط را به ترتیب عنوان، حجم، مدت، قیمت به ریال و ترتیب نمایش بفرستید:\n\n"
-        f"<code>{escape(plan.title)}\n{plan.traffic_gb}\n{plan.duration_days}\n"
+        f"{RTL}۶ خط را به ترتیب عنوان، ایموجی، حجم، مدت، قیمت ریالی و ترتیب بفرستید:\n\n"
+        f"<code>{escape(plan.title)}\n{escape(plan.emoji)}\n{plan.traffic_gb}\n{plan.duration_days}\n"
         f"{plan.price_rial}\n{plan.sort_order}</code>\n\n"
         f"{RTL}برای لغو /cancel را بفرستید."
     )
 
 
-def _form_values(text: str, editing: bool) -> tuple[str, str, int, int, int, int]:
+def _form_values(text: str, editing: bool) -> tuple[str, str, str, int, int, int, int]:
     lines = [line.strip() for line in text.splitlines()]
-    expected = 5 if editing else 6
+    expected = 6 if editing else 7
     if len(lines) != expected or any(not line for line in lines):
         raise PlanValidationError(f"دقیقاً {expected} خط غیرخالی بفرستید.")
     if editing:
-        title, raw_traffic, raw_duration, raw_price, raw_order = lines
+        title, emoji, raw_traffic, raw_duration, raw_price, raw_order = lines
         code = ""
     else:
-        code, title, raw_traffic, raw_duration, raw_price, raw_order = lines
+        code, title, emoji, raw_traffic, raw_duration, raw_price, raw_order = lines
     try:
-        return code, title, int(raw_traffic), int(raw_duration), int(raw_price), int(raw_order)
+        return code, title, emoji, int(raw_traffic), int(raw_duration), int(raw_price), int(raw_order)
     except ValueError as exc:
         raise PlanValidationError(
             "حجم، مدت، قیمت ریالی و ترتیب نمایش باید عدد صحیح باشند."
@@ -308,7 +317,9 @@ def build_admin_router(service: AdminPlanService) -> Router:
         data = await state.get_data()
         editing = data.get("editing") is True
         try:
-            code, title, traffic, duration, price, order = _form_values(message.text or "", editing)
+            code, title, emoji, traffic, duration, price, order = _form_values(
+                message.text or "", editing
+            )
             if editing:
                 stored_code = data.get("code")
                 if not isinstance(stored_code, str):
@@ -322,6 +333,7 @@ def build_admin_router(service: AdminPlanService) -> Router:
                 duration_days=duration,
                 price_rial=price,
                 sort_order=order,
+                emoji=emoji,
                 editing=editing,
             )
         except (PlanValidationError, UnknownPlanError) as exc:
