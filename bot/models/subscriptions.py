@@ -8,10 +8,13 @@ from enum import StrEnum
 class Protocol(StrEnum):
     VMESS = "vmess"
     VLESS = "vless"
+    BOTH = "both"
 
 
 class SubscriptionStatus(StrEnum):
     PENDING_PAYMENT = "pending_payment"
+    PAID_AWAITING_PROVISIONING = "paid_awaiting_provisioning"
+    TEST_AWAITING_PROVISIONING = "test_awaiting_provisioning"
     ACTIVE = "active"
     EXPIRED = "expired"
     SUSPENDED = "suspended"
@@ -26,6 +29,7 @@ class Plan:
     price_rial: int
     is_active: bool = True
     sort_order: int = 0
+    emoji: str = "🦋"
 
     def __post_init__(self) -> None:
         if (
@@ -64,6 +68,7 @@ class Subscription:
     expires_at: datetime | None
     created_at: datetime
     price_rial: int = 0
+    duration_days: int = 0
 
     @property
     def traffic_remaining_bytes(self) -> int:
