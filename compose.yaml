@@ -6,11 +6,14 @@ services:
       context: .
       dockerfile: Dockerfile
     env_file: .env
+    group_add: ["10001"]
     command: ["python", "-m", "bot.app"]
     restart: unless-stopped
     depends_on:
       mysql:
         condition: service_healthy
+    volumes:
+      - ./data/node:/run/papilio
     networks: [private]
 
   callback:
@@ -26,6 +29,23 @@ services:
       mysql:
         condition: service_healthy
     networks: [private]
+
+  xray:
+    image: ghcr.io/xtls/xray-core@sha256:592ec4d11f656db95598d01e76dbcc6e002d67360b96a5436500a938230f52c7
+    entrypoint: ["/usr/local/bin/papilio-proxy"]
+    command: ["serve"]
+    user: "65532:10001"
+    network_mode: host
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - ./data/xray/config.json:/etc/xray/config.json:ro
+      - ./data/xray/papilio-proxy:/usr/local/bin/papilio-proxy:ro
+      - ./data/node:/run/papilio
+      - ./data/xray/certs:/etc/xray/certs:ro
+    restart: unless-stopped
+    mem_limit: 512m
 
   tui:
     build:

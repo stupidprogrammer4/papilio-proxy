@@ -21,6 +21,24 @@ func main() {
 		usage(os.Stdout)
 	case "version", "--version":
 		fmt.Println(version)
+	case "render":
+		if len(os.Args) != 2 {
+			fmt.Fprintln(os.Stderr, "render accepts no command-line arguments")
+			os.Exit(2)
+		}
+		if err := runRender(); err != nil {
+			fmt.Fprintln(os.Stderr, "invalid Xray configuration:", err)
+			os.Exit(1)
+		}
+	case "serve":
+		if len(os.Args) != 2 {
+			fmt.Fprintln(os.Stderr, "serve accepts no command-line arguments")
+			os.Exit(2)
+		}
+		if err := runNode(); err != nil {
+			fmt.Fprintln(os.Stderr, "Xray node stopped:", err)
+			os.Exit(1)
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n", os.Args[1])
 		usage(os.Stderr)
@@ -29,5 +47,5 @@ func main() {
 }
 
 func usage(output *os.File) {
-	fmt.Fprintln(output, "Usage: papilio-proxy <help|version>")
+	fmt.Fprintln(output, "Usage: papilio-proxy <help|version|render|serve>")
 }
