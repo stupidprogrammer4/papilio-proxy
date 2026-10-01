@@ -21,3 +21,13 @@ class ProviderVerification:
     def verified(self) -> bool:
         # KPay does not document a status enum. Fail closed for unknown values.
         return self.status == "paid" and self.paid_at is not None
+
+
+@dataclass(frozen=True, slots=True)
+class PaymentInitiation:
+    """KPay's checkout handle; not evidence that an order is paid."""
+
+    transaction_id: str
+    authority: str
+    amount_rial: int
+    payment_url: str

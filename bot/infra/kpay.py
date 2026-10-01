@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
+from urllib.parse import urlsplit
+from uuid import UUID
 
 import httpx
 from sqlalchemy.exc import SQLAlchemyError
 
 from bot.infra.db.credentials import KPAY_ACCESS_TOKEN_NAME, MysqlCredentialVault
 from bot.models.credentials import CredentialStorageError
-from bot.models.payments import PaymentProviderUnavailable, ProviderVerification
+from bot.models.payments import PaymentInitiation, PaymentProviderUnavailable, ProviderVerification
 
 
 class KpayVerifier:
@@ -58,6 +61,122 @@ class KpayVerifier:
         ):
             raise PaymentProviderUnavailable("Invalid KPay verification response")
         return ProviderVerification(authority, status, transaction_id, amount, paid_at)
+
+    async def create_transaction(
+        self,
+        *,
+        shop_id: str,
+        card_id: str,
+        amount_rial: int,
+        callback_url: str,
+        order_id: str,
+        description: str,
+    ) -> PaymentInitiation:
+        """Create a KPay checkout for one already-persisted order."""
+        try:
+            UUID(shop_id)
+            UUID(card_id)
+        except ValueError as exc:
+            raise PaymentProviderUnavailable("Invalid KPay shop or card ID") from exc
+        callback = urlsplit(callback_url)
+        if (
+            callback.scheme != "https"
+            or not callback.hostname
+            or callback.username
+            or callback.password
+            or not callback.path.endswith("/payments/kpay/callback")
+            or amount_rial <= 0
+            or not order_id
+        ):
+            raise PaymentProviderUnavailable("Invalid KPay checkout parameters")
+        payload = {
+            "shop_id": shop_id,
+            "card_id": card_id,
+            "amount": amount_rial,
+            "callback_url": callback_url,
+            "factor_number": order_id,
+            "description": description[:200],
+            "fee_side": "seller",
+        }
+        try:
+            token = await self._vault.get(KPAY_ACCESS_TOKEN_NAME)
+            if not token:
+                token = await self._login()
+            response = await self._client.post(
+                f"{self._base_url}/transactions/create",
+                json=payload,
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if response.status_code == 401:
+                token = await self._login()
+                response = await self._client.post(
+                    f"{self._base_url}/transactions/create",
+                    json=payload,
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+            if response.status_code not in {200, 201}:
+                raise PaymentProviderUnavailable("KPay checkout failed")
+            data = response.json()
+        except (
+            httpx.HTTPError,
+            ValueError,
+            TypeError,
+            CredentialStorageError,
+            SQLAlchemyError,
+        ) as exc:
+            raise PaymentProviderUnavailable("KPay checkout unavailable") from exc
+        if not isinstance(data, Mapping):
+            raise PaymentProviderUnavailable("Invalid KPay checkout response")
+        transaction_id = data.get("id")
+        authority = data.get("authority")
+        returned_amount = data.get("amount")
+        payment_url = data.get("payment_url")
+        status = data.get("status")
+        if (
+            status != "pending"
+            or not isinstance(transaction_id, str)
+            or not transaction_id
+            or not isinstance(authority, str)
+            or not authority
+            or isinstance(returned_amount, bool)
+            or returned_amount != amount_rial
+        ):
+            raise PaymentProviderUnavailable("Invalid KPay checkout response")
+        if payment_url is None:
+            # The live card-to-card API currently omits payment_url despite its docs.
+            # Confirm the public transaction record before constructing its hosted page.
+            if (
+                urlsplit(self._base_url).hostname != "kpay.website"
+                or re.fullmatch(r"[A-Za-z0-9_-]{1,256}", authority) is None
+            ):
+                raise PaymentProviderUnavailable("Cannot verify KPay hosted payment page")
+            try:
+                info_response = await self._client.get(
+                    f"{self._base_url}/transactions/payment/{authority}"
+                )
+                info = info_response.json()
+            except (httpx.HTTPError, ValueError, TypeError) as exc:
+                raise PaymentProviderUnavailable("KPay hosted payment page unavailable") from exc
+            if (
+                info_response.status_code != 200
+                or not isinstance(info, Mapping)
+                or info.get("authority") != authority
+                or info.get("amount") != amount_rial
+                or info.get("status") != "pending"
+            ):
+                raise PaymentProviderUnavailable("KPay hosted payment page did not match")
+            payment_url = f"https://kpay.website/pay/{authority}"
+        if not isinstance(payment_url, str):
+            raise PaymentProviderUnavailable("Invalid KPay checkout URL")
+        payment = urlsplit(payment_url)
+        if (
+            payment.scheme != "https"
+            or payment.hostname not in {"kpay.website", "www.kpay.website"}
+            or payment.username
+            or payment.password
+        ):
+            raise PaymentProviderUnavailable("Unsafe KPay payment URL")
+        return PaymentInitiation(transaction_id, authority, amount_rial, payment_url)
 
     async def _verify_request(self, authority: str, token: str) -> httpx.Response:
         return await self._client.post(

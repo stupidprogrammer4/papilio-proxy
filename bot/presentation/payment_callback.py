@@ -6,7 +6,11 @@ from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse
 
 from bot.models.payments import PaymentProviderUnavailable
-from bot.services.payments import PaymentVerificationService
+from bot.services.payments import (
+    CallbackOutcome,
+    PaymentSettlementError,
+    PaymentVerificationService,
+)
 
 
 def build_payment_router() -> APIRouter:
@@ -24,10 +28,10 @@ def build_payment_router() -> APIRouter:
             result = await service.verify_callback(authorities[0])
         except PaymentProviderUnavailable:
             return PlainTextResponse("بررسی پرداخت فعلاً در دسترس نیست.", status_code=503)
-        if result.verified:
-            return PlainTextResponse(
-                "پرداخت در KPay تأیید شده است؛ وضعیت سفارش و فعال‌سازی سرویس هنوز بررسی نشده‌اند."
-            )
+        except PaymentSettlementError:
+            return PlainTextResponse("پرداخت به سفارش معتبری متصل نشد؛ با پشتیبانی تماس بگیرید.", status_code=409)
+        if result == CallbackOutcome.PAID:
+            return PlainTextResponse("پرداخت تأیید شد. وضعیت تحویل سرویس را در بات بررسی کنید.")
         return PlainTextResponse("پرداخت در KPay هنوز تأیید نشده است.")
 
     @router.get("/healthz", response_class=PlainTextResponse)
