@@ -22,12 +22,14 @@ from bot.infra.db.dashboard import MysqlDashboardRepository
 from bot.infra.db.mysql import MysqlSubscriptionRepository
 from bot.infra.db.payments import MysqlPaymentRepository
 from bot.infra.db.pricing import MysqlPricingRepository
+from bot.infra.db.receipts import MysqlReceiptRepository
 from bot.infra.db.user_access import MysqlUserAccessRepository
 from bot.infra.kpay import KpayVerifier
 from bot.infra.node import XrayNodeClient
 from bot.presentation.admin_web.routes import ASSETS as ADMIN_ASSETS
 from bot.presentation.admin_web.routes import build_admin_web_router
 from bot.presentation.payment_callback import build_payment_router
+from bot.presentation.receipt_checkout import build_receipt_router
 from bot.presentation.subscription_api import build_subscription_router
 from bot.presentation.subscription_view import ASSETS as SUBSCRIPTION_ASSETS
 from bot.services.access import AccessService
@@ -38,6 +40,7 @@ from bot.services.checkout import CheckoutService
 from bot.services.dashboard import DashboardService
 from bot.services.payments import PaymentVerificationService
 from bot.services.pricing import PricingService
+from bot.services.receipts import ReceiptService
 from bot.services.user_access import UserAccessService
 
 
@@ -62,6 +65,7 @@ def create_app(
         admin_dashboard_repository: MysqlDashboardRepository | None = None
         admin_subscription_repository: MysqlSubscriptionRepository | None = None
         user_access_repository: MysqlUserAccessRepository | None = None
+        receipt_repository: MysqlReceiptRepository | None = None
         if service is None:
             try:
                 settings = Settings.from_environment(require_token=False)
@@ -73,14 +77,19 @@ def create_app(
                     client = httpx.AsyncClient(timeout=10.0, follow_redirects=False)
                     repository = MysqlPaymentRepository(settings.database_url)
                     await repository.initialize()
+                    receipt_repository = MysqlReceiptRepository(settings.database_url)
+                    await receipt_repository.initialize()
+                    provider = KpayVerifier(settings.kpay_api_base_url, vault, client)
+                    app.state.receipt_service = ReceiptService(receipt_repository, provider, repository)
                     app.state.payment_service = PaymentVerificationService(
-                        KpayVerifier(settings.kpay_api_base_url, vault, client), repository
+                        provider, repository, app.state.receipt_service,
                     )
                     checkout_repository = MysqlCheckoutRepository(settings.database_url)
                     await checkout_repository.initialize()
                     app.state.checkout_service = CheckoutService(
                         checkout_repository, KpayVerifier(settings.kpay_api_base_url, vault, client),
                         repository, app.state.payment_service, settings.admin_ids,
+                        receipts=app.state.receipt_service,
                     )
                 admin_origin = os.getenv("ADMIN_PUBLIC_ORIGIN", "").strip().rstrip("/")
                 parsed_origin = urlsplit(admin_origin)
@@ -145,6 +154,8 @@ def create_app(
                 await pricing_repository.close()
             if user_access_repository is not None:
                 await user_access_repository.close()
+            if receipt_repository is not None:
+                await receipt_repository.close()
 
     framework = FrameworkSettings.model_validate(
         {
@@ -164,12 +175,13 @@ def create_app(
     )
     app = create_papilio_app(
         framework,
-        routers=[build_payment_router(), build_subscription_router(), build_admin_web_router()],
+        routers=[build_payment_router(), build_receipt_router(), build_subscription_router(), build_admin_web_router()],
         middleware=(),
         docs_url=None,
         lifespan=lifespan,
     )
     app.state.payment_service = service
+    app.state.receipt_service = None
     app.state.checkout_service = None
     app.state.private_node = None
     app.state.access_service = access_service
@@ -187,7 +199,7 @@ def create_app(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         response = await call_next(request)
-        if request.url.path.startswith("/admin"):
+        if request.url.path.startswith(("/admin", "/payments/kpay")):
             response.headers["Cache-Control"] = "private, no-store, max-age=0"
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["X-Frame-Options"] = "DENY"

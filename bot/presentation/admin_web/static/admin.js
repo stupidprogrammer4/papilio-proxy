@@ -371,10 +371,11 @@
   }
   async function payments() {
     const config = await api('/checkout');
+    const receiptPolicy = await api('/receipt-policy');
     const rows = await api(`/payments?offset=${state.offsets.payments}`);
     const notice = node("div", "notice");
     add(notice, node("strong", "", "تأیید پرداخت از KPay: "),
-      node("span", "", "رسید یا تصویر به‌تنهایی تأیید نیست. این پنل دکمهٔ تغییر دستی وضعیت تراکنش ندارد."));
+      node("span", "", "رسید به KPay ارسال و نتیجهٔ آن خودکار پیگیری می‌شود. این برنامه API تأیید پذیرنده را فراخوانی نمی‌کند. مسئولیت گزینهٔ تأیید بدون بررسی در خود KPay با مالک است."));
     const box = table([
       ["سفارش", row => node("span", "mono", shortId(row.order_id))],
       ["مبلغ", row => toman(row.amount_rial / 10)],
@@ -390,11 +391,15 @@
     }
     const enabled = node('input'); enabled.type = 'checkbox'; enabled.checked = config.enabled;
     const toggle = node('label', '', ' خرید عمومی فعال باشد '); toggle.prepend(enabled); form.append(toggle);
+    const receipts = node('input'); receipts.type = 'checkbox'; receipts.checked = receiptPolicy.enabled;
+    const receiptToggle = node('label', '', ' صفحهٔ ارسال رسید و پیگیری خودکار نتیجهٔ KPay فعال باشد ');
+    receiptToggle.prepend(receipts); form.append(receiptToggle);
     const submit = node('button', 'btn btn-primary', 'ذخیرهٔ تنظیمات درگاه'); submit.type = 'submit'; form.append(submit);
     form.addEventListener('submit', async (event) => {
       event.preventDefault(); submit.disabled = true;
       try {
         await api('/checkout', {method: 'PUT', body: JSON.stringify({enabled: enabled.checked, shop_id: fields.shop_id.value.trim(), card_id: fields.card_id.value.trim(), callback_url: fields.callback_url.value.trim()})});
+        await api('/receipt-policy', {method: 'PUT', body: JSON.stringify({enabled: receipts.checked})});
         toast('تنظیمات درگاه ذخیره شد.');
       } catch (error) { toast(error.message, true); } finally { submit.disabled = false; }
     });

@@ -16,6 +16,7 @@ from bot.infra.db.checkout import MysqlCheckoutRepository
 from bot.infra.db.credentials import MysqlCredentialVault
 from bot.infra.db.mysql import MysqlSubscriptionRepository
 from bot.infra.db.payments import MysqlPaymentRepository
+from bot.infra.db.receipts import MysqlReceiptRepository
 from bot.infra.kpay import KpayVerifier
 from bot.infra.node import XrayNodeClient
 from bot.jobs.runtime import usage_warning_scheduler
@@ -29,6 +30,7 @@ from bot.services.branding import BrandingService
 from bot.services.checkout import CheckoutService
 from bot.services.node import NodeReconciler
 from bot.services.payments import PaymentVerificationService
+from bot.services.receipts import ReceiptService
 from bot.services.subscriptions import SubscriptionService
 
 logger = logging.getLogger(__name__)
@@ -61,6 +63,7 @@ async def run() -> None:
     dispatcher = Dispatcher()
     checkout_repository: MysqlCheckoutRepository | None = None
     payment_repository: MysqlPaymentRepository | None = None
+    receipt_repository: MysqlReceiptRepository | None = None
     vault: MysqlCredentialVault | None = None
     payment_client: httpx.AsyncClient | None = None
     checkout_service: CheckoutService | None = None
@@ -69,12 +72,16 @@ async def run() -> None:
         payment_repository = MysqlPaymentRepository(settings.database_url)
         await checkout_repository.initialize()
         await payment_repository.initialize()
+        receipt_repository = MysqlReceiptRepository(settings.database_url)
+        await receipt_repository.initialize()
         vault = MysqlCredentialVault(settings.database_url, settings.credential_encryption_key)
         payment_client = httpx.AsyncClient(timeout=12, follow_redirects=False)
         provider = KpayVerifier(settings.kpay_api_base_url, vault, payment_client)
-        verification = PaymentVerificationService(provider, payment_repository)
+        receipts = ReceiptService(receipt_repository, provider, payment_repository)
+        verification = PaymentVerificationService(provider, payment_repository, receipts)
         checkout_service = CheckoutService(
-            checkout_repository, provider, payment_repository, verification, settings.admin_ids
+            checkout_repository, provider, payment_repository, verification, settings.admin_ids,
+            receipts=receipts,
         )
     subscription_service = SubscriptionService(repository, repository)
     dispatcher.include_router(build_router(subscription_service, settings, access_service, checkout_service))
@@ -109,6 +116,8 @@ async def run() -> None:
             await checkout_repository.close()
         if payment_repository is not None:
             await payment_repository.close()
+        if receipt_repository is not None:
+            await receipt_repository.close()
         await bot.session.close()
         await repository.close()
         if access_repository is not None:

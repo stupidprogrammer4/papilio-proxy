@@ -19,6 +19,7 @@ from bot.models.user_access import UnknownUserError
 from bot.services.admin_plans import PlanValidationError
 from bot.services.admin_web import AdminWebService
 from bot.services.checkout import CheckoutService
+from bot.services.receipts import ReceiptService
 from bot.services.subscriptions import Plan, UnknownPlanError
 from bot.services.user_access import UserAccessService
 
@@ -85,6 +86,11 @@ class UserAccessBody(BaseModel):
     reason: str = Field(default="", max_length=300)
 
 
+class ReceiptPolicyBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = Field(strict=True)
+
+
 def _service(request: Request) -> AdminWebService:
     service = cast("AdminWebService | None", request.app.state.admin_web_service)
     if service is None:
@@ -145,6 +151,22 @@ async def _pricing_data(service: AdminWebService) -> dict[str, object]:
 
 def build_admin_web_router() -> APIRouter:
     router = APIRouter()
+
+    @router.get("/admin/api/receipt-policy")
+    async def receipt_policy(request: Request, _: Annotated[AdminSession, Depends(_session)]) -> dict[str, bool]:
+        service = cast("ReceiptService | None", request.app.state.receipt_service)
+        if service is None:
+            raise HTTPException(503, "تأیید خودکار رسید تنظیم نشده است.")
+        return {"enabled": await service.repository.enabled()}
+
+    @router.put("/admin/api/receipt-policy")
+    async def save_receipt_policy(body: ReceiptPolicyBody, request: Request,
+                                  _: Annotated[AdminSession, Depends(_mutating_session)]) -> dict[str, bool]:
+        service = cast("ReceiptService | None", request.app.state.receipt_service)
+        if service is None:
+            raise HTTPException(503, "تأیید خودکار رسید تنظیم نشده است.")
+        await service.repository.set_enabled(body.enabled)
+        return {"enabled": await service.repository.enabled()}
 
     @router.get("/admin", include_in_schema=False)
     @router.get("/admin/", include_in_schema=False)

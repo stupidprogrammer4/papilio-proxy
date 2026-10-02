@@ -9,6 +9,7 @@ from bot.models.payments import PaymentInitiation, PaymentProviderUnavailable
 from bot.models.subscriptions import SubscriptionStatus
 from bot.models.user_access import UserBlockedError
 from bot.services.payments import CallbackOutcome, PaymentRepository, PaymentVerificationService
+from bot.services.receipts import ReceiptService
 
 
 class CheckoutRepository(Protocol):
@@ -32,7 +33,18 @@ class CheckoutService:
     payments: PaymentRepository
     verification: PaymentVerificationService
     admin_ids: frozenset[int] = frozenset()
+    receipts: ReceiptService | None = None
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+    async def receipt_mode(self) -> bool:
+        return bool(self.receipts and await self.receipts.repository.enabled())
+
+    async def customer_payment_url(self, checkout: PaymentInitiation) -> str:
+        if not await self.receipt_mode():
+            return checkout.payment_url
+        config = await self.repository.get_config()
+        origin = urlsplit(config.callback_url)
+        return f"{origin.scheme}://{origin.netloc}/payments/kpay/checkout/{checkout.authority}"
 
     async def enabled(self, telegram_id: int | None = None) -> bool:
         config = await self.repository.get_config()

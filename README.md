@@ -45,6 +45,8 @@ The bot creates a payment for the order's stored rial amount. The callback verif
 
 The bot also checks pending payments every 15 seconds in small batches, so closing the browser does not prevent fulfillment. Provisioning runs every two seconds; a durable delivery queue sends subscription links and QR images in the buyer's private chat. The payment result page attempts to return to Telegram and provides a fallback button. Returning to chat is not required for delivery, and browsers may require a user tap to open Telegram.
 
+The optional receipt page forwards PNG/JPEG receipts to KPay and observes KPay's decision; it never calls the merchant approval endpoint. Enable it in the dashboard and install `deploy/nginx/receipt-checkout.conf` in the HTTPS server. Duplicate image hashes are rejected across orders. Receipt-upload responses are retained encrypted for the private payment test; receipt images are not stored locally. A pending response never activates a subscription. Provider receipt processing and fraud detection still require a real purchase test.
+
 Subscription links contain branded profile names and shared usage metadata. Opening one in a browser displays its private usage dashboard; subscription clients receive connection links. When configured, Hysteria2, VLESS and VMess share the same entitlement, quota and expiry.
 
 ## Checks

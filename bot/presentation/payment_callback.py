@@ -33,7 +33,7 @@ def build_payment_router() -> APIRouter:
             return PlainTextResponse("پرداخت به سفارش معتبری متصل نشد؛ با پشتیبانی تماس بگیرید.", status_code=409)
         paid = result == CallbackOutcome.PAID
         title = "✅ پرداخت تأیید شد" if paid else "⏳ پرداخت هنوز تأیید نشده است"
-        detail = "سفارش وارد صف فعال‌سازی شد. وضعیت تحویل سرویس را در بات بررسی کنید." if paid else "پس از انتقال وجه، در بات «بررسی پرداخت» را بزن. رسید به‌تنهایی تأیید نیست."
+        detail = "سفارش وارد صف فعال‌سازی شد. وضعیت تحویل سرویس را در بات بررسی کنید." if paid else "اگر رسید را ارسال کرده‌ای، بررسی خودکار ادامه دارد. در بات «بررسی پرداخت» را بزن؛ دوباره واریز نکن."
         destination = cast("str | None", getattr(request.app.state, "bot_return_url", None))
         order_id = await service.return_order_id(authorities[0])
         if destination and order_id:
