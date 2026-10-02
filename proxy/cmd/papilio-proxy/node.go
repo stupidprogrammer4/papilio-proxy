@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/stupidprogrammer4/papilio-proxy/internal/hysteria"
 	"github.com/stupidprogrammer4/papilio-proxy/internal/xray"
 )
 
@@ -98,15 +100,21 @@ func (u *trackedUser) snapshot() nodeSnapshot {
 }
 
 type nodeServer struct {
-	mu          sync.Mutex
-	users       map[string]*trackedUser
-	lastContact time.Time
-	config      nodeConfig
-	xrayBinary  string
-	server      xray.DualServerConfig
-	publicKey   string
-	child       *exec.Cmd
-	childDone   chan error
+	mu           sync.Mutex
+	users        map[string]*trackedUser
+	lastContact  time.Time
+	config       nodeConfig
+	xrayBinary   string
+	server       xray.DualServerConfig
+	publicKey    string
+	child        *exec.Cmd
+	childDone    chan error
+	hy           *hysteria.Client
+	hyConfig     hysteria.Config
+	hyChild      *exec.Cmd
+	hyChildDone  chan error
+	hyAuthServer *http.Server
+	identities   map[string]string
 }
 
 func loadNodeConfig(path string) (nodeConfig, xray.DualServerConfig, string, error) {
@@ -214,10 +222,21 @@ func (n *nodeServer) addUser(ctx context.Context, request ensureRequest) error {
 
 func (n *nodeServer) removeUser(ctx context.Context, email string) error {
 	var failures []error
+	if user, ok := n.users[email]; ok {
+		user.revoked = true
+	}
+	if n.hy != nil {
+		if err := n.hy.Kick(ctx, email); err != nil {
+			failures = append(failures, err)
+		}
+	}
 	for _, tag := range []string{"vless-reality-in", "vmess-ws-tls-in"} {
 		if _, err := n.callAPI(ctx, "rmu", []string{"-tag=" + tag, email}, nil); err != nil {
 			failures = append(failures, err)
 		}
+	}
+	if len(failures) > 0 && n.child != nil && n.child.Process != nil {
+		_ = n.child.Process.Kill()
 	}
 	return errors.Join(failures...)
 }
@@ -250,6 +269,14 @@ func (n *nodeServer) poll(ctx context.Context) error {
 		}
 		values[item.Name] = item.Value
 	}
+	hyTraffic := make(map[string]hysteria.Traffic)
+	if n.hy != nil {
+		var err error
+		hyTraffic, err = n.hy.Counters(ctx)
+		if err != nil {
+			return err
+		}
+	}
 	now := time.Now().UTC()
 	for email, user := range n.users {
 		if user.revoked {
@@ -257,8 +284,18 @@ func (n *nodeServer) poll(ctx context.Context) error {
 		}
 		up := values["user>>>"+email+">>>traffic>>>uplink"]
 		down := values["user>>>"+email+">>>traffic>>>downlink"]
+		traffic := hyTraffic[email]
+		if up > math.MaxInt64-traffic.Upload || down > math.MaxInt64-traffic.Download ||
+			up+traffic.Upload > math.MaxInt64-user.baseUp || down+traffic.Download > math.MaxInt64-user.baseDown {
+			return errors.New("node traffic counter overflow")
+		}
+		up += traffic.Upload
+		down += traffic.Download
 		candidateUp := user.baseUp + up
 		candidateDown := user.baseDown + down
+		if candidateUp > math.MaxInt64-candidateDown {
+			return errors.New("combined traffic counter overflow")
+		}
 		if candidateUp < user.uplink || candidateDown < user.downlink {
 			return errors.New("Xray counter decreased")
 		}
@@ -292,6 +329,23 @@ func decodeRequest[T any](w http.ResponseWriter, r *http.Request, target *T) boo
 
 func (n *nodeServer) handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/links/{email}", func(w http.ResponseWriter, r *http.Request) {
+		n.mu.Lock()
+		defer n.mu.Unlock()
+		user, ok := n.users[r.PathValue("email")]
+		if !ok || user.revoked || !time.Now().Before(user.request.ExpiresAt) ||
+			user.uplink+user.downlink >= user.request.QuotaBytes || time.Since(n.lastContact) > 15*time.Second {
+			http.Error(w, "active entitlement unavailable", http.StatusNotFound)
+			return
+		}
+		link := ""
+		if n.hy != nil {
+			link = n.hyConfig.ShareLink(user.request.ID, user.request.Label)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		_ = json.NewEncoder(w).Encode(map[string]string{"hysteria_link": link})
+	})
 	mux.HandleFunc("POST /v1/heartbeat", func(w http.ResponseWriter, r *http.Request) {
 		n.mu.Lock()
 		n.lastContact = time.Now()
@@ -329,6 +383,10 @@ func (n *nodeServer) handler() http.Handler {
 		n.mu.Lock()
 		defer n.mu.Unlock()
 		n.lastContact = time.Now()
+		if email, found := n.identities[request.ID]; found && email != request.Email {
+			http.Error(w, "entitlement identity conflict", http.StatusConflict)
+			return
+		}
 		tracked, exists := n.users[request.Email]
 		if exists && tracked.revoked {
 			http.Error(w, "entitlement revoked", http.StatusGone)
@@ -357,6 +415,10 @@ func (n *nodeServer) handler() http.Handler {
 				lastMeasured: startedAt,
 			}
 			n.users[request.Email] = tracked
+			if n.identities == nil {
+				n.identities = make(map[string]string)
+			}
+			n.identities[request.ID] = request.Email
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
@@ -365,7 +427,6 @@ func (n *nodeServer) handler() http.Handler {
 	mux.HandleFunc("GET /v1/usage", func(w http.ResponseWriter, r *http.Request) {
 		n.mu.Lock()
 		defer n.mu.Unlock()
-		n.lastContact = time.Now()
 		result := make([]nodeSnapshot, 0, len(n.users))
 		for _, user := range n.users {
 			result = append(result, user.snapshot())
@@ -392,6 +453,7 @@ func (n *nodeServer) handler() http.Handler {
 				}
 			}
 			delete(n.users, request.Email)
+			delete(n.identities, user.request.ID)
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
@@ -450,10 +512,14 @@ func runNode() error {
 		return err
 	}
 	defer func() {
+		n.closeHysteria()
 		if n.child != nil && n.child.Process != nil {
 			_ = n.child.Process.Kill()
 		}
 	}()
+	if err := n.startHysteria(); err != nil {
+		return err
+	}
 	_ = os.Remove(socketPath)
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
@@ -471,6 +537,8 @@ func runNode() error {
 		select {
 		case <-n.childDone:
 			return errors.New("Xray child exited")
+		case <-n.hyChildDone:
+			return errors.New("Hysteria child exited; node failed closed")
 		case <-ticker.C:
 			n.mu.Lock()
 			stale := time.Since(n.lastContact) > 15*time.Second && len(n.users) > 0

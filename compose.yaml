@@ -21,6 +21,9 @@ services:
       context: .
       dockerfile: Dockerfile
     env_file: .env
+    group_add: ["10001"]
+    volumes:
+      - ./data/node:/run/papilio
     command: ["uvicorn", "bot.callback:app", "--host", "0.0.0.0", "--port", "8080", "--no-access-log"]
     ports:
       - "127.0.0.1:8080:8080"
@@ -34,6 +37,8 @@ services:
     image: ghcr.io/xtls/xray-core@sha256:592ec4d11f656db95598d01e76dbcc6e002d67360b96a5436500a938230f52c7
     entrypoint: ["/usr/local/bin/papilio-proxy"]
     command: ["serve"]
+    environment:
+      PAPILIO_HYSTERIA_CONFIG: /etc/hysteria/node.json
     user: "65532:10001"
     network_mode: host
     read_only: true
@@ -44,6 +49,9 @@ services:
       - ./data/xray/papilio-proxy:/usr/local/bin/papilio-proxy:ro
       - ./data/node:/run/papilio
       - ./data/xray/certs:/etc/xray/certs:ro
+      - ./data/hysteria/node.json:/etc/hysteria/node.json:ro
+      - ./data/hysteria/server.json:/etc/hysteria/server.json:ro
+      - ./data/hysteria/hysteria:/usr/local/bin/hysteria:ro
     restart: unless-stopped
     mem_limit: 512m
 
@@ -83,4 +91,3 @@ networks:
 
 volumes:
   mysql_data:
-

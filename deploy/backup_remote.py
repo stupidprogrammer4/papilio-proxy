@@ -35,6 +35,8 @@ FILES = (
     "data/xray/node.json",
     "data/xray/certs/fullchain.pem",
     "data/xray/certs/privkey.pem",
+    "data/hysteria/node.json",
+    "data/hysteria/server.json",
 )
 
 
