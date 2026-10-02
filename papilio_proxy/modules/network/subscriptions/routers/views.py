@@ -17,14 +17,14 @@ PAGE = Template((ASSETS / "subscription.html").read_text())
 def connection_links(access: SubscriptionAccess) -> list[str]:
     """Change display labels only; preserve transport credentials and parameters."""
     result: list[str] = []
-    for link, icon, protocol in (
-        (access.hysteria_link, "🚀", "Hysteria2"),
-        (access.vless_link, "⚡", "VLESS"),
-        (access.vmess_link, "🌐", "VMess"),
+    for link, icon, protocol, name in (
+        (access.hysteria_link, "🚀", "Hysteria2", "پیشنهادی"),
+        (access.vless_link, "⚡", "VLESS", "مسیر ۱"),
+        (access.vmess_link, "🌐", "VMess", "مسیر ۲"),
     ):
         if not link:
             continue
-        label = f"{icon} {access.profile_name} · {protocol}"
+        label = f"{icon} {access.profile_name} · {name}"
         parsed = urlsplit(link)
         if protocol == "VMess":
             payload = json.loads(base64.b64decode(parsed.netloc, validate=True))
@@ -57,7 +57,7 @@ def subscription_page(access: SubscriptionAccess, public_base: str | None) -> st
         measured=escape(last_update),
         subscription=escape(subscription, quote=True),
         import_url=escape("hiddify://import/" + subscription, quote=True),
-        protocols="🚀 Hysteria2 · ⚡ VLESS · 🌐 VMess"
+        protocols="🚀 اتصال پیشنهادی · ⚡ مسیر ۱ · 🌐 مسیر ۲"
         if access.hysteria_link
-        else "⚡ VLESS · 🌐 VMess",
+        else "⚡ مسیر ۱ · 🌐 مسیر ۲",
     )
