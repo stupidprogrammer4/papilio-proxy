@@ -11,6 +11,10 @@ class PaymentVerifier(Protocol):
     async def verify(self, authority: str) -> ProviderVerification: ...
 
 
+class ReceiptAutomation(Protocol):
+    async def recheck_uploaded(self) -> int: ...
+
+
 class PaymentRepository(Protocol):
     async def order_id_for_authority(self, authority: str) -> str | None: ...
 
@@ -35,10 +39,12 @@ class CallbackOutcome(StrEnum):
 class PaymentVerificationService:
     """Rechecks KPay and atomically records settled-but-unprovisioned orders."""
 
-    def __init__(self, provider: PaymentVerifier, repository: PaymentRepository) -> None:
+    def __init__(self, provider: PaymentVerifier, repository: PaymentRepository,
+                 receipts: ReceiptAutomation | None = None) -> None:
         self._provider = provider
         self._repository = repository
         self._cursor: str | None = None
+        self._receipts = receipts
 
     async def return_order_id(self, authority: str) -> str | None:
         value = await self._repository.order_id_for_authority(authority)
@@ -51,11 +57,12 @@ class PaymentVerificationService:
 
     async def recheck_pending(self, limit: int = 5) -> int:
         """Recover payments even when the buyer never opens the callback URL."""
+        receipt_paid = await self._receipts.recheck_uploaded() if self._receipts else 0
         authorities = await self._repository.pending_authorities(self._cursor, limit)
         if not authorities and self._cursor:
             self._cursor = None
             authorities = await self._repository.pending_authorities(None, limit)
-        paid = 0
+        paid = receipt_paid
         for authority in authorities:
             self._cursor = authority
             try:

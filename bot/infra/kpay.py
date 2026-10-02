@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from collections.abc import Mapping
 from urllib.parse import urlsplit
@@ -11,6 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from bot.infra.db.credentials import KPAY_ACCESS_TOKEN_NAME, MysqlCredentialVault
 from bot.models.credentials import CredentialStorageError
 from bot.models.payments import PaymentInitiation, PaymentProviderUnavailable, ProviderVerification
+from bot.models.receipts import ReceiptPaymentPage
 
 
 class KpayVerifier:
@@ -184,6 +187,59 @@ class KpayVerifier:
             json={"authority": authority},
             headers={"Authorization": f"Bearer {token}"},
         )
+
+    async def payment_page(self, authority: str) -> ReceiptPaymentPage:
+        try:
+            response = await self._client.get(
+                f"{self._base_url}/transactions/payment/{authority}"
+            )
+            data = response.json()
+            if response.status_code != 200 or not isinstance(data, Mapping):
+                raise PaymentProviderUnavailable("KPay payment page unavailable")
+            if data.get("authority") != authority:
+                raise PaymentProviderUnavailable("KPay page authority mismatch")
+            amount, final, remaining = (
+                data.get("amount"), data.get("final_amount"), data.get("remaining_seconds"),
+            )
+            card, owner, status = data.get("card_number"), data.get("owner_name"), data.get("status")
+            if (any(type(value) is not int for value in (amount, final, remaining))
+                    or not isinstance(amount, int) or not isinstance(final, int)
+                    or not isinstance(remaining, int) or amount <= 0 or final < amount
+                    or not isinstance(card, str) or re.fullmatch(r"[0-9]{16}", card) is None
+                    or not isinstance(owner, str) or not isinstance(status, str)):
+                raise PaymentProviderUnavailable("Invalid KPay payment page")
+            return ReceiptPaymentPage(amount, final, card, owner, remaining, status)
+        except (httpx.HTTPError, ValueError, TypeError) as exc:
+            raise PaymentProviderUnavailable("KPay payment page unavailable") from exc
+
+    async def upload_receipt(self, authority: str, image: str) -> None:
+        try:
+            response = await self._client.post(
+                f"{self._base_url}/transactions/payment/{authority}/upload-receipt",
+                json={"receipt_image": image},
+            )
+            # Keep the provider's actual response encrypted for the private pilot.
+            # Never emit image data, banking identifiers or authority to logs.
+            try:
+                payload = response.json()
+            except ValueError:
+                payload = {"content_type": response.headers.get("content-type", ""), "not_json": True}
+            observation = json.dumps({"http_status": response.status_code, "body": payload}, ensure_ascii=False)
+            if len(observation.encode()) > 2_000:
+                observation = json.dumps({
+                    "http_status": response.status_code,
+                    "response_field_names": [str(key)[:40] for key in list(payload)[:20]] if isinstance(payload, Mapping) else [],
+                    "oversized": True,
+                }, ensure_ascii=True)
+                if len(observation) > 2_000:
+                    observation = '{"oversized": true}'
+            await self._vault.put(
+                "kpay.receipt_response." + hashlib.sha256(authority.encode()).hexdigest(), observation,
+            )
+            if response.status_code not in {200, 201}:
+                raise PaymentProviderUnavailable("KPay receipt upload unavailable")
+        except (httpx.HTTPError, ValueError, TypeError, CredentialStorageError, SQLAlchemyError) as exc:
+            raise PaymentProviderUnavailable("KPay receipt upload unavailable") from exc
 
     async def _login(self) -> str:
         credentials = await self._vault.load_kpay_credentials()
