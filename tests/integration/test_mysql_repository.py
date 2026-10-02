@@ -12,10 +12,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from bot.infra.db.access import MysqlAccessRepository
+from bot.infra.db.checkout import MysqlCheckoutRepository
 from bot.infra.db.models import SubscriptionAccessModel
 from bot.infra.db.mysql import MysqlSubscriptionRepository
 from bot.infra.db.payments import MysqlPaymentRepository
 from bot.models import Protocol, TelegramUser
+from bot.models.checkout import CheckoutConfig, CheckoutUnavailable
 from bot.models.payments import PaymentInitiation, ProviderVerification
 from bot.models.subscriptions import SubscriptionStatus
 from bot.services.access import AccessService, AccessUnavailable
@@ -29,6 +31,7 @@ class MysqlRepositoryTests(IsolatedAsyncioTestCase):
     async def test_catalog_and_order_roundtrip_with_rollback(self) -> None:
         repository = MysqlSubscriptionRepository(os.environ["PAPILIO_TEST_DATABASE_URL"])
         payments = MysqlPaymentRepository(os.environ["PAPILIO_TEST_DATABASE_URL"])
+        checkouts = MysqlCheckoutRepository(os.environ["PAPILIO_TEST_DATABASE_URL"])
         access_repository = MysqlAccessRepository(
             os.environ["PAPILIO_TEST_DATABASE_URL"],
             os.getenv("CREDENTIAL_ENCRYPTION_KEY") or Fernet.generate_key().decode()
@@ -37,17 +40,20 @@ class MysqlRepositoryTests(IsolatedAsyncioTestCase):
         owner = -(uuid4().int % 2**40 + 1)
         try:
             await repository.initialize()
+            await checkouts.initialize()
             async with repository._engine.connect() as connection:
                 transaction = await connection.begin()
                 original_factory = repository._session_factory
                 original_payments_factory = payments._session_factory
                 original_access_factory = access_repository._session_factory
+                original_checkout_factory = checkouts._session_factory
                 test_factory = async_sessionmaker(
                     connection, expire_on_commit=False, join_transaction_mode="create_savepoint"
                 )
                 repository._session_factory = test_factory
                 payments._session_factory = test_factory
                 access_repository._session_factory = test_factory
+                checkouts._session_factory = test_factory
                 try:
                     admin = AdminPlanService(repository, frozenset({owner}))
                     customer = SubscriptionService(repository, repository)
@@ -85,6 +91,15 @@ class MysqlRepositoryTests(IsolatedAsyncioTestCase):
                     self.assertEqual(records[0].traffic_used_bytes, 0)
                     self.assertEqual(records[0].created_at.tzinfo, order.created_at.tzinfo)
                     self.assertEqual(await customer.list_subscriptions(owner - 1), [])
+                    await checkouts.save_config(CheckoutConfig(
+                        False, str(uuid4()), str(uuid4()),
+                        "https://bot.amupouya.org/payments/kpay/callback",
+                    ))
+                    self.assertFalse((await checkouts.get_config()).enabled)
+                    self.assertIsNone(await checkouts.get_order(owner - 1, order.id))
+                    await checkouts.claim(order.id)
+                    with self.assertRaises(CheckoutUnavailable):
+                        await checkouts.claim(order.id)
                     checkout = PaymentInitiation(
                         transaction_id="tx-" + uuid4().hex,
                         authority="auth-" + uuid4().hex,
@@ -92,6 +107,11 @@ class MysqlRepositoryTests(IsolatedAsyncioTestCase):
                         payment_url="https://kpay.website/pay/test",
                     )
                     await payments.attach_checkout(order.id, checkout)
+                    saved_checkout = await checkouts.get_order(owner, order.id)
+                    assert saved_checkout is not None
+                    self.assertEqual(saved_checkout.checkout, checkout)
+                    self.assertEqual(await payments.order_id_for_authority(checkout.authority), order.id)
+                    self.assertIn(checkout.authority, await payments.pending_authorities(None, 20))
                     paid = ProviderVerification(
                         checkout.authority,
                         "paid",
@@ -111,6 +131,7 @@ class MysqlRepositoryTests(IsolatedAsyncioTestCase):
                         )
                     self.assertTrue(await payments.settle_verified(paid))
                     self.assertTrue(await payments.settle_verified(paid))
+                    self.assertNotIn(checkout.authority, await payments.pending_authorities(None, 20))
                     settled = await customer.list_subscriptions(owner)
                     self.assertEqual(
                         settled[0].status, SubscriptionStatus.PAID_AWAITING_PROVISIONING
@@ -164,6 +185,8 @@ class MysqlRepositoryTests(IsolatedAsyncioTestCase):
                     fetched = await access_service.get_by_token(access.token)
                     assert fetched is not None
                     self.assertEqual(fetched.vmess_link, vmess)
+                    self.assertEqual(fetched.plan_title, "آزمون برگشت‌پذیر")
+                    self.assertEqual(fetched.plan_emoji, "🪐")
                     self.assertIsNone(await access_service.get_for_user(owner - 1, order.id))
                     exhausted = await access_service.record_usage(
                         order.id, 14 * 1024**3, 0, activated_at + timedelta(seconds=1)
@@ -193,12 +216,14 @@ class MysqlRepositoryTests(IsolatedAsyncioTestCase):
                     repository._session_factory = original_factory
                     payments._session_factory = original_payments_factory
                     access_repository._session_factory = original_access_factory
+                    checkouts._session_factory = original_checkout_factory
             self.assertIsNone(await repository.get(code))
             self.assertEqual(await repository.list_for_user(owner), [])
         finally:
             await repository.close()
             await payments.close()
             await access_repository.close()
+            await checkouts.close()
 
 
 if __name__ == "__main__":

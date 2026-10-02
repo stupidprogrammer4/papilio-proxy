@@ -7,6 +7,7 @@ Papilio is a work-in-progress VPN subscription project with a Persian Telegram b
 - `bot/`: Telegram interface, admin tools, application services, and MySQL/SQLAlchemy adapters.
 - `bot/callback.py`: a small Papilio/FastAPI API for KPay verification and private subscription pages.
 - `proxy/`: a Go component for Xray configuration and subscription entitlements.
+- `deploy/hysteria/`: pinned official Hysteria installation with private Go authentication.
 - `deploy/xray/`: VPS bootstrap, TLS-renewal hook, and disposable smoke tests.
 - `assets/`: the existing Papilio banner and logo used by the bot.
 - `bot/infra/qr.py`: in-memory QR rendering with bounded background workers.
@@ -34,6 +35,16 @@ The owner dashboard is at `/admin` on the HTTPS callback domain. Set `ADMIN_PUBL
 
 The dashboard also stores editable pricing assumptions in MySQL and compares each plan against a fully-consuming customer cohort. Provider traffic is modeled in decimal GB while plan traffic uses GiB. It reports a contribution scenario, not guaranteed net profit; changing assumptions does not silently alter published plan prices.
 
+## Purchase flow
+
+Configure the KPay shop, card, HTTPS callback, and public checkout switch in the admin dashboard. These settings live in MySQL. Admins can test checkout while public purchases remain disabled.
+
+The bot creates a payment for the order's stored rial amount. The callback verifies the transaction with KPay and atomically records settlement; redirects and receipt images never count as payment proof. Duplicate callbacks cannot activate a second subscription. Failed provisioning remains queued for retry.
+
+The bot also checks pending payments every 15 seconds in small batches, so closing the browser does not prevent fulfillment. Provisioning runs every two seconds; a durable delivery queue sends subscription links and QR images in the buyer's private chat. The payment result page attempts to return to Telegram and provides a fallback button. Returning to chat is not required for delivery, and browsers may require a user tap to open Telegram.
+
+Subscription links contain branded profile names and shared usage metadata. Opening one in a browser displays its private usage dashboard; subscription clients receive connection links. When configured, Hysteria2, VLESS and VMess share the same entitlement, quota and expiry.
+
 ## Checks
 
 ```bash
@@ -50,6 +61,6 @@ Install development dependencies with `pip install -e '.[dev]'`. They include an
 
 The VPS runs a pinned official Xray container with VLESS/REALITY on TCP 8443 and VMess/WSS on TCP 8444. The Go controller manages both protocols through a private Unix socket, polls shared usage counters, and revokes access at expiry or measured quota exhaustion. A disposable account passed real HTTPS traffic through both protocols, produced positive counters, and was rejected after revocation. An admin-only, zero-revenue pilot entitlement is now active for real-network testing.
 
-The bot and callback API are deployed with a public HTTPS subscription/usage route, encrypted per-order links, asynchronous QR delivery, and an 80% usage warning outbox. The Python unit suite, a rollback-only MySQL integration test on the VPS, Go tests, Ruff, and Pyright pass. A settled payment is recorded exactly once and remains retryable until provisioning succeeds. The customer checkout button is still disabled, so the service is **not accepting paid orders**.
+The bot and callback API support public HTTPS subscription/usage routes, encrypted per-order links, asynchronous QR delivery, and an 80% usage warning outbox. Public checkout is disabled by default and controlled separately in MySQL. Do not confuse an enabled catalog or a deployed checkout with proof of live bank settlement.
 
-Xray usage is sampled once per second. It is not a byte-exact cap: traffic can exceed the advertised quota between samples, and usage can be lost around an unclean controller restart. No live paid KPay settlement or connection test from Iranian mobile and fixed networks has been completed. One encrypted off-node snapshot was restored in an isolated MySQL container and dumped again successfully, but recurring backup automation is not yet in place. Do not advertise the service as production-ready or enable sales until those gates are resolved and verified.
+Usage is sampled once per second. It is not a byte-exact cap: traffic can exceed the advertised quota between samples, and usage can be lost around an unclean controller restart. Hiddify-core tests over Irancell completed for VLESS and Hysteria2; these are single-client observations, not a 100-concurrent-user capacity guarantee. Live paid KPay settlement and the other target-network trials still require verification. Encrypted off-node snapshots have passed isolated MySQL restore tests, but recurring backup automation is not yet in place. Do not advertise full production readiness until the remaining gates are verified.
