@@ -371,20 +371,18 @@ def build_router(
             await callback.answer(str(exc), show_alert=True)
             return
         await callback.answer()
-        receipt_mode = await checkout_service.receipt_mode()
         payment_url = await checkout_service.customer_payment_url(checkout)
         await _show_view(callback,
             f"{RTL}💳 <b>پرداخت و دریافت خودکار سرویس</b>\n\n"
             f"{RTL}مبلغ سفارش: <b>{_toman(checkout.amount_rial // 10)}</b>\n"
             f"{RTL}🔖 پیگیری: <code>{escape(order_id[:8])}</code>\n\n"
-            f"{RTL}۱️⃣ درگاه را باز کن و دستور انتقال را دقیق دنبال کن.\n" +
-            (f"{RTL}۲️⃣ تصویر رسید را همان‌جا ارسال کن؛ نتیجهٔ KPay خودکار پیگیری می‌شود.\n"
-             if receipt_mode else f"{RTL}۲️⃣ پس از تأیید KPay، از صفحهٔ نتیجه به چت بات برگرد.\n") +
+            f"{RTL}۱️⃣ صفحهٔ خود KPay را باز کن و مراحل پرداخت را همان‌جا انجام بده.\n"
+            f"{RTL}۲️⃣ نتیجهٔ KPay خودکار پیگیری می‌شود؛ پس از تأیید به چت بات برگرد.\n"
             f"{RTL}۳️⃣ پس از تأیید پرداخت، لینک خصوصی و QR خودکار ارسال می‌شود.\n\n"
             f"{RTL}🔎 اگر صفحه بسته شد، تأیید پرداخت در پس‌زمینه هم پیگیری می‌شود.\n"
             f"{RTL}🔐 لینک پرداخت و سرویس را خصوصی نگه دار.",
             InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="💳 پرداخت و تأیید خودکار", url=payment_url, style="success")],
+                [InlineKeyboardButton(text="💳 پرداخت در KPay", url=payment_url, style="success")],
                 [InlineKeyboardButton(text="🔎 بررسی پرداخت", callback_data=f"paycheck:{order_id}", style="primary")],
                 [InlineKeyboardButton(text="📊 سفارش‌های من", callback_data="subscriptions")],
             ]))

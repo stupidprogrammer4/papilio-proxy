@@ -8,6 +8,13 @@ from bot.services.checkout import CheckoutService
 
 
 class CheckoutTests(IsolatedAsyncioTestCase):
+    async def test_customer_always_gets_provider_link_even_with_receipt_page_enabled(self) -> None:
+        service = self.service()
+        service.receipts = AsyncMock()
+        checkout = PaymentInitiation("tx", "auth", 50_000, "https://kpay.website/pay/auth")
+        self.assertEqual(await service.customer_payment_url(checkout), checkout.payment_url)
+        cast(AsyncMock, service.receipts).repository.enabled.assert_not_awaited()
+
     def service(self, enabled: bool = True) -> CheckoutService:
         repo, provider, payments, verification = (AsyncMock() for _ in range(4))
         repo.get_config.return_value = CheckoutConfig(enabled, "shop", "card", "https://example.test/payments/kpay/callback")

@@ -40,11 +40,8 @@ class CheckoutService:
         return bool(self.receipts and await self.receipts.repository.enabled())
 
     async def customer_payment_url(self, checkout: PaymentInitiation) -> str:
-        if not await self.receipt_mode():
-            return checkout.payment_url
-        config = await self.repository.get_config()
-        origin = urlsplit(config.callback_url)
-        return f"{origin.scheme}://{origin.netloc}/payments/kpay/checkout/{checkout.authority}"
+        # The buyer uses the provider's own checkout, never a local replacement.
+        return checkout.payment_url
 
     async def enabled(self, telegram_id: int | None = None) -> bool:
         config = await self.repository.get_config()
