@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from bot.models.node import IssuedNodeLinks, NodeSnapshot
+from bot.services.node_identity import node_email
 
 
 class NodeUnavailable(RuntimeError):
@@ -97,3 +98,9 @@ class XrayNodeClient:
 
     async def remove(self, email: str) -> None:
         await self._request("POST", "/v1/remove", {"email": email})
+
+    async def hysteria_link(self, subscription_id: str) -> str | None:
+        raw = await self._request("GET", "/v1/links/" + node_email(subscription_id))
+        if not isinstance(raw, dict) or not isinstance(raw.get("hysteria_link"), str):
+            raise NodeUnavailable("Invalid Hysteria link response")
+        return raw["hysteria_link"] or None

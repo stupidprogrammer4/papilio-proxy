@@ -5,18 +5,13 @@ import logging
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from hashlib import sha256
 from typing import Protocol
 
 from bot.models.node import ActiveNodeAccess, IssuedNodeLinks, NodeSnapshot, PendingProvision
 from bot.services.access import AccessService, AccessUnavailable
+from bot.services.node_identity import node_email
 
 logger = logging.getLogger(__name__)
-
-
-def node_email(subscription_id: str) -> str:
-    """An opaque, deterministic Xray accounting key for one paid order."""
-    return "ent-" + sha256(subscription_id.encode()).hexdigest()[:48]
 
 
 def _label(title: str) -> str:

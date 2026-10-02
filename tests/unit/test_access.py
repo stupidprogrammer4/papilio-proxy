@@ -10,6 +10,7 @@ import httpx
 
 from bot.callback import create_app
 from bot.models.access import SubscriptionAccess, UsageAlert
+from bot.presentation.subscription_view import connection_links
 from bot.services.access import AccessService, AccessUnavailable
 
 USER_ID = "123e4567-e89b-42d3-a456-426614174000"
@@ -93,7 +94,8 @@ class AccessTests(IsolatedAsyncioTestCase):
             await AccessService(repository).get_by_token("private-token")
 
     async def test_subscription_returns_both_links_and_usage_header(self) -> None:
-        service = AccessService(MemoryAccessRepository())
+        repository = MemoryAccessRepository()
+        service = AccessService(repository)
         app = create_app(access_service=service)
         app.state.subscription_public_base_url = "https://sub.example"
         async with httpx.AsyncClient(
@@ -103,7 +105,9 @@ class AccessTests(IsolatedAsyncioTestCase):
             usage = await client.get("/usage/private-token")
             missing = await client.get("/s/not-a-token")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.text.splitlines(), [VLESS, VMESS])
+        self.assertEqual(response.text.splitlines(), connection_links(repository.access))
+        title = response.headers["profile-title"].removeprefix("base64:")
+        self.assertEqual(base64.b64decode(title).decode(), repository.access.profile_name)
         self.assertIn("upload=100; download=50; total=1000", response.headers["subscription-userinfo"])
         self.assertEqual(response.headers["cache-control"], "private, no-store, max-age=0")
         self.assertIn("/usage/private-token", response.headers["profile-web-page-url"])

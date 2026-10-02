@@ -19,6 +19,13 @@ class SubscriptionAccess:
     expires_at: datetime
     last_measured_at: datetime | None
     status: SubscriptionStatus = SubscriptionStatus.ACTIVE
+    hysteria_link: str | None = None
+    plan_title: str = "سرویس اختصاصی"
+    plan_emoji: str = "🦋"
+
+    @property
+    def profile_name(self) -> str:
+        return f"{self.plan_emoji} Papilio · {self.plan_title} · {self.subscription_id[:8]}"
 
     @property
     def traffic_used_bytes(self) -> int:

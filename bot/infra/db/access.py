@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from bot.infra.db.models import (
     Base,
     PlanModel,
+    PlanVisualModel,
     ProvisionDeliveryModel,
     SubscriptionAccessModel,
     SubscriptionModel,
@@ -55,7 +56,8 @@ class MysqlAccessRepository:
             raise AccessUnavailable("Subscription secret cannot be decrypted") from exc
 
     def _access(
-        self, row: SubscriptionAccessModel, order: SubscriptionModel
+        self, row: SubscriptionAccessModel, order: SubscriptionModel,
+        title: str | None = None, emoji: str | None = None,
     ) -> SubscriptionAccess:
         if order.expires_at is None:
             raise AccessUnavailable("Active subscription has no expiry")
@@ -71,6 +73,8 @@ class MysqlAccessRepository:
             expires_at=order.expires_at.replace(tzinfo=UTC),
             last_measured_at=row.last_measured_at.replace(tzinfo=UTC),
             status=SubscriptionStatus(order.status),
+            plan_title=title or ("تست خصوصی" if order.price_rial == 0 else order.plan_code),
+            plan_emoji=emoji or "🦋",
         )
 
     async def activate(
@@ -123,8 +127,10 @@ class MysqlAccessRepository:
     async def get_by_token(self, token: str) -> SubscriptionAccess | None:
         digest = sha256(token.encode()).hexdigest()
         statement = (
-            select(SubscriptionAccessModel, SubscriptionModel)
+            select(SubscriptionAccessModel, SubscriptionModel, PlanModel.title, PlanVisualModel.emoji)
             .join(SubscriptionModel, SubscriptionAccessModel.subscription_id == SubscriptionModel.id)
+            .outerjoin(PlanModel, PlanModel.code == SubscriptionModel.plan_code)
+            .outerjoin(PlanVisualModel, PlanVisualModel.plan_code == PlanModel.code)
             .where(
                 SubscriptionAccessModel.token_digest == digest,
             )
@@ -133,15 +139,17 @@ class MysqlAccessRepository:
             pair = (await session.execute(statement)).one_or_none()
         if pair is None:
             return None
-        row, order = pair
-        return self._access(row, order)
+        row, order, title, emoji = pair
+        return self._access(row, order, title, emoji)
 
     async def get_for_user(
         self, telegram_id: int, subscription_id: str
     ) -> SubscriptionAccess | None:
         statement = (
-            select(SubscriptionAccessModel, SubscriptionModel)
+            select(SubscriptionAccessModel, SubscriptionModel, PlanModel.title, PlanVisualModel.emoji)
             .join(SubscriptionModel, SubscriptionAccessModel.subscription_id == SubscriptionModel.id)
+            .outerjoin(PlanModel, PlanModel.code == SubscriptionModel.plan_code)
+            .outerjoin(PlanVisualModel, PlanVisualModel.plan_code == PlanModel.code)
             .where(
                 SubscriptionAccessModel.subscription_id == subscription_id,
                 SubscriptionModel.telegram_id == telegram_id,
@@ -152,8 +160,8 @@ class MysqlAccessRepository:
             pair = (await session.execute(statement)).one_or_none()
         if pair is None:
             return None
-        row, order = pair
-        return self._access(row, order)
+        row, order, title, emoji = pair
+        return self._access(row, order, title, emoji)
 
     async def record_usage(
         self, subscription_id: str, uplink_bytes: int,

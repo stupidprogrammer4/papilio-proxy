@@ -4,7 +4,8 @@ import base64
 import binascii
 import json
 import secrets
-from dataclasses import dataclass
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 from urllib.parse import urlsplit
@@ -71,6 +72,7 @@ def _link_user_id(vless_link: str, vmess_link: str) -> None:
 class AccessService:
     repository: AccessRepository
     max_counter_age: timedelta = timedelta(minutes=10)
+    node_links: Callable[[str], Awaitable[str | None]] | None = None
 
     async def record_provisioned(
         self, subscription_id: str, vless_link: str, vmess_link: str,
@@ -95,14 +97,30 @@ class AccessService:
             return None
         access = await self.repository.get_by_token(token)
         self._require_current(access)
-        return access
+        return await self._decorate(access)
 
     async def get_for_user(
         self, telegram_id: int, subscription_id: str
     ) -> SubscriptionAccess | None:
         access = await self.repository.get_for_user(telegram_id, subscription_id)
         self._require_current(access)
-        return access
+        return await self._decorate(access)
+
+    async def _decorate(self, access: SubscriptionAccess | None) -> SubscriptionAccess | None:
+        if access is None or self.node_links is None:
+            return access
+        try:
+            link = await self.node_links(access.subscription_id)
+        except RuntimeError as exc:
+            raise AccessUnavailable("Connection metadata is unavailable") from exc
+        if link:
+            parsed = urlsplit(link)
+            if (
+                parsed.scheme not in {"hysteria2", "hy2"} or not parsed.hostname
+                or parsed.username != access.subscription_id
+            ):
+                raise AccessUnavailable("Hysteria link does not share the entitlement")
+        return replace(access, hysteria_link=link)
 
     async def record_usage(
         self, subscription_id: str, uplink_bytes: int, downlink_bytes: int,
