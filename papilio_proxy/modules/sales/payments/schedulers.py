@@ -23,7 +23,7 @@ class ReceiptDecisionJob(Scheduler):
 
     async def _send(self, notice: ReceiptNotification) -> bool:
         if notice.status == ReceiptStatus.APPROVED:
-            text = "✅ <b>پرداختت تأیید شد.</b>\n\nاشتراکت در حال آماده‌سازی است؛ لینک و QR در همین چت ارسال می‌شوند."
+            text = "✅ <b>پرداختت تأیید شد.</b>\n\nلینک اشتراک و QR در همین چت ارسال می‌شوند."
             button = InlineKeyboardButton(
                 text="🧾 پیگیری خرید", callback_data="orders", style="success"
             )

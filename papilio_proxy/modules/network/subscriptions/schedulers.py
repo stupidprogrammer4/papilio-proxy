@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 from html import escape
 from typing import Any, ClassVar
-from urllib.parse import quote
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
@@ -16,6 +15,10 @@ from papilio_proxy.modules.network.subscriptions.app.services import (
 )
 from papilio_proxy.modules.network.subscriptions.infra.qr import QrRenderer
 from papilio_proxy.modules.network.subscriptions.infra.repository import MysqlAccessRepository
+from papilio_proxy.modules.network.subscriptions.routers.cards import (
+    delivery_caption,
+    subscription_url,
+)
 from papilio_proxy.modules.network.subscriptions.routers.views import connection_links
 from papilio_proxy.modules.sales.subscriptions.routers.telegram import _access_keyboard
 
@@ -87,19 +90,14 @@ class ProvisionDeliveryDispatcher:
                     if current is None:
                         raise AccessUnavailable("Active delivery is unavailable")
                     access = current
-                subscription_url = f"{self._public_base}/s/{access.token}#{quote(access.profile_name[:40], safe='')}"
-                image = await self._qr.render(subscription_url)
+                url = subscription_url(self._public_base, access)
+                image = await self._qr.render(url)
                 await self._bot.send_photo(
                     access.telegram_id,
                     BufferedInputFile(image, filename="papilio-subscription.png"),
-                    caption=(
-                        "✅ <b>پرداخت موفق بود؛ سرویست آماده است!</b>\n\n"
-                        "📲 QR اشتراک اختصاصی توست.\n"
-                        f"🔗 لینک اشتراک و مشاهدهٔ مصرف:\n<code>{escape(subscription_url)}</code>\n\n"
-                        "🔐 لینک‌ها را برای دیگران نفرست."
-                    ),
+                    caption=delivery_caption(access, url),
                     reply_markup=_access_keyboard(
-                        access.subscription_id, subscription_url, bool(access.hysteria_link)
+                        access.subscription_id, url, bool(access.hysteria_link)
                     ),
                 )
                 for index, link in enumerate(connection_links(access), 1):

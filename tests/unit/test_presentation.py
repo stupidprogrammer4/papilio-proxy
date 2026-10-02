@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 from aiogram.types import Animation, CallbackQuery, Chat, Message, PhotoSize, User
 
 from papilio_proxy.config.settings import Settings
+from papilio_proxy.modules.sales.payments.domain.entities import PaymentInstructions
 from papilio_proxy.modules.sales.subscriptions.app.services import (
     Plan,
     Protocol,
@@ -22,6 +23,8 @@ from papilio_proxy.modules.sales.subscriptions.routers.telegram import (
     _home_keyboard,
     _home_text,
     _order_keyboard,
+    _payment_card,
+    _payment_keyboard,
     _plan_card,
     _plans_keyboard,
     _plans_text,
@@ -36,6 +39,41 @@ from papilio_proxy.modules.sales.subscriptions.routers.telegram import (
 
 
 class PresentationTests(TestCase):
+    def test_payment_card_uses_database_destination_toman_and_customer_steps(self) -> None:
+        instructions = PaymentInstructions(
+            "test-order",
+            50_000,
+            "تست <خرید>",
+            "کارت & تست",
+            "1111222233334444",
+            "بانک <تست>",
+            "صاحب & حساب",
+        )
+        text = _payment_card(instructions)
+        for value in (
+            "5٬000 تومان",
+            "تست &lt;خرید&gt;",
+            "بانک &lt;تست&gt;",
+            "صاحب &amp; حساب",
+            "1111 2222 3333 4444",
+            "ارسال رسید",
+            "پس از تأیید",
+        ):
+            self.assertIn(value, text)
+        self.assertNotIn("خودکار تأیید", text)
+        self.assertNotIn("API", text)
+
+    def test_payment_buttons_copy_current_card_and_upload_to_exact_order(self) -> None:
+        instructions = PaymentInstructions(
+            "test-order", 50_000, "Test", "Card", "1111222233334444", "Bank", "Owner"
+        )
+        rows = _payment_keyboard(instructions).inline_keyboard
+        assert rows[0][0].copy_text is not None
+        self.assertEqual(rows[0][0].copy_text.text, instructions.card_number)
+        self.assertEqual(rows[0][0].style, "primary")
+        self.assertEqual(rows[1][0].callback_data, "receipt:test-order")
+        self.assertEqual(rows[1][0].style, "success")
+
     def test_brand_assets_are_available(self) -> None:
         self.assertTrue(BANNER_PATH.is_file())
         self.assertTrue(LOGO_PATH.is_file())

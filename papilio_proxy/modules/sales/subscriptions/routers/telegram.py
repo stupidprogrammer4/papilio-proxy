@@ -31,6 +31,7 @@ from papilio_proxy.modules.network.subscriptions.app.services import (
     AccessUnavailable,
 )
 from papilio_proxy.modules.network.subscriptions.infra.qr import QrRenderer
+from papilio_proxy.modules.network.subscriptions.routers.cards import expiry_label
 from papilio_proxy.modules.network.subscriptions.routers.views import connection_links
 from papilio_proxy.modules.sales.payments.app.services import PaymentService
 from papilio_proxy.modules.sales.payments.domain.entities import (
@@ -148,9 +149,7 @@ def _subscription_card(record: Subscription, plan: Plan | None) -> str:
             f"{payment_line}"
             f"{RTL}🔗 لینک اتصال هنوز صادر نشده است."
         )
-    expiry = (
-        record.expires_at.astimezone().strftime("%Y/%m/%d") if record.expires_at else "ثبت نشده"
-    )
+    expiry = expiry_label(record.expires_at) if record.expires_at else "ثبت نشده"
     return (
         f"{RTL}<b>{escape(plan.title) if plan else ('تست خصوصی' if record.price_rial == 0 else 'پلن آرشیوی')}</b> · {state}\n"
         f"{RTL}مصرف: {_size(record.traffic_used_bytes)} از {_size(record.traffic_limit_bytes)}\n"
@@ -299,7 +298,7 @@ def _access_keyboard(
         [
             InlineKeyboardButton(
                 text="📋 کپی لینک اشتراک",
-                copy_text=CopyTextButton(text=subscription_url.split("#")[0]),
+                copy_text=CopyTextButton(text=subscription_url),
                 style="success",
             )
         ],
@@ -333,6 +332,45 @@ def _access_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _payment_card(instructions: PaymentInstructions) -> str:
+    card = " ".join(instructions.card_number[i : i + 4] for i in range(0, 16, 4))
+    return (
+        f"{RTL}💳 <b>{escape(instructions.method_title)}</b>\n\n"
+        f"{RTL}📦 {escape(instructions.plan_title)}\n"
+        f"{RTL}مبلغ: <b>{_toman(instructions.amount_rial // 10)}</b>\n\n"
+        f"{RTL}🏦 بانک: {escape(instructions.bank_name)}\n"
+        f"{RTL}👤 به نام: {escape(instructions.account_holder)}\n"
+        f"<code>{escape(card)}</code>\n\n"
+        f"{RTL}پس از واریز، دکمهٔ «ارسال رسید» را بزن و عکس رسیدت را بفرست.\n"
+        f"{RTL}اشتراکت پس از تأیید پرداخت، در همین چت تحویل داده می‌شود."
+    )
+
+
+def _payment_keyboard(instructions: PaymentInstructions) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📋 کپی شماره کارت",
+                    copy_text=CopyTextButton(text=instructions.card_number),
+                    style="primary",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📸 ارسال رسید",
+                    callback_data=f"receipt:{instructions.order_id}",
+                    style="success",
+                )
+            ],
+            [
+                InlineKeyboardButton(text="🧾 پیگیری خرید", callback_data="orders"),
+                InlineKeyboardButton(text="🏠 خانه", callback_data="home"),
+            ],
+        ]
+    )
+
+
 def _plans_text(plans: list[Plan], page: int, sales_enabled: bool = False) -> str:
     pages = max(1, (len(plans) + PAGE_SIZE - 1) // PAGE_SIZE)
     visible = plans[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
@@ -353,7 +391,7 @@ def _guide_text(sales_enabled: bool = False) -> str:
     return (
         f"{RTL}🧭 <b>راهنمای اتصال، قدم‌به‌قدم</b>\n\n"
         f"{RTL}۱️⃣ پس از فعال‌سازی سرویس، لینک اشتراک اختصاصی را دریافت کن.\n"
-        f"{RTL}۲️⃣ در برنامهٔ سازگار با پروتکل سرویس، افزودن اشتراک از لینک را انتخاب کن.\n"
+        f"{RTL}۲️⃣ در برنامهٔ اتصال، گزینهٔ «افزودن اشتراک از لینک» را انتخاب کن.\n"
         f"{RTL}۳️⃣ لینک را وارد و اشتراک را به‌روزرسانی کن؛ سپس یک اتصال را انتخاب کن.\n"
         f"{RTL}۴️⃣ اتصال را روشن کن و بازشدن یک وب‌سایت را بررسی کن.\n\n"
         f"{RTL}🔐 لینک اشتراک مثل رمز است؛ آن را در گروه یا برای دیگران نفرست.\n"
@@ -449,38 +487,10 @@ def build_router(
                 _order_keyboard(order_id),
             )
             return
-        card = " ".join(instructions.card_number[i : i + 4] for i in range(0, 16, 4))
         await _show_view(
             callback,
-            f"{RTL}💳 <b>{escape(instructions.method_title)}</b>\n\n"
-            f"{RTL}📦 {escape(instructions.plan_title)}\n"
-            f"{RTL}مبلغ: <b>{_toman(instructions.amount_rial // 10)}</b>\n\n"
-            f"{RTL}🏦 بانک: {escape(instructions.bank_name)}\n"
-            f"{RTL}👤 به نام: {escape(instructions.account_holder)}\n"
-            f"<code>{escape(card)}</code>\n\n"
-            f"{RTL}پس از واریز، دکمهٔ «ارسال رسید» را بزن و عکس رسیدت را بفرست.\n"
-            f"{RTL}اشتراکت پس از تأیید پرداخت، در همین چت تحویل داده می‌شود.",
-            InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="📋 کپی شماره کارت",
-                            copy_text=CopyTextButton(text=instructions.card_number),
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            text="📸 ارسال رسید",
-                            callback_data=f"receipt:{order_id}",
-                            style="success",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(text="🧾 پیگیری خرید", callback_data="orders"),
-                        InlineKeyboardButton(text="🏠 خانه", callback_data="home"),
-                    ],
-                ]
-            ),
+            _payment_card(instructions),
+            _payment_keyboard(instructions),
         )
 
     async def selected_plan(key: str) -> Plan:
@@ -944,7 +954,7 @@ def build_router(
             f"{RTL}🔄 <b>اشتراک و مشاهدهٔ مصرف:</b>\n<code>{escape(subscription_url)}</code>\n\n"
             f"{RTL}📊 مصرف: {_size(access.traffic_used_bytes)} از {_size(access.traffic_limit_bytes)}"
             f" · مانده: {_size(access.traffic_remaining_bytes)}\n"
-            f"{RTL}🗓 انقضا: {access.expires_at.astimezone().strftime('%Y/%m/%d')}\n\n"
+            f"{RTL}🗓 اعتبار تا: {expiry_label(access.expires_at)}\n\n"
             f"{RTL}📲 لینک اشتراک را در برنامهٔ اتصال وارد کن یا QR را اسکن کن.\n"
             f"{RTL}🔐 این لینک‌ها خصوصی‌اند؛ در گروه منتشرشان نکن."
         )
