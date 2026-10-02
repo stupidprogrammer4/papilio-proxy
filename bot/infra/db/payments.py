@@ -37,6 +37,25 @@ class MysqlPaymentRepository:
     async def close(self) -> None:
         await self._engine.dispose()
 
+    async def order_id_for_authority(self, authority: str) -> str | None:
+        async with self._session_factory() as session:
+            return await session.scalar(select(PaymentAttemptModel.order_id).where(
+                PaymentAttemptModel.authority == authority
+            ))
+
+    async def pending_authorities(self, after: str | None, limit: int) -> list[str]:
+        statement = (
+            select(PaymentAttemptModel.authority)
+            .join(SubscriptionModel, SubscriptionModel.id == PaymentAttemptModel.order_id)
+            .where(PaymentAttemptModel.status == "pending",
+                   SubscriptionModel.status == SubscriptionStatus.PENDING_PAYMENT.value)
+            .order_by(PaymentAttemptModel.authority).limit(max(1, min(limit, 20)))
+        )
+        if after:
+            statement = statement.where(PaymentAttemptModel.authority > after)
+        async with self._session_factory() as session:
+            return list((await session.scalars(statement)).all())
+
     async def has_authority(self, authority: str) -> bool:
         statement = select(PaymentAttemptModel.order_id).where(
             PaymentAttemptModel.authority == authority

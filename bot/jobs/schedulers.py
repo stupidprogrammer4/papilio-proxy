@@ -17,8 +17,31 @@ from bot.presentation.subscription_view import connection_links
 from bot.presentation.ui import _access_keyboard
 from bot.services.access import AccessService, AccessUnavailable
 from bot.services.node import NodeReconciler
+from bot.services.payments import PaymentVerificationService
 
 logger = logging.getLogger(__name__)
+
+
+class PaymentRecheckJob(Scheduler):
+    schedule: ClassVar[list[dict[str, Any]] | None] = [{"interval": 15}]
+
+    def __init__(self, service: PaymentVerificationService) -> None:
+        self._service = service
+
+    async def run(self) -> int:
+        return await self._service.recheck_pending()
+
+
+class PaymentRecheckProvider(Provider):
+    scope = Scope.APP
+
+    def __init__(self, service: PaymentVerificationService) -> None:
+        super().__init__()
+        self._service = service
+
+    @provide
+    def job(self) -> PaymentRecheckJob:
+        return PaymentRecheckJob(self._service)
 
 
 class UsageWarningDispatcher:

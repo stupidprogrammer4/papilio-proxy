@@ -16,6 +16,8 @@ from bot.infra.db.access import MysqlAccessRepository
 from bot.jobs.schedulers import (
     NodeReconcileJob,
     NodeReconcileProvider,
+    PaymentRecheckJob,
+    PaymentRecheckProvider,
     ProvisionDeliveryDispatcher,
     ProvisionDeliveryJob,
     ProvisionDeliveryProvider,
@@ -24,18 +26,23 @@ from bot.jobs.schedulers import (
     UsageWarningProvider,
 )
 from bot.services.node import NodeReconciler
+from bot.services.payments import PaymentVerificationService
 
 
 @asynccontextmanager
 async def usage_warning_scheduler(
     repository: MysqlAccessRepository, bot: Bot, reconciler: NodeReconciler | None = None,
     public_base: str | None = None,
+    payments: PaymentVerificationService | None = None,
 ) -> AsyncIterator[None]:
     """One-process Papilio Tasks beat; MySQL outbox survives its restarts."""
     dispatcher = UsageWarningDispatcher(repository, bot)
     registrar = Registrar()
     registrar.include(UsageWarningJob)
     providers: list[Provider] = [UsageWarningProvider(dispatcher)]
+    if payments is not None:
+        registrar.include(PaymentRecheckJob)
+        providers.append(PaymentRecheckProvider(payments))
     if reconciler is not None:
         registrar.include(NodeReconcileJob)
         providers.append(NodeReconcileProvider(reconciler))

@@ -5,6 +5,7 @@ import json
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from unittest import IsolatedAsyncioTestCase
+from unittest.mock import AsyncMock, patch
 
 from bot.models.node import (
     ActiveNodeAccess,
@@ -77,6 +78,19 @@ class FakeNode:
 
 
 class NodeReconciliationTests(IsolatedAsyncioTestCase):
+    async def test_failed_paid_provision_remains_retryable(self) -> None:
+        access_repo = MemoryAccessRepository()
+        repository = FakeRepository(access_repo)
+        node = FakeNode()
+        reconciler = NodeReconciler(repository, AccessService(access_repo), node)
+        with patch.object(node, "ensure", new_callable=AsyncMock) as ensure:
+            ensure.side_effect = RuntimeError("node temporarily unavailable")
+            with self.assertRaises(RuntimeError):
+                await reconciler.run_once()
+        self.assertEqual(len(repository.pending), 1)
+        self.assertEqual(repository.expired, [])
+        await reconciler.run_once()
+        self.assertEqual(access_repo.access.subscription_id, ORDER_ID)
     async def test_idle_counters_refresh_only_after_one_minute(self) -> None:
         class CountingRepository(MemoryAccessRepository):
             calls = 0

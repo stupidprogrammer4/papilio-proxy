@@ -93,7 +93,8 @@ async def run() -> None:
             if access_repository is not None:
                 await stack.enter_async_context(
                     usage_warning_scheduler(
-                        access_repository, bot, reconciler, settings.subscription_public_base_url
+                        access_repository, bot, reconciler, settings.subscription_public_base_url,
+                        checkout_service.verification if checkout_service else None,
                     )
                 )
             await dispatcher.start_polling(

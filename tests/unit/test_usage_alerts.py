@@ -10,6 +10,7 @@ from bot.infra.db.access import MysqlAccessRepository
 from bot.jobs.runtime import usage_warning_scheduler
 from bot.jobs.schedulers import (
     NodeReconcileJob,
+    PaymentRecheckJob,
     ProvisionDeliveryDispatcher,
     ProvisionDeliveryJob,
     UsageWarningDispatcher,
@@ -17,9 +18,25 @@ from bot.jobs.schedulers import (
 )
 from bot.models.access import ProvisionDelivery, UsageAlert
 from bot.services.node import NodeReconciler
+from bot.services.payments import PaymentVerificationService
 
 
 class UsageAlertTests(IsolatedAsyncioTestCase):
+    async def test_payment_recheck_uses_papilio_scheduler_without_browser_callback(self) -> None:
+        repository = AsyncMock(spec=MysqlAccessRepository)
+        repository.claim_alerts.return_value = []
+        verification = AsyncMock(spec=PaymentVerificationService)
+        verification.recheck_pending.return_value = 1
+        bot = Bot("123456:TEST_TOKEN")
+        try:
+            async with usage_warning_scheduler(repository, bot, payments=verification):
+                handle = await PaymentRecheckJob.enqueue()
+                result = await handle.wait_result(timeout=5)
+            self.assertFalse(result.is_err)
+            self.assertEqual(result.return_value, 1)
+            verification.recheck_pending.assert_awaited_once()
+        finally:
+            await bot.session.close()
     async def test_dispatcher_sends_80_percent_once_and_marks_outbox(self) -> None:
         repository = AsyncMock(spec=MysqlAccessRepository)
         repository.claim_alerts.return_value = [
