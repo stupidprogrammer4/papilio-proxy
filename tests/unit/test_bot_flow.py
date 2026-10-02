@@ -119,3 +119,20 @@ class BotFlowTests(IsolatedAsyncioTestCase):
         listing = self.send.await_args_list[-1].args[1]
         self.assertNotIn(order.id[:8], listing.text)
         self.assertNotIn("فقط مالک", listing.text)
+
+    async def test_payment_return_cannot_read_another_customers_order(self) -> None:
+        await self.repository.save(Plan("owned", "فقط مالک", 7, 10, 100))
+        order = await self.service.create_order(77, "owned", Protocol.BOTH)
+        await self.command("/start paid_" + order.id, owner=88)
+        response = self.send.await_args_list[-1].args[1]
+        self.assertIsInstance(response, SendMessage)
+        self.assertIn("برای حساب تو پیدا نشد", response.text)
+        self.assertNotIn(order.id, response.text)
+
+    async def test_payment_return_does_not_trust_paid_parameter(self) -> None:
+        await self.repository.save(Plan("owned", "فقط مالک", 7, 10, 100))
+        order = await self.service.create_order(77, "owned", Protocol.BOTH)
+        await self.command("/start paid_" + order.id)
+        response = self.send.await_args_list[-1].args[1]
+        self.assertIsInstance(response, SendMessage)
+        self.assertIn("هنوز تأیید پرداخت ثبت نشده", response.text)

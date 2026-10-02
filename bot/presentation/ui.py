@@ -375,8 +375,9 @@ def build_router(
             f"{RTL}مبلغ سفارش: <b>{_toman(checkout.amount_rial // 10)}</b>\n"
             f"{RTL}🔖 پیگیری: <code>{escape(order_id[:8])}</code>\n\n"
             f"{RTL}۱️⃣ درگاه را باز کن و دستور انتقال را دقیق دنبال کن.\n"
-            f"{RTL}۲️⃣ بعد از انتقال، به همین صفحه برگرد و «بررسی پرداخت» را بزن.\n"
+            f"{RTL}۲️⃣ پس از تأیید KPay، از صفحهٔ نتیجه به چت بات برگرد.\n"
             f"{RTL}۳️⃣ پس از تأیید پرداخت، لینک خصوصی و QR خودکار ارسال می‌شود.\n\n"
+            f"{RTL}🔎 اگر صفحه بسته شد، تأیید پرداخت در پس‌زمینه هم پیگیری می‌شود.\n"
             f"{RTL}🔐 تصویر رسید به‌تنهایی تأیید پرداخت نیست.",
             InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="💳 ورود به درگاه KPay", url=checkout.payment_url, style="success")],
@@ -418,6 +419,31 @@ def build_router(
             await service.register_user(
                 TelegramUser(sender.id, sender.full_name or "کاربر پاپیلیو", sender.username)
             )
+            argument = (message.text or "").partition(" ")[2].strip()
+            if argument.startswith("paid_"):
+                order_id = argument.removeprefix("paid_")
+                owned = next((item for item in await service.list_subscriptions(sender.id)
+                              if item.id == order_id), None)
+                if owned is None:
+                    await message.answer("🔐 این سفارش برای حساب تو پیدا نشد.")
+                elif owned.status == SubscriptionStatus.ACTIVE and access_service:
+                    try:
+                        access = await access_service.get_for_user(sender.id, owned.id)
+                    except AccessUnavailable:
+                        access = None
+                    if access:
+                        url = _subscription_url(settings, access.token, access.profile_name)
+                        await message.answer(
+                            f"✅ <b>سرویست آماده است!</b>\n\n{escape(access.profile_name)}\n"
+                            "لینک‌ها و QR در همین چت ارسال می‌شوند. از دکمه‌ها هم می‌توانی دریافتشان کنی.",
+                            reply_markup=_access_keyboard(owned.id, url, bool(access.hysteria_link)),
+                        )
+                    else:
+                        await message.answer("⏳ وضعیت اتصال در حال بررسی است؛ از «سرویس‌های من» پیگیری کن.")
+                else:
+                    text = "✅ پرداختت تأیید شده؛ سرویس در صف فعال‌سازی است و خودکار همین‌جا تحویل می‌شود." if owned.status == SubscriptionStatus.PAID_AWAITING_PROVISIONING else "⏳ هنوز تأیید پرداخت ثبت نشده است؛ وضعیت را از سفارش‌های من پیگیری کن."
+                    await message.answer(text, reply_markup=_section_keyboard("سرویس‌های من", "subscriptions"))
+                return
         name = sender.first_name if sender else "دوست عزیز"
         await _show_welcome(message, name, await sales(sender.id if sender else None))
 

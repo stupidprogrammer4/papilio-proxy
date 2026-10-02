@@ -214,6 +214,31 @@ class KpayVerifierTests(IsolatedAsyncioTestCase):
 
 
 class PaymentCallbackTests(IsolatedAsyncioTestCase):
+    async def test_paid_callback_returns_to_owned_order_without_leaking_authority(self) -> None:
+        service = AsyncMock(spec=PaymentVerificationService)
+        identifier = "123e4567-e89b-42d3-a456-426614174000"
+        service.verify_callback.return_value = CallbackOutcome.PAID
+        service.return_order_id.return_value = identifier
+        app = create_app(service)
+        app.state.bot_return_url = "https://t.me/example_bot"
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/payments/kpay/callback?authority=private-authority")
+        self.assertIn("https://t.me/example_bot?start=paid_" + identifier, response.text)
+        self.assertIn("payment-return.js", response.text)
+        self.assertNotIn("private-authority", response.text)
+        self.assertEqual(response.headers["referrer-policy"], "no-referrer")
+
+    async def test_unpaid_callback_never_auto_redirects_or_claims_activation(self) -> None:
+        service = AsyncMock(spec=PaymentVerificationService)
+        service.verify_callback.return_value = CallbackOutcome.NOT_PAID
+        service.return_order_id.return_value = None
+        app = create_app(service)
+        app.state.bot_return_url = "https://t.me/example_bot"
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/payments/kpay/callback?authority=private-authority")
+        self.assertNotIn("payment-return.js", response.text)
+        self.assertIn("هنوز تأیید نشده", response.text)
+
     async def test_callback_requires_one_authority(self) -> None:
         service = AsyncMock(spec=PaymentVerificationService)
         app = create_app(service)

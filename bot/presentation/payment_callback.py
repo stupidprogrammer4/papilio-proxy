@@ -35,13 +35,25 @@ def build_payment_router() -> APIRouter:
         title = "✅ پرداخت تأیید شد" if paid else "⏳ پرداخت هنوز تأیید نشده است"
         detail = "سفارش وارد صف فعال‌سازی شد. وضعیت تحویل سرویس را در بات بررسی کنید." if paid else "پس از انتقال وجه، در بات «بررسی پرداخت» را بزن. رسید به‌تنهایی تأیید نیست."
         destination = cast("str | None", getattr(request.app.state, "bot_return_url", None))
+        order_id = await service.return_order_id(authorities[0])
+        if destination and order_id:
+            destination += "?start=paid_" + order_id
         action = f'<div class="actions"><a href="{escape(destination, quote=True)}">🦋 بازگشت به بات</a></div>' if destination else ""
+        redirect = (
+            f'<p>در حال بازگشت به چت… اگر باز نشد، دکمهٔ بالا را بزن.</p>'
+            f'<div id="payment-return" data-url="{escape(destination, quote=True)}"></div>'
+            '<script src="/subscription-assets/payment-return.js" defer></script>'
+        ) if paid and destination else ""
         return HTMLResponse(
             '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width,initial-scale=1"><title>پرداخت پاپیلیو</title>'
             '<link rel="stylesheet" href="/subscription-assets/subscription.css"></head><body><main>'
-            f'<section class="dashboard"><h1>{title}</h1><p>{detail}</p>{action}</section>'
-            '</main></body></html>', headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+            f'<section class="dashboard"><h1>{title}</h1><p>{detail}</p>{action}{redirect}</section>'
+            '</main></body></html>', headers={
+                "Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
+                "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY",
+                "Content-Security-Policy": "default-src 'none'; style-src 'self'; script-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+            },
         )
 
     @router.get("/healthz", response_class=PlainTextResponse)
