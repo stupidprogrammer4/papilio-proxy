@@ -7,6 +7,7 @@ def create_mysql_engine(database_url: str) -> AsyncEngine:
     """Create the small, long-lived MySQL connection pool used by one process."""
     return create_async_engine(
         database_url,
+        hide_parameters=True,
         pool_size=5,
         max_overflow=5,
         pool_timeout=30,
