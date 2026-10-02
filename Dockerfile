@@ -8,7 +8,7 @@ WORKDIR /app
 
 COPY pyproject.toml README.md ./
 
-COPY bot ./bot
+COPY papilio_proxy ./papilio_proxy
 
 COPY assets ./assets
 RUN pip install --no-cache-dir .
@@ -16,4 +16,4 @@ RUN useradd --system --create-home --uid 10001 papilio \
     && chown -R papilio:papilio /app
 USER papilio
 
-CMD ["python", "-m", "bot.app"]
+CMD ["python", "-m", "papilio_proxy.apps.bot"]

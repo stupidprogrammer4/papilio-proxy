@@ -10,12 +10,15 @@ from uuid import uuid4
 from cryptography.fernet import Fernet
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from bot.infra.db.access import MysqlAccessRepository
-from bot.infra.db.mysql import MysqlSubscriptionRepository
-from bot.infra.db.test_access import MysqlTestAccessRepository
-from bot.models.subscriptions import SubscriptionStatus, TelegramUser
-from bot.services.access import AccessService
-from bot.services.test_access import TestAccessService
+from papilio_proxy.modules.network.subscriptions.app.services import AccessService
+from papilio_proxy.modules.network.subscriptions.app.trials import TestAccessService
+from papilio_proxy.modules.network.subscriptions.infra.repository import MysqlAccessRepository
+from papilio_proxy.modules.network.subscriptions.infra.trials import MysqlTestAccessRepository
+from papilio_proxy.modules.sales.subscriptions.domain.entities import (
+    SubscriptionStatus,
+    TelegramUser,
+)
+from papilio_proxy.modules.sales.subscriptions.infra.repository import MysqlSubscriptionRepository
 
 
 @skipUnless(os.getenv("PAPILIO_TEST_DATABASE_URL"), "Requires explicit MySQL URL")
@@ -53,9 +56,12 @@ class TestGrantRepositoryTests(IsolatedAsyncioTestCase):
                     self.assertIn(order_id, {item.subscription_id for item in pending})
                     identifier = "123e4567-e89b-42d3-a456-426614174000"
                     vless = f"vless://{identifier}@node.example:443?security=reality#Pilot"
-                    vmess = "vmess://" + base64.b64encode(
-                        json.dumps({"id": identifier, "add": "node.example"}).encode()
-                    ).decode()
+                    vmess = (
+                        "vmess://"
+                        + base64.b64encode(
+                            json.dumps({"id": identifier, "add": "node.example"}).encode()
+                        ).decode()
+                    )
                     issued = await AccessService(access).record_provisioned(
                         order_id, vless, vmess, datetime.now(UTC)
                     )

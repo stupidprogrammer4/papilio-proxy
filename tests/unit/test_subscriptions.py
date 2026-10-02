@@ -3,13 +3,14 @@ from __future__ import annotations
 from dataclasses import replace
 from unittest import IsolatedAsyncioTestCase
 
-from bot.services.subscriptions import (
+from papilio_proxy.modules.sales.subscriptions.app.services import (
     Plan,
     PlanRepository,
     Protocol,
     Subscription,
     SubscriptionRepository,
     SubscriptionService,
+    SubscriptionStatus,
     TelegramUser,
 )
 
@@ -23,8 +24,17 @@ class MemorySubscriptionRepository(SubscriptionRepository, PlanRepository):
     async def upsert_user(self, user: TelegramUser) -> None:
         self.users[user.telegram_id] = user
 
-    async def list_for_user(self, telegram_id: int) -> list[Subscription]:
-        return [record for record in self.records if record.telegram_id == telegram_id]
+    async def list_for_user(
+        self,
+        telegram_id: int,
+        *,
+        statuses: frozenset[SubscriptionStatus] | None = None,
+    ) -> list[Subscription]:
+        return [
+            record
+            for record in self.records
+            if record.telegram_id == telegram_id and (statuses is None or record.status in statuses)
+        ]
 
     async def create(self, subscription: Subscription) -> None:
         self.records.append(subscription)

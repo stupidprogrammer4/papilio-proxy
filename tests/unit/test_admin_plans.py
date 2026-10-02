@@ -1,8 +1,16 @@
 from dataclasses import replace
 from unittest import IsolatedAsyncioTestCase
 
-from bot.services.admin_plans import AdminAccessError, AdminPlanService, PlanValidationError
-from bot.services.subscriptions import Protocol, SubscriptionService, UnknownPlanError
+from papilio_proxy.modules.sales.subscriptions.app.plans import (
+    AdminAccessError,
+    AdminPlanService,
+    PlanValidationError,
+)
+from papilio_proxy.modules.sales.subscriptions.app.services import (
+    Protocol,
+    SubscriptionService,
+    UnknownPlanError,
+)
 from tests.unit.test_subscriptions import MemorySubscriptionRepository
 
 

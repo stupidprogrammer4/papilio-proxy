@@ -7,22 +7,23 @@ from datetime import UTC, datetime, timedelta
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, patch
 
-from bot.models.node import (
+from papilio_proxy.modules.network.nodes.app.services import NodeReconciler, node_email
+from papilio_proxy.modules.network.nodes.domain.entities import (
     ActiveNodeAccess,
     IssuedNodeLinks,
     NodeAccount,
     NodeSnapshot,
     PendingProvision,
 )
-from bot.services.access import AccessService
-from bot.services.node import NodeReconciler, node_email
+from papilio_proxy.modules.network.subscriptions.app.services import AccessService
 from tests.unit.test_access import MemoryAccessRepository
 
 ORDER_ID = "123e4567-e89b-42d3-a456-426614174000"
 VLESS = f"vless://{ORDER_ID}@node.example:8443?security=reality#Papilio"
-VMESS = "vmess://" + base64.b64encode(
-    json.dumps({"id": ORDER_ID, "add": "node.example"}).encode()
-).decode()
+VMESS = (
+    "vmess://"
+    + base64.b64encode(json.dumps({"id": ORDER_ID, "add": "node.example"}).encode()).decode()
+)
 
 
 class FakeRepository:
@@ -37,11 +38,19 @@ class FakeRepository:
     async def list_active_node_access(self) -> list[ActiveNodeAccess]:
         if self.access.access.subscription_id == ORDER_ID:
             access = self.access.access
-            return [ActiveNodeAccess(NodeAccount(
-                access.subscription_id, access.traffic_limit_bytes,
-                access.uplink_bytes, access.downlink_bytes,
-                access.expires_at, access.last_measured_at,
-            ), "آزمایش")]
+            return [
+                ActiveNodeAccess(
+                    NodeAccount(
+                        access.subscription_id,
+                        access.traffic_limit_bytes,
+                        access.uplink_bytes,
+                        access.downlink_bytes,
+                        access.expires_at,
+                        access.last_measured_at,
+                    ),
+                    "آزمایش",
+                )
+            ]
         return []
 
     async def mark_expired(self, subscription_id: str) -> None:
@@ -60,13 +69,22 @@ class FakeNode:
         self.heartbeats += 1
 
     async def ensure(
-        self, *, identifier: str, email: str, label: str, quota_bytes: int,
-        duration_days: int = 0, expires_at: datetime | None = None,
-        baseline_uplink_bytes: int = 0, baseline_downlink_bytes: int = 0,
+        self,
+        *,
+        identifier: str,
+        email: str,
+        label: str,
+        quota_bytes: int,
+        duration_days: int = 0,
+        expires_at: datetime | None = None,
+        baseline_uplink_bytes: int = 0,
+        baseline_downlink_bytes: int = 0,
     ) -> IssuedNodeLinks:
         self.ensure_count += 1
         return IssuedNodeLinks(
-            VLESS, VMESS, expires_at or self.started + timedelta(days=duration_days),
+            VLESS,
+            VMESS,
+            expires_at or self.started + timedelta(days=duration_days),
             self.snapshot,
         )
 
@@ -81,7 +99,8 @@ class NodeReconciliationTests(IsolatedAsyncioTestCase):
     async def test_expired_access_is_not_recreated_after_unblocking(self) -> None:
         access_repo = MemoryAccessRepository()
         access_repo.access = replace(
-            access_repo.access, subscription_id=ORDER_ID,
+            access_repo.access,
+            subscription_id=ORDER_ID,
             expires_at=datetime.now(UTC) - timedelta(seconds=1),
         )
         repository = FakeRepository(access_repo)
@@ -106,13 +125,17 @@ class NodeReconciliationTests(IsolatedAsyncioTestCase):
         self.assertEqual(repository.expired, [])
         await reconciler.run_once()
         self.assertEqual(access_repo.access.subscription_id, ORDER_ID)
+
     async def test_idle_counters_refresh_only_after_one_minute(self) -> None:
         class CountingRepository(MemoryAccessRepository):
             calls = 0
 
             async def record_usage(
-                self, subscription_id: str, uplink_bytes: int,
-                downlink_bytes: int, measured_at: datetime,
+                self,
+                subscription_id: str,
+                uplink_bytes: int,
+                downlink_bytes: int,
+                measured_at: datetime,
             ) -> bool:
                 self.calls += 1
                 return await super().record_usage(
@@ -147,7 +170,9 @@ class NodeReconciliationTests(IsolatedAsyncioTestCase):
         repository.pending = []
 
         node.snapshot = replace(
-            node.snapshot, uplink_bytes=800, downlink_bytes=100,
+            node.snapshot,
+            uplink_bytes=800,
+            downlink_bytes=100,
             measured_at=node.started + timedelta(seconds=1),
         )
         await reconciler.run_once()
@@ -155,8 +180,10 @@ class NodeReconciliationTests(IsolatedAsyncioTestCase):
         self.assertEqual(node.removed, [])
 
         node.snapshot = replace(
-            node.snapshot, downlink_bytes=200,
-            measured_at=node.started + timedelta(seconds=2), revoked=True,
+            node.snapshot,
+            downlink_bytes=200,
+            measured_at=node.started + timedelta(seconds=2),
+            revoked=True,
         )
         await reconciler.run_once()
         self.assertEqual(access_repo.access.traffic_used_bytes, 1000)

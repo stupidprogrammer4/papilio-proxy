@@ -8,35 +8,59 @@ from unittest import IsolatedAsyncioTestCase
 
 import httpx
 
-from bot.callback import create_app
-from bot.models.access import SubscriptionAccess, UsageAlert
-from bot.presentation.subscription_view import connection_links
-from bot.services.access import AccessService, AccessUnavailable
+from papilio_proxy.apps.api import create_app
+from papilio_proxy.modules.network.subscriptions.app.services import (
+    AccessService,
+    AccessUnavailable,
+)
+from papilio_proxy.modules.network.subscriptions.domain.entities import (
+    SubscriptionAccess,
+    UsageAlert,
+)
+from papilio_proxy.modules.network.subscriptions.routers.views import connection_links
 
 USER_ID = "123e4567-e89b-42d3-a456-426614174000"
 VLESS = f"vless://{USER_ID}@node.example:443?security=reality#Papilio"
-VMESS = "vmess://" + base64.b64encode(
-    json.dumps({"id": USER_ID, "add": "node.example"}).encode()
-).decode()
+VMESS = (
+    "vmess://"
+    + base64.b64encode(json.dumps({"id": USER_ID, "add": "node.example"}).encode()).decode()
+)
 
 
 class MemoryAccessRepository:
     def __init__(self) -> None:
         now = datetime.now(UTC)
         self.access = SubscriptionAccess(
-            "order-1", 77, "private-token", VLESS, VMESS,
-            1000, 100, 50, now + timedelta(days=30), now,
+            "order-1",
+            77,
+            "private-token",
+            VLESS,
+            VMESS,
+            1000,
+            100,
+            50,
+            now + timedelta(days=30),
+            now,
         )
         self.alerts: list[UsageAlert] = []
 
     async def activate(
-        self, subscription_id: str, token: str, vless_link: str,
-        vmess_link: str, measured_at: datetime,
+        self,
+        subscription_id: str,
+        token: str,
+        vless_link: str,
+        vmess_link: str,
+        measured_at: datetime,
     ) -> SubscriptionAccess:
         self.access = replace(
-            self.access, subscription_id=subscription_id, token=token,
-            vless_link=vless_link, vmess_link=vmess_link,
-            uplink_bytes=0, downlink_bytes=0, last_measured_at=measured_at,
+            self.access,
+            subscription_id=subscription_id,
+            token=token,
+            vless_link=vless_link,
+            vmess_link=vmess_link,
+            uplink_bytes=0,
+            downlink_bytes=0,
+            last_measured_at=measured_at,
         )
         return self.access
 
@@ -46,17 +70,25 @@ class MemoryAccessRepository:
     async def get_for_user(
         self, telegram_id: int, subscription_id: str
     ) -> SubscriptionAccess | None:
-        if telegram_id == self.access.telegram_id and subscription_id == self.access.subscription_id:
+        if (
+            telegram_id == self.access.telegram_id
+            and subscription_id == self.access.subscription_id
+        ):
             return self.access
         return None
 
     async def record_usage(
-        self, subscription_id: str, uplink_bytes: int,
-        downlink_bytes: int, measured_at: datetime,
+        self,
+        subscription_id: str,
+        uplink_bytes: int,
+        downlink_bytes: int,
+        measured_at: datetime,
     ) -> bool:
         self.access = replace(
-            self.access, uplink_bytes=uplink_bytes,
-            downlink_bytes=downlink_bytes, last_measured_at=measured_at,
+            self.access,
+            uplink_bytes=uplink_bytes,
+            downlink_bytes=downlink_bytes,
+            last_measured_at=measured_at,
         )
         return uplink_bytes + downlink_bytes >= self.access.traffic_limit_bytes
 
@@ -76,8 +108,12 @@ class AccessTests(IsolatedAsyncioTestCase):
         service = AccessService(repository)
         with self.assertRaises(AccessUnavailable):
             await service.record_provisioned(
-                "order-1", VLESS,
-                "vmess://" + base64.b64encode(json.dumps({"id": str(__import__("uuid").uuid4())}).encode()).decode(),
+                "order-1",
+                VLESS,
+                "vmess://"
+                + base64.b64encode(
+                    json.dumps({"id": str(__import__("uuid").uuid4())}).encode()
+                ).decode(),
                 datetime.now(UTC),
             )
         access = await service.record_provisioned("order-1", VLESS, VMESS, datetime.now(UTC))
@@ -108,7 +144,9 @@ class AccessTests(IsolatedAsyncioTestCase):
         self.assertEqual(response.text.splitlines(), connection_links(repository.access))
         title = response.headers["profile-title"].removeprefix("base64:")
         self.assertEqual(base64.b64decode(title).decode(), repository.access.profile_name)
-        self.assertIn("upload=100; download=50; total=1000", response.headers["subscription-userinfo"])
+        self.assertIn(
+            "upload=100; download=50; total=1000", response.headers["subscription-userinfo"]
+        )
         self.assertEqual(response.headers["cache-control"], "private, no-store, max-age=0")
         self.assertIn("/usage/private-token", response.headers["profile-web-page-url"])
         self.assertEqual(usage.status_code, 200)

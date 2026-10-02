@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 from PIL import Image
 
-from bot.infra.qr import QrRenderer
+from papilio_proxy.modules.network.subscriptions.infra.qr import QrRenderer
 
 
 class QrRendererTests(IsolatedAsyncioTestCase):

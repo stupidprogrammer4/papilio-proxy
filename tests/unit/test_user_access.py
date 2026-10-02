@@ -1,9 +1,9 @@
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock
 
-from bot.models.user_access import UnknownUserError
-from bot.services.node_identity import node_email
-from bot.services.user_access import UserAccessService
+from papilio_proxy.modules.accounts.users.app.services import UserAccessService
+from papilio_proxy.modules.accounts.users.domain.entities import UnknownUserError
+from papilio_proxy.modules.network.nodes.app.identity import node_email
 
 
 class UserAccessTests(IsolatedAsyncioTestCase):

@@ -6,11 +6,11 @@ from unittest.mock import AsyncMock
 
 import httpx
 
-from bot.callback import create_app
-from bot.models.admin_web import AdminLogin, AdminSession
-from bot.models.user_access import UnknownUserError, UserAccessResult
-from bot.services.admin_web import AdminWebService
-from bot.services.user_access import UserAccessService
+from papilio_proxy.apps.api import create_app
+from papilio_proxy.modules.accounts.admin.app.services import AdminWebService
+from papilio_proxy.modules.accounts.admin.domain.entities import AdminLogin, AdminSession
+from papilio_proxy.modules.accounts.users.app.services import UserAccessService
+from papilio_proxy.modules.accounts.users.domain.entities import UnknownUserError, UserAccessResult
 
 
 class AdminWebRoutesTests(IsolatedAsyncioTestCase):
@@ -63,15 +63,23 @@ class AdminWebRoutesTests(IsolatedAsyncioTestCase):
         self.assertEqual(denied.status_code, 401)
         self.service.session.return_value = self.session
         self.client.cookies.set("papilio_admin_session", "private-session-token", path="/admin")
-        body = {"code": "M30", "title": "۳۰ گیگ", "traffic_gb": 30,
-                "duration_days": 30, "price_toman": 59000, "sort_order": 1, "emoji": "🦋"}
+        body = {
+            "code": "M30",
+            "title": "۳۰ گیگ",
+            "traffic_gb": 30,
+            "duration_days": 30,
+            "price_toman": 59000,
+            "sort_order": 1,
+            "emoji": "🦋",
+        }
         without_csrf = await self.client.post(
             "/admin/api/plans", json=body, headers={"Origin": "https://bot.amupouya.org"}
         )
         self.assertEqual(without_csrf.status_code, 403)
         self.service.save_plan.assert_not_awaited()
         wrong_origin = await self.client.post(
-            "/admin/api/plans", json=body,
+            "/admin/api/plans",
+            json=body,
             headers={"Origin": "https://attacker.example", "X-CSRF-Token": "csrf-test"},
         )
         self.assertEqual(wrong_origin.status_code, 403)
@@ -84,7 +92,8 @@ class AdminWebRoutesTests(IsolatedAsyncioTestCase):
         )
         self.assertEqual(denied.status_code, 403)
         response = await self.client.post(
-            "/admin/api/password", json=body,
+            "/admin/api/password",
+            json=body,
             headers={"Origin": "https://bot.amupouya.org", "X-CSRF-Token": "csrf-test"},
         )
         self.assertEqual(response.status_code, 204)
@@ -101,18 +110,23 @@ class AdminWebRoutesTests(IsolatedAsyncioTestCase):
         self.assertEqual(read.status_code, 200)
         self.assertIsNone(read.json()["assumptions"])
         body = {
-            "period_days": 30, "daily_server_cost_toman": 80000,
-            "included_traffic_gb": 900, "overage_cost_toman_per_gb": 350,
-            "target_customers": 25, "contingency_percent": 10,
+            "period_days": 30,
+            "daily_server_cost_toman": 80000,
+            "included_traffic_gb": 900,
+            "overage_cost_toman_per_gb": 350,
+            "target_customers": 25,
+            "contingency_percent": 10,
             "target_margin_percent": 25,
         }
         denied = await self.client.put(
-            "/admin/api/pricing", json=body,
+            "/admin/api/pricing",
+            json=body,
             headers={"Origin": "https://bot.amupouya.org"},
         )
         self.assertEqual(denied.status_code, 403)
         saved = await self.client.put(
-            "/admin/api/pricing", json=body,
+            "/admin/api/pricing",
+            json=body,
             headers={"Origin": "https://bot.amupouya.org", "X-CSRF-Token": "csrf-test"},
         )
         self.assertEqual(saved.status_code, 200)
@@ -135,19 +149,33 @@ class AdminWebRoutesTests(IsolatedAsyncioTestCase):
         self.assertEqual((await self.client.put(path, json=body, headers=headers)).status_code, 401)
         self.service.session.return_value = self.session
         self.assertEqual((await self.client.put(path, json=body)).status_code, 403)
-        self.assertEqual((await self.client.put(
-            path, json=body, headers={"Origin": "https://bot.amupouya.org"},
-        )).status_code, 403)
-        self.assertEqual((await self.client.put(
-            path, json=body,
-            headers={"Origin": "https://attacker.example", "X-CSRF-Token": "csrf-test"},
-        )).status_code, 403)
+        self.assertEqual(
+            (
+                await self.client.put(
+                    path,
+                    json=body,
+                    headers={"Origin": "https://bot.amupouya.org"},
+                )
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            (
+                await self.client.put(
+                    path,
+                    json=body,
+                    headers={"Origin": "https://attacker.example", "X-CSRF-Token": "csrf-test"},
+                )
+            ).status_code,
+            403,
+        )
         self.user_access.set_blocked.assert_not_awaited()
 
     async def test_user_block_records_authenticated_actor_and_pending_node_status(self) -> None:
         self.user_access.set_blocked.return_value = UserAccessResult(77, True, "abuse", True)
         response = await self.client.put(
-            "/admin/api/users/77/access", json={"blocked": True, "reason": "abuse"},
+            "/admin/api/users/77/access",
+            json={"blocked": True, "reason": "abuse"},
             headers={"Origin": "https://bot.amupouya.org", "X-CSRF-Token": "csrf-test"},
         )
         self.assertEqual(response.status_code, 200)
@@ -157,7 +185,8 @@ class AdminWebRoutesTests(IsolatedAsyncioTestCase):
     async def test_user_block_rejects_coerced_flags_and_extra_fields(self) -> None:
         for body in ({"blocked": "false"}, {"blocked": 1}, {"blocked": True, "actor": "spoof"}):
             response = await self.client.put(
-                "/admin/api/users/77/access", json=body,
+                "/admin/api/users/77/access",
+                json=body,
                 headers={"Origin": "https://bot.amupouya.org", "X-CSRF-Token": "csrf-test"},
             )
             self.assertEqual(response.status_code, 422)
@@ -166,7 +195,8 @@ class AdminWebRoutesTests(IsolatedAsyncioTestCase):
     async def test_user_block_reports_unknown_user(self) -> None:
         self.user_access.set_blocked.side_effect = UnknownUserError("کاربر پیدا نشد.")
         response = await self.client.put(
-            "/admin/api/users/77/access", json={"blocked": True},
+            "/admin/api/users/77/access",
+            json={"blocked": True},
             headers={"Origin": "https://bot.amupouya.org", "X-CSRF-Token": "csrf-test"},
         )
         self.assertEqual(response.status_code, 404)

@@ -6,8 +6,8 @@ from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from bot.infra.db.admin_web import MysqlAdminWebRepository
-from bot.models.admin_web import AdminLoginDenied
+from papilio_proxy.modules.accounts.admin.domain.entities import AdminLoginDenied
+from papilio_proxy.modules.accounts.admin.infra.repository import MysqlAdminWebRepository
 
 
 @skipUnless(os.getenv("PAPILIO_TEST_DATABASE_URL"), "Requires an explicitly configured MySQL URL")

@@ -5,8 +5,8 @@ from unittest import IsolatedAsyncioTestCase, skipUnless
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from bot.infra.db.pricing import MysqlPricingRepository
-from bot.models.pricing import PricingAssumptions
+from papilio_proxy.modules.sales.pricing.domain.entities import PricingAssumptions
+from papilio_proxy.modules.sales.pricing.infra.repository import MysqlPricingRepository
 
 
 @skipUnless(os.getenv("PAPILIO_TEST_DATABASE_URL"), "Requires an explicitly configured MySQL URL")

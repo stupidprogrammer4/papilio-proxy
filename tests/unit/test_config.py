@@ -4,7 +4,7 @@ import os
 from unittest import TestCase
 from unittest.mock import patch
 
-from bot.core.config import ConfigurationError, Settings
+from papilio_proxy.config.settings import ConfigurationError, Settings
 
 
 class SettingsTests(TestCase):

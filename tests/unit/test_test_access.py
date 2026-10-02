@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from unittest import IsolatedAsyncioTestCase
 
-from bot.services.test_access import TestAccessService
+from papilio_proxy.modules.network.subscriptions.app.trials import TestAccessService
 
 
 class FakePilotRepository:

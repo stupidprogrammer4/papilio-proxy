@@ -6,8 +6,14 @@ from unittest.mock import AsyncMock, patch
 
 from aiogram.types import Animation, CallbackQuery, Chat, Message, PhotoSize, User
 
-from bot.core.config import Settings
-from bot.presentation.ui import (
+from papilio_proxy.config.settings import Settings
+from papilio_proxy.modules.sales.subscriptions.app.services import (
+    Plan,
+    Protocol,
+    Subscription,
+    SubscriptionStatus,
+)
+from papilio_proxy.modules.sales.subscriptions.routers.telegram import (
     ANIMATION_PATH,
     BANNER_PATH,
     LOGO_PATH,
@@ -27,7 +33,6 @@ from bot.presentation.ui import (
     _subscription_card,
     build_router,
 )
-from bot.services.subscriptions import Plan, Protocol, Subscription, SubscriptionStatus
 
 
 class PresentationTests(TestCase):
@@ -57,9 +62,11 @@ class PresentationTests(TestCase):
         self.assertIsNone(home[2][0].style)
         purchase = _protocol_keyboard("sample").inline_keyboard[0][0]
         self.assertEqual(purchase.style, "success")
-        self.assertIn("هر دو لینک", purchase.text)
+        self.assertIn("ادامهٔ خرید", purchase.text)
         self.assertTrue((purchase.callback_data or "").endswith(":both"))
-        self.assertEqual(_plans_keyboard([Plan("p", "پلن", 1, 1, 10)]).inline_keyboard[0][0].style, "primary")
+        self.assertEqual(
+            _plans_keyboard([Plan("p", "پلن", 1, 1, 10)]).inline_keyboard[0][0].style, "primary"
+        )
         copy_button = _order_keyboard("order-123").inline_keyboard[0][0]
         assert copy_button.copy_text is not None
         self.assertEqual(copy_button.copy_text.text, "order-123")
@@ -188,7 +195,10 @@ class PhotoNavigationTests(IsolatedAsyncioTestCase):
             data="home",
         )
         with (
-            patch("bot.presentation.ui.ANIMATION_PATH", BANNER_PATH),
+            patch(
+                "papilio_proxy.modules.sales.subscriptions.routers.telegram.ANIMATION_PATH",
+                BANNER_PATH,
+            ),
             patch.object(Message, "edit_reply_markup", new_callable=AsyncMock) as clear_keyboard,
             patch.object(Message, "answer_animation", new_callable=AsyncMock) as answer_animation,
             patch.object(Message, "answer_photo", new_callable=AsyncMock) as answer_photo,
@@ -207,7 +217,10 @@ class PhotoNavigationTests(IsolatedAsyncioTestCase):
             chat=Chat(id=1, type="private"),
         )
         with (
-            patch("bot.presentation.ui.ANIMATION_PATH", BANNER_PATH.with_name("missing-intro.mp4")),
+            patch(
+                "papilio_proxy.modules.sales.subscriptions.routers.telegram.ANIMATION_PATH",
+                BANNER_PATH.with_name("missing-intro.mp4"),
+            ),
             patch.object(Message, "answer_photo", new_callable=AsyncMock) as answer_photo,
             patch.object(Message, "answer_animation", new_callable=AsyncMock) as answer_animation,
             patch.object(Message, "answer", new_callable=AsyncMock) as answer,
@@ -228,7 +241,10 @@ class PhotoNavigationTests(IsolatedAsyncioTestCase):
             chat=Chat(id=1, type="private"),
         )
         with (
-            patch("bot.presentation.ui.ANIMATION_PATH", BANNER_PATH),
+            patch(
+                "papilio_proxy.modules.sales.subscriptions.routers.telegram.ANIMATION_PATH",
+                BANNER_PATH,
+            ),
             patch.object(Message, "answer_animation", new_callable=AsyncMock) as answer_animation,
             patch.object(Message, "answer_photo", new_callable=AsyncMock) as answer_photo,
             patch.object(Message, "answer", new_callable=AsyncMock) as answer,

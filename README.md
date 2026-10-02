@@ -1,70 +1,60 @@
-# Papilio
+# Papilio Proxy
 
-Papilio is a work-in-progress VPN subscription project with a Persian Telegram bot. It combines a Python application, MySQL storage, and a Go component for Xray configuration.
+A Persian Telegram VPN subscription bot, a private web admin panel, and a Go controller for Xray.
 
-## Components
+## Structure
 
-- `bot/`: Telegram interface, admin tools, application services, and MySQL/SQLAlchemy adapters.
-- `bot/callback.py`: a small Papilio/FastAPI API for KPay verification and private subscription pages.
-- `proxy/`: a Go component for Xray configuration and subscription entitlements.
-- `deploy/hysteria/`: pinned official Hysteria installation with private Go authentication.
-- `deploy/xray/`: VPS bootstrap, TLS-renewal hook, and disposable smoke tests.
-- `assets/`: the existing Papilio banner and logo used by the bot.
-- `bot/infra/qr.py`: in-memory QR rendering with bounded background workers.
+- `papilio_proxy/apps/`: Papilio API, Telegram bot, and Papilio Tasks scheduler entry points.
+- `papilio_proxy/modules/`: accounts, sales, branding, analytics, and network modules. Each module separates `domain`, `app`, `infra`, `routers`, and `providers`.
+- `papilio_proxy/config/`: runtime configuration and the shared MySQL connection pool.
+- `proxy/`: Go node controller and quota accounting.
+- `assets/`: bot logo, banner, and animation.
 
-## Local setup
+Plans, plan emoji, branding, and payment destinations are editable in MySQL. Prices are stored in integer rial and displayed in toman. Database queries belong in module infrastructure, not services or routers.
 
-1. Copy `.env.example` to `.env` and set private credentials. Never commit `.env`.
-2. Start MySQL, the bot, and the callback API:
+## Setup
 
-   ```bash
-   docker compose up -d --build mysql bot callback
-   ```
+Copy `.env.example` to `.env` and configure private credentials. Never commit `.env`.
 
-3. Open the terminal dashboard when needed:
+```bash
+docker compose up -d --build mysql bot callback
+docker compose --profile admin run --rm tui
+```
 
-   ```bash
-   docker compose --profile admin run --rm tui
-   ```
+The API exposes private subscription pages and the owner panel at `/admin`. Configure `ADMIN_PUBLIC_ORIGIN` with the exact HTTPS origin. Create the admin credential interactively:
 
-The bot reads plans from MySQL and displays prices in toman; stored prices are in rial. Admins can manage each plan's emoji and details with `/admin`, and bot profile text with `/branding` in a private chat.
+```bash
+python -m papilio_proxy.tools.admin_web_credentials <username>
+```
 
-Customer menus use native colored Telegram buttons and emoji. No Mini App is required. New plans stay hidden until an admin activates them; prices are not seeded in application code.
+The panel uses vanilla JavaScript, secure revocable sessions, and CSRF protection. Owners can edit plans, card destinations, branding, pricing assumptions, and user access.
 
-The owner dashboard is at `/admin` on the HTTPS callback domain. Set `ADMIN_PUBLIC_ORIGIN` to that exact origin and create its credential with `python -m bot.tools.admin_web_credentials <username>` from an interactive terminal. The password is salted and hashed in MySQL, never committed. The dashboard uses vanilla JavaScript, server-side revocable sessions, CSRF protection, and a 15-minute lockout after repeated failures. It can manage plans and bot profile text and inspect users, orders, payments, and launch readiness. Payment records are read-only: KPay remains the authority for settlement.
+## Payments
 
-The dashboard also stores editable pricing assumptions in MySQL and compares each plan against a fully-consuming customer cohort. Provider traffic is modeled in decimal GB while plan traffic uses GiB. It reports a contribution scenario, not guaranteed net profit; changing assumptions does not silently alter published plan prices.
+The current method is card-to-card with manual admin approval. Add a card number, bank name, and account holder in the panel, then enable the method. No card details or public plan prices are seeded in application code.
 
-In **Users**, admins can block or unblock all service access for a Telegram user and record a note. Blocks survive restarts, disable subscription refresh and new purchases, and remove the user's configurations from the node. Unblocking preserves remaining quota and the original expiry. Hysteria sessions are kicked; already-open VLESS/VMess streams may continue until they close. If the node is unavailable, the panel reports pending enforcement and reconciliation retries removal.
+Buyers receive payment instructions and upload a receipt photo in Telegram. Admins view private receipt images and approve or reject them in the panel. Approval requires the bank transaction reference after checking actual account credit. A receipt image alone never marks an order paid.
 
-## Purchase flow
+Images are sanitized and encrypted. Each order keeps its payment destination snapshot. Duplicate transaction references cannot settle different orders; repeating an approval does not activate another service.
 
-Configure the KPay shop, card, HTTPS callback, and public checkout switch in the admin dashboard. These settings live in MySQL. Admins can test checkout while public purchases remain disabled.
-
-The bot creates a payment for the order's stored rial amount. The callback verifies the transaction with KPay and atomically records settlement; a redirect or receipt submitted to this application never settles an order directly. KPay remains a trust boundary: if its unchecked receipt auto-confirm option is enabled, its paid result is not independent proof of bank credit. Duplicate callbacks cannot activate a second subscription. Failed provisioning remains queued for retry.
-
-The bot also checks pending payments every 15 seconds in small batches, so closing the browser does not prevent fulfillment. Provisioning runs every two seconds; a durable delivery queue sends subscription links and QR images in the buyer's private chat. The payment result page attempts to return to Telegram and provides a fallback button. Returning to chat is not required for delivery, and browsers may require a user tap to open Telegram.
-
-Bot purchases always link directly to KPay's hosted payment page. An optional, separately enabled receipt page can forward PNG/JPEG receipts to KPay; it never replaces the bot's provider link or calls the merchant approval endpoint. Its responses are retained encrypted and duplicate image hashes are rejected across orders. A pending result never activates a subscription. Provider receipt processing and fraud detection still require a real purchase test.
-
-Subscription links contain branded profile names and shared usage metadata. Opening one in a browser displays its private usage dashboard; subscription clients receive connection links. When configured, Hysteria2, VLESS and VMess share the same entitlement, quota and expiry.
+After approval, native Papilio Tasks jobs provision the entitlement and deliver connection links, the individual subscription URL, and a QR image. Provisioning and notifications remain retryable. Pending purchases are separate from “My services”. Automatic bank detection and payment approval are not enabled.
 
 ## Checks
 
 ```bash
-python3 -m unittest discover -s tests -v
+pip install -e '.[dev]'
+ruff check papilio_proxy tests
+ruff format --check papilio_proxy tests
+pyright
+python -m unittest discover -s tests -v
 (cd proxy && go test ./... && go vet ./...)
 docker compose --env-file .env.example config --quiet
 ```
 
-On the owner workstation, `python deploy/backup_remote.py` creates an encrypted off-node snapshot and verifies a restore in temporary MySQL. It requires pinned SSH details in the private `.env`; the resulting file is ignored by Git.
+MySQL integration tests are opt-in through `PAPILIO_TEST_DATABASE_URL`. Use a test database; tests create missing tables and roll back their test records.
 
-Install development dependencies with `pip install -e '.[dev]'`. They include an independent QR decoder for round-trip tests. To run the opt-in MySQL test, provide `PAPILIO_TEST_DATABASE_URL` for an initialized database; it uses an outer transaction and rolls back its test data.
+## Limits
 
-## Current limits
+Quota is enforced from sampled node counters, not byte-exact accounting. Sampling and unclean restarts can cause overshoot or lost measurements. Blocked users cannot refresh subscriptions or make new purchases; existing streams may remain open until they close.
 
-The VPS runs a pinned official Xray container with VLESS/REALITY on TCP 8443 and VMess/WSS on TCP 8444. The Go controller manages both protocols through a private Unix socket, polls shared usage counters, and revokes access at expiry or measured quota exhaustion. A disposable account passed real HTTPS traffic through both protocols, produced positive counters, and was rejected after revocation. An admin-only, zero-revenue pilot entitlement is now active for real-network testing.
-
-The bot and callback API support public HTTPS subscription/usage routes, encrypted per-order links, asynchronous QR delivery, and an 80% usage warning outbox. Public checkout is disabled by default and controlled separately in MySQL. Do not confuse an enabled catalog or a deployed checkout with proof of live bank settlement.
-
-Usage is sampled once per second. It is not a byte-exact cap: traffic can exceed the advertised quota between samples, and usage can be lost around an unclean controller restart. Hiddify-core tests over Irancell completed for VLESS and Hysteria2; these are single-client observations, not a 100-concurrent-user capacity guarantee. Live paid KPay settlement and the other target-network trials still require verification. Encrypted off-node snapshots have passed isolated MySQL restore tests, but recurring backup automation is not yet in place. Do not advertise full production readiness until the remaining gates are verified.
+An 80% usage warning is sent through a durable notification queue. Individual connectivity tests do not establish capacity for 100 concurrent users. Deployment, bank-credit review, backups, and target-network checks must be verified before claiming production readiness.

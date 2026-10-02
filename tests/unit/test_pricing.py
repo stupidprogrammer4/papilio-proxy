@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from unittest import TestCase
 
-from bot.models.pricing import PricingAssumptions, PricingValidationError
-from bot.models.subscriptions import Plan
-from bot.services.pricing import project_plan, validate_pricing
+from papilio_proxy.modules.sales.pricing.app.services import project_plan, validate_pricing
+from papilio_proxy.modules.sales.pricing.domain.entities import (
+    PricingAssumptions,
+    PricingValidationError,
+)
+from papilio_proxy.modules.sales.subscriptions.domain.entities import Plan
 
 
 class PricingTests(TestCase):

@@ -1,1 +1,0 @@
-"""Papilio Telegram bot package."""
