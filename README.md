@@ -35,11 +35,13 @@ The owner dashboard is at `/admin` on the HTTPS callback domain. Set `ADMIN_PUBL
 
 The dashboard also stores editable pricing assumptions in MySQL and compares each plan against a fully-consuming customer cohort. Provider traffic is modeled in decimal GB while plan traffic uses GiB. It reports a contribution scenario, not guaranteed net profit; changing assumptions does not silently alter published plan prices.
 
+In **Users**, admins can block or unblock all service access for a Telegram user and record a note. Blocks survive restarts, disable subscription refresh and new purchases, and remove the user's configurations from the node. Unblocking preserves remaining quota and the original expiry. Hysteria sessions are kicked; already-open VLESS/VMess streams may continue until they close. If the node is unavailable, the panel reports pending enforcement and reconciliation retries removal.
+
 ## Purchase flow
 
 Configure the KPay shop, card, HTTPS callback, and public checkout switch in the admin dashboard. These settings live in MySQL. Admins can test checkout while public purchases remain disabled.
 
-The bot creates a payment for the order's stored rial amount. The callback verifies the transaction with KPay and atomically records settlement; redirects and receipt images never count as payment proof. Duplicate callbacks cannot activate a second subscription. Failed provisioning remains queued for retry.
+The bot creates a payment for the order's stored rial amount. The callback verifies the transaction with KPay and atomically records settlement; a redirect or receipt submitted to this application never settles an order directly. KPay remains a trust boundary: if its unchecked receipt auto-confirm option is enabled, its paid result is not independent proof of bank credit. Duplicate callbacks cannot activate a second subscription. Failed provisioning remains queued for retry.
 
 The bot also checks pending payments every 15 seconds in small batches, so closing the browser does not prevent fulfillment. Provisioning runs every two seconds; a durable delivery queue sends subscription links and QR images in the buyer's private chat. The payment result page attempts to return to Telegram and provides a fallback button. Returning to chat is not required for delivery, and browsers may require a user tap to open Telegram.
 

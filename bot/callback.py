@@ -22,6 +22,7 @@ from bot.infra.db.dashboard import MysqlDashboardRepository
 from bot.infra.db.mysql import MysqlSubscriptionRepository
 from bot.infra.db.payments import MysqlPaymentRepository
 from bot.infra.db.pricing import MysqlPricingRepository
+from bot.infra.db.user_access import MysqlUserAccessRepository
 from bot.infra.kpay import KpayVerifier
 from bot.infra.node import XrayNodeClient
 from bot.presentation.admin_web.routes import ASSETS as ADMIN_ASSETS
@@ -37,6 +38,7 @@ from bot.services.checkout import CheckoutService
 from bot.services.dashboard import DashboardService
 from bot.services.payments import PaymentVerificationService
 from bot.services.pricing import PricingService
+from bot.services.user_access import UserAccessService
 
 
 def create_app(
@@ -59,6 +61,7 @@ def create_app(
         pricing_repository: MysqlPricingRepository | None = None
         admin_dashboard_repository: MysqlDashboardRepository | None = None
         admin_subscription_repository: MysqlSubscriptionRepository | None = None
+        user_access_repository: MysqlUserAccessRepository | None = None
         if service is None:
             try:
                 settings = Settings.from_environment(require_token=False)
@@ -110,6 +113,11 @@ def create_app(
                         node_client = XrayNodeClient(settings.node_socket_path)
                         app.state.access_service.node_links = node_client.hysteria_link
                         app.state.private_node = node_client
+                if app.state.admin_web_service is not None:
+                    user_access_repository = MysqlUserAccessRepository(settings.database_url)
+                    app.state.admin_user_access_service = UserAccessService(
+                        user_access_repository, node_client,
+                    )
             except ConfigurationError:
                 pass
         try:
@@ -135,6 +143,8 @@ def create_app(
                 await admin_repository.close()
             if pricing_repository is not None:
                 await pricing_repository.close()
+            if user_access_repository is not None:
+                await user_access_repository.close()
 
     framework = FrameworkSettings.model_validate(
         {
@@ -167,6 +177,7 @@ def create_app(
     username = os.getenv("TELEGRAM_BOT_USERNAME", "")
     app.state.bot_return_url = f"https://t.me/{username}" if re.fullmatch(r"[A-Za-z0-9_]{5,32}", username) else None
     app.state.admin_web_service = None
+    app.state.admin_user_access_service = None
     app.state.admin_public_origin = None
     app.mount("/admin/assets", StaticFiles(directory=ADMIN_ASSETS), name="admin-assets")
     app.mount("/subscription-assets", StaticFiles(directory=SUBSCRIPTION_ASSETS), name="subscription-assets")

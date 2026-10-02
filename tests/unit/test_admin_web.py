@@ -8,7 +8,9 @@ import httpx
 
 from bot.callback import create_app
 from bot.models.admin_web import AdminLogin, AdminSession
+from bot.models.user_access import UnknownUserError, UserAccessResult
 from bot.services.admin_web import AdminWebService
+from bot.services.user_access import UserAccessService
 
 
 class AdminWebRoutesTests(IsolatedAsyncioTestCase):
@@ -20,6 +22,8 @@ class AdminWebRoutesTests(IsolatedAsyncioTestCase):
         self.app = create_app()
         self.app.state.admin_web_service = self.service
         self.app.state.admin_public_origin = "https://bot.amupouya.org"
+        self.user_access = AsyncMock(spec=UserAccessService)
+        self.app.state.admin_user_access_service = self.user_access
         self.client = httpx.AsyncClient(
             transport=httpx.ASGITransport(app=self.app),
             base_url="https://bot.amupouya.org",
@@ -122,3 +126,47 @@ class AdminWebRoutesTests(IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()["sales_enabled"])
         self.assertFalse(response.json()["live_usage_connected"])
+
+    async def test_user_block_requires_session_origin_and_csrf(self) -> None:
+        path = "/admin/api/users/77/access"
+        body = {"blocked": True, "reason": "abuse"}
+        headers = {"Origin": "https://bot.amupouya.org", "X-CSRF-Token": "csrf-test"}
+        self.service.session.return_value = None
+        self.assertEqual((await self.client.put(path, json=body, headers=headers)).status_code, 401)
+        self.service.session.return_value = self.session
+        self.assertEqual((await self.client.put(path, json=body)).status_code, 403)
+        self.assertEqual((await self.client.put(
+            path, json=body, headers={"Origin": "https://bot.amupouya.org"},
+        )).status_code, 403)
+        self.assertEqual((await self.client.put(
+            path, json=body,
+            headers={"Origin": "https://attacker.example", "X-CSRF-Token": "csrf-test"},
+        )).status_code, 403)
+        self.user_access.set_blocked.assert_not_awaited()
+
+    async def test_user_block_records_authenticated_actor_and_pending_node_status(self) -> None:
+        self.user_access.set_blocked.return_value = UserAccessResult(77, True, "abuse", True)
+        response = await self.client.put(
+            "/admin/api/users/77/access", json={"blocked": True, "reason": "abuse"},
+            headers={"Origin": "https://bot.amupouya.org", "X-CSRF-Token": "csrf-test"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["enforcement_pending"])
+        self.user_access.set_blocked.assert_awaited_once_with(77, True, "abuse", "amupouya")
+
+    async def test_user_block_rejects_coerced_flags_and_extra_fields(self) -> None:
+        for body in ({"blocked": "false"}, {"blocked": 1}, {"blocked": True, "actor": "spoof"}):
+            response = await self.client.put(
+                "/admin/api/users/77/access", json=body,
+                headers={"Origin": "https://bot.amupouya.org", "X-CSRF-Token": "csrf-test"},
+            )
+            self.assertEqual(response.status_code, 422)
+        self.user_access.set_blocked.assert_not_awaited()
+
+    async def test_user_block_reports_unknown_user(self) -> None:
+        self.user_access.set_blocked.side_effect = UnknownUserError("کاربر پیدا نشد.")
+        response = await self.client.put(
+            "/admin/api/users/77/access", json={"blocked": True},
+            headers={"Origin": "https://bot.amupouya.org", "X-CSRF-Token": "csrf-test"},
+        )
+        self.assertEqual(response.status_code, 404)

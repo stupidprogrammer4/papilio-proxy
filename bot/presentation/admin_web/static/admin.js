@@ -310,9 +310,51 @@
       ["کاربر", row => row.display_name], ["شناسهٔ تلگرام", row => node("span", "mono", row.telegram_id)],
       ["نام کاربری", row => row.username ? `@${row.username}` : "—"],
       ["سفارش", row => n(row.subscriptions)], ["عضویت", row => date(row.created_at)],
+      ["دسترسی", row => node("span", `badge ${row.is_blocked ? "red" : "green"}`, row.is_blocked ? "⛔ مسدود" : "✓ مجاز")],
+      ["توضیح", row => node("span", "muted", row.block_reason || "—")],
+      ["مدیریت", row => button(
+        row.is_blocked ? "رفع مسدودسازی" : "⛔ مسدودسازی",
+        `btn ${row.is_blocked ? "btn-quiet" : "btn-danger"} btn-small`,
+        () => userAccessForm(row),
+      )],
     ], rows, "کاربری با این مشخصات پیدا نشد.");
     box.prepend(toolbar);
-    root.replaceChildren(paged(box, "users", rows, () => users().catch(fail)));
+    root.replaceChildren(
+      add(node("div", "notice"), node("strong", "", "مدیریت دسترسی: "),
+        node("span", "", "مسدودسازی شامل همهٔ سرویس‌های کاربر، لینک ساب و خرید جدید است. رفع مسدودسازی حجم یا اعتبار سرویس را از نو شروع نمی‌کند.")),
+      paged(box, "users", rows, () => users().catch(fail)),
+    );
+  }
+  function userAccessForm(row) {
+    document.getElementById("user-access-editor")?.remove();
+    const blocked = !row.is_blocked;
+    const panel = node("section", "panel form-panel user-access-panel"); panel.id = "user-access-editor";
+    const action = blocked ? "مسدودسازی" : "رفع مسدودسازی";
+    add(panel, node("h2", "", `${blocked ? "⛔" : "🔓"} ${action} ${row.display_name}`),
+      node("p", "mono", `Telegram ID: ${row.telegram_id}`),
+      node("p", "", blocked
+        ? "همهٔ کانفیگ‌های این کاربر از نود حذف و ساب او غیرفعال می‌شود. موجودی، سفارش‌ها و سابقهٔ پرداخت حذف نمی‌شوند."
+        : "فقط سرویس‌هایی که هنوز حجم و اعتبار دارند دوباره قابل اتصال می‌شوند؛ زمان مسدودبودن به اعتبار اضافه نمی‌شود."),
+      node("p", "helper", "Hysteria اتصال جاری را قطع می‌کند؛ اتصال‌های از قبل بازِ VLESS/VMess ممکن است تا بسته‌شدن ادامه داشته باشند. اتصال جدید مسدود می‌شود."));
+    const form = node("form");
+    const label = node("label", "", "یادداشت مدیریت (اختیاری)"); label.htmlFor = "user-block-reason";
+    const reason = node("textarea", "field"); reason.id = "user-block-reason"; reason.maxLength = 300; reason.value = row.block_reason || "";
+    const submit = node("button", `btn ${blocked ? "btn-danger" : "btn-primary"}`, `تأیید ${action}`); submit.type = "submit";
+    add(form, label, reason, add(node("div", "form-actions"), submit,
+      button("انصراف", "btn btn-ghost", () => panel.remove())));
+    form.addEventListener("submit", async event => {
+      event.preventDefault(); submit.disabled = true;
+      try {
+        const result = await api(`/users/${encodeURIComponent(row.telegram_id)}/access`, {
+          method: "PUT", body: JSON.stringify({ blocked, reason: reason.value.trim() }),
+        });
+        toast(result.enforcement_pending
+          ? "مسدودسازی ذخیره شد؛ حذف کانفیگ از نود هنوز در انتظار تلاش مجدد است."
+          : `${action} ثبت شد.`, result.enforcement_pending);
+        await users();
+      } catch (error) { toast(error.message, true); submit.disabled = false; }
+    });
+    add(panel, form); root.prepend(panel); panel.scrollIntoView({ behavior: "smooth", block: "start" }); reason.focus();
   }
   async function orders() {
     const rows = await api(`/orders?offset=${state.offsets.orders}`);
@@ -320,7 +362,7 @@
       ["کد سفارش", row => node("span", "mono", shortId(row.id))],
       ["کاربر", row => node("span", "mono", row.telegram_id)],
       ["پلن", row => row.plan_code], ["مبلغ", row => toman(row.price_rial / 10)],
-      ["وضعیت", row => statusBadge(row.status)], ["پرداخت", row => statusBadge(row.payment_status)],
+      ["وضعیت", row => row.is_blocked ? node("span", "badge red", "⛔ کاربر مسدود") : statusBadge(row.status)], ["پرداخت", row => statusBadge(row.payment_status)],
       ["مصرف", row => `${gib(row.traffic_used_bytes)} / ${gib(row.traffic_limit_bytes)}`],
       ["ثبت", row => date(row.created_at)],
     ], rows, "هنوز سفارشی ثبت نشده است.");

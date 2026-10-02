@@ -22,6 +22,7 @@ from bot.core.config import Settings
 from bot.infra.qr import QrRenderer
 from bot.models.checkout import CheckoutUnavailable
 from bot.models.payments import PaymentProviderUnavailable
+from bot.models.user_access import UserBlockedError
 from bot.presentation.subscription_view import connection_links
 from bot.services.access import AccessInactive, AccessService, AccessUnavailable
 from bot.services.checkout import CheckoutService
@@ -546,6 +547,9 @@ def build_router(
                 TelegramUser(sender.id, sender.full_name or "کاربر پاپیلیو", sender.username)
             )
             order = await service.create_order(callback.from_user.id, plan.code, protocol)
+        except UserBlockedError as exc:
+            await callback.answer(str(exc), show_alert=True)
+            return
         except (UnknownPlanError, ValueError):
             await callback.answer("درخواست معتبر نیست.", show_alert=True)
             return

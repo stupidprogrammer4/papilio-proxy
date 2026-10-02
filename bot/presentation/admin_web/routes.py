@@ -15,10 +15,12 @@ from bot.models.admin_web import AdminLoginDenied, AdminSession
 from bot.models.branding import BrandingValidationError
 from bot.models.checkout import CheckoutConfig
 from bot.models.pricing import PricingAssumptions, PricingValidationError
+from bot.models.user_access import UnknownUserError
 from bot.services.admin_plans import PlanValidationError
 from bot.services.admin_web import AdminWebService
 from bot.services.checkout import CheckoutService
 from bot.services.subscriptions import Plan, UnknownPlanError
+from bot.services.user_access import UserAccessService
 
 COOKIE_NAME = "papilio_admin_session"
 ASSETS = Path(__file__).resolve().parent / "static"
@@ -75,6 +77,12 @@ class CheckoutBody(BaseModel):
     shop_id: str = Field(max_length=36)
     card_id: str = Field(max_length=36)
     callback_url: str = Field(max_length=2048)
+
+
+class UserAccessBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    blocked: bool = Field(strict=True)
+    reason: str = Field(default="", max_length=300)
 
 
 def _service(request: Request) -> AdminWebService:
@@ -259,6 +267,25 @@ def build_admin_web_router() -> APIRouter:
     ) -> list[dict[str, object]]:
         rows = await _service(request).users(q.strip(), offset)
         return [asdict(row) for row in rows]
+
+    @router.put("/admin/api/users/{telegram_id}/access")
+    async def set_user_access(
+        telegram_id: int, body: UserAccessBody, request: Request,
+        session: Annotated[AdminSession, Depends(_mutating_session)],
+    ) -> dict[str, object]:
+        service = cast(
+            "UserAccessService | None", request.app.state.admin_user_access_service
+        )
+        if service is None:
+            raise HTTPException(503, "مدیریت دسترسی کاربران هنوز تنظیم نشده است.")
+        try:
+            return asdict(await service.set_blocked(
+                telegram_id, body.blocked, body.reason, session.username,
+            ))
+        except UnknownUserError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
 
     @router.get("/admin/api/orders")
     async def orders(
