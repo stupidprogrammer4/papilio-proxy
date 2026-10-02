@@ -34,7 +34,8 @@ class UsageAlertTests(IsolatedAsyncioTestCase):
                 result = await handle.wait_result(timeout=5)
             self.assertFalse(result.is_err)
             self.assertEqual(result.return_value, 1)
-            verification.recheck_pending.assert_awaited_once()
+            # A recurring 15-second tick may run alongside the explicit enqueue.
+            verification.recheck_pending.assert_awaited()
         finally:
             await bot.session.close()
     async def test_dispatcher_sends_80_percent_once_and_marks_outbox(self) -> None:
@@ -61,7 +62,8 @@ class UsageAlertTests(IsolatedAsyncioTestCase):
                 result = await handle.wait_result(timeout=5)
             self.assertFalse(result.is_err)
             self.assertEqual(result.return_value, 0)
-            repository.claim_alerts.assert_awaited_once()
+            # The recurring beat may also fire at a minute boundary.
+            repository.claim_alerts.assert_awaited()
         finally:
             await bot.session.close()
 
