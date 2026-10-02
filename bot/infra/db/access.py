@@ -18,6 +18,7 @@ from bot.infra.db.models import (
     UsageAlertModel,
 )
 from bot.infra.db.pool import create_mysql_engine
+from bot.infra.db.user_access import require_user_access, subscription_user_is_allowed
 from bot.models.access import ProvisionDelivery, SubscriptionAccess, UsageAlert
 from bot.models.node import ActiveNodeAccess, NodeAccount, PendingProvision
 from bot.models.subscriptions import SubscriptionStatus
@@ -82,6 +83,12 @@ class MysqlAccessRepository:
         vmess_link: str, measured_at: datetime,
     ) -> SubscriptionAccess:
         async with self._session_factory() as session, session.begin():
+            owner = await session.scalar(select(SubscriptionModel.telegram_id).where(
+                SubscriptionModel.id == subscription_id,
+            ))
+            if owner is None:
+                raise AccessUnavailable("Order does not exist")
+            await require_user_access(session, owner)
             order = await session.scalar(
                 select(SubscriptionModel)
                 .where(SubscriptionModel.id == subscription_id)
@@ -133,6 +140,7 @@ class MysqlAccessRepository:
             .outerjoin(PlanVisualModel, PlanVisualModel.plan_code == PlanModel.code)
             .where(
                 SubscriptionAccessModel.token_digest == digest,
+                subscription_user_is_allowed(),
             )
         )
         async with self._session_factory() as session:
@@ -154,6 +162,7 @@ class MysqlAccessRepository:
                 SubscriptionAccessModel.subscription_id == subscription_id,
                 SubscriptionModel.telegram_id == telegram_id,
                 SubscriptionModel.status == SubscriptionStatus.ACTIVE.value,
+                subscription_user_is_allowed(),
             )
         )
         async with self._session_factory() as session:
@@ -214,6 +223,7 @@ class MysqlAccessRepository:
                 SubscriptionStatus.PAID_AWAITING_PROVISIONING.value,
                 SubscriptionStatus.TEST_AWAITING_PROVISIONING.value,
             )))
+            .where(subscription_user_is_allowed())
             .order_by(SubscriptionModel.created_at)
             .limit(limit)
         )
@@ -242,7 +252,10 @@ class MysqlAccessRepository:
             )
             .join(SubscriptionModel, SubscriptionAccessModel.subscription_id == SubscriptionModel.id)
             .outerjoin(PlanModel, PlanModel.code == SubscriptionModel.plan_code)
-            .where(SubscriptionModel.status == SubscriptionStatus.ACTIVE.value)
+            .where(
+                SubscriptionModel.status == SubscriptionStatus.ACTIVE.value,
+                subscription_user_is_allowed(),
+            )
         )
         async with self._session_factory() as session:
             rows = (await session.execute(statement)).all()
@@ -283,6 +296,7 @@ class MysqlAccessRepository:
                     ProvisionDeliveryModel.leased_until < now,
                 ),
                 SubscriptionModel.status == SubscriptionStatus.ACTIVE.value,
+                subscription_user_is_allowed(),
             )
             .order_by(SubscriptionModel.created_at)
             .limit(limit)
@@ -318,6 +332,7 @@ class MysqlAccessRepository:
                 UsageAlertModel.sent_at.is_(None),
                 or_(UsageAlertModel.leased_until.is_(None), UsageAlertModel.leased_until < now),
                 SubscriptionModel.status == SubscriptionStatus.ACTIVE.value,
+                subscription_user_is_allowed(),
                 SubscriptionModel.traffic_used_bytes < SubscriptionModel.traffic_limit_bytes,
             )
             .order_by(UsageAlertModel.id)

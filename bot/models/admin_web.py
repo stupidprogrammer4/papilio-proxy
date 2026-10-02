@@ -24,6 +24,8 @@ class AdminUserRow:
     username: str | None
     subscriptions: int
     created_at: datetime
+    is_blocked: bool = False
+    block_reason: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +40,7 @@ class AdminOrderRow:
     created_at: datetime
     expires_at: datetime | None
     payment_status: str | None
+    is_blocked: bool = False
 
 
 @dataclass(frozen=True, slots=True)

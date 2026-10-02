@@ -12,7 +12,13 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.sql.elements import ColumnElement
 
 from bot.infra.db.admin_models import WebAdminAccountModel, WebAdminSessionModel
-from bot.infra.db.models import Base, PaymentAttemptModel, SubscriptionModel, UserModel
+from bot.infra.db.models import (
+    Base,
+    PaymentAttemptModel,
+    SubscriptionModel,
+    UserAccessPolicyModel,
+    UserModel,
+)
 from bot.infra.db.pool import create_mysql_engine
 from bot.models.admin_web import (
     AdminFinancialSnapshot,
@@ -163,11 +169,15 @@ class MysqlAdminWebRepository:
                 UserModel.username,
                 func.count(SubscriptionModel.id),
                 UserModel.created_at,
+                UserAccessPolicyModel.is_blocked,
+                UserAccessPolicyModel.reason,
             )
             .outerjoin(SubscriptionModel, SubscriptionModel.telegram_id == UserModel.telegram_id)
+            .outerjoin(UserAccessPolicyModel, UserAccessPolicyModel.telegram_id == UserModel.telegram_id)
             .group_by(
                 UserModel.telegram_id, UserModel.display_name, UserModel.username,
                 UserModel.created_at,
+                UserAccessPolicyModel.is_blocked, UserAccessPolicyModel.reason,
             )
             .order_by(UserModel.created_at.desc(), UserModel.telegram_id.desc())
             .limit(limit)
@@ -184,14 +194,21 @@ class MysqlAdminWebRepository:
         async with self._sessions() as session:
             rows = (await session.execute(statement)).all()
         return [
-            AdminUserRow(int(row[0]), str(row[1]), row[2], int(row[3]), row[4].replace(tzinfo=UTC))
+            AdminUserRow(
+                int(row[0]), str(row[1]), row[2], int(row[3]), row[4].replace(tzinfo=UTC),
+                bool(row[5]), row[6] or "",
+            )
             for row in rows
         ]
 
     async def list_orders(self, *, limit: int = 50, offset: int = 0) -> list[AdminOrderRow]:
         statement = (
-            select(SubscriptionModel, PaymentAttemptModel.status)
+            select(SubscriptionModel, PaymentAttemptModel.status, UserAccessPolicyModel.is_blocked)
             .outerjoin(PaymentAttemptModel, PaymentAttemptModel.order_id == SubscriptionModel.id)
+            .outerjoin(
+                UserAccessPolicyModel,
+                UserAccessPolicyModel.telegram_id == SubscriptionModel.telegram_id,
+            )
             .order_by(SubscriptionModel.created_at.desc(), SubscriptionModel.id.desc())
             .limit(limit)
             .offset(offset)
@@ -205,8 +222,9 @@ class MysqlAdminWebRepository:
                 order.created_at.replace(tzinfo=UTC),
                 order.expires_at.replace(tzinfo=UTC) if order.expires_at else None,
                 payment_status,
+                bool(blocked),
             )
-            for order, payment_status in rows
+            for order, payment_status, blocked in rows
         ]
 
     async def list_payments(self, *, limit: int = 50, offset: int = 0) -> list[AdminPaymentRow]:

@@ -47,6 +47,18 @@ class PlanModel(Base):
     )
 
 
+class UserAccessPolicyModel(Base):
+    __tablename__ = "user_access_policies"
+
+    telegram_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.telegram_id"), primary_key=True
+    )
+    is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    reason: Mapped[str] = mapped_column(String(300), default="")
+    changed_by: Mapped[str] = mapped_column(String(64))
+    updated_at: Mapped[datetime] = mapped_column(DateTime)
+
+
 class PlanVisualModel(Base):
     """Per-plan visual settings, added without altering the existing plans table."""
 

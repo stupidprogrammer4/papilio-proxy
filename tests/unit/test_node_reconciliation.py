@@ -78,6 +78,21 @@ class FakeNode:
 
 
 class NodeReconciliationTests(IsolatedAsyncioTestCase):
+    async def test_expired_access_is_not_recreated_after_unblocking(self) -> None:
+        access_repo = MemoryAccessRepository()
+        access_repo.access = replace(
+            access_repo.access, subscription_id=ORDER_ID,
+            expires_at=datetime.now(UTC) - timedelta(seconds=1),
+        )
+        repository = FakeRepository(access_repo)
+        repository.pending = []
+        node = FakeNode()
+        with patch.object(node, "usage", new_callable=AsyncMock, return_value=[]):
+            await NodeReconciler(repository, AccessService(access_repo), node).run_once()
+        self.assertEqual(node.ensure_count, 0)
+        self.assertEqual(node.removed, [node_email(ORDER_ID)])
+        self.assertEqual(repository.expired, [ORDER_ID])
+
     async def test_failed_paid_provision_remains_retryable(self) -> None:
         access_repo = MemoryAccessRepository()
         repository = FakeRepository(access_repo)

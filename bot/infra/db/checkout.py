@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from bot.infra.db.checkout_models import CheckoutReservationModel, CheckoutSettingsModel
 from bot.infra.db.models import Base, PaymentAttemptModel, SubscriptionModel
 from bot.infra.db.pool import create_mysql_engine
+from bot.infra.db.user_access import require_user_access, subscription_user_is_allowed
 from bot.models.checkout import CheckoutConfig, CheckoutOrder, CheckoutUnavailable
 from bot.models.payments import PaymentInitiation
 
@@ -45,7 +46,10 @@ class MysqlCheckoutRepository:
         statement = (
             select(SubscriptionModel, PaymentAttemptModel)
             .outerjoin(PaymentAttemptModel, PaymentAttemptModel.order_id == SubscriptionModel.id)
-            .where(SubscriptionModel.id == order_id, SubscriptionModel.telegram_id == telegram_id)
+            .where(
+                SubscriptionModel.id == order_id, SubscriptionModel.telegram_id == telegram_id,
+                subscription_user_is_allowed(),
+            )
         )
         async with self._session_factory() as session:
             pair = (await session.execute(statement)).one_or_none()
@@ -61,6 +65,12 @@ class MysqlCheckoutRepository:
     async def claim(self, order_id: str) -> None:
         try:
             async with self._session_factory() as session, session.begin():
+                owner = await session.scalar(select(SubscriptionModel.telegram_id).where(
+                    SubscriptionModel.id == order_id,
+                ))
+                if owner is None:
+                    raise CheckoutUnavailable("سفارش پیدا نشد.")
+                await require_user_access(session, owner)
                 session.add(CheckoutReservationModel(order_id=order_id))
         except IntegrityError as exc:
             raise CheckoutUnavailable("وضعیت پرداخت قبلی نامشخص است؛ با پشتیبانی تماس بگیر.") from exc

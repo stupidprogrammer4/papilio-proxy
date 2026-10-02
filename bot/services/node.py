@@ -91,6 +91,13 @@ class NodeReconciler:
             for item in active:
                 access = item.access
                 email = node_email(access.subscription_id)
+                if (
+                    access.expires_at <= datetime.now(UTC)
+                    or access.uplink_bytes + access.downlink_bytes >= access.traffic_limit_bytes
+                ):
+                    await self.node.remove(email)
+                    await self.repository.mark_expired(access.subscription_id)
+                    continue
                 snapshot = snapshots.get(email)
                 if snapshot is None:
                     issued = await self.node.ensure(

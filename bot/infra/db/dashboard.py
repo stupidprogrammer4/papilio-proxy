@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from bot.infra.db.models import SubscriptionModel, UserModel
 from bot.infra.db.pool import create_mysql_engine
+from bot.infra.db.user_access import subscription_user_is_allowed
 from bot.services.dashboard import DashboardRepository, DashboardSnapshot
 
 
@@ -26,7 +27,10 @@ class MysqlDashboardRepository(DashboardRepository):
                     select(
                         func.count(SubscriptionModel.id),
                         func.coalesce(
-                            func.sum(case((SubscriptionModel.status == "active", 1), else_=0)), 0
+                            func.sum(case((
+                                (SubscriptionModel.status == "active")
+                                & subscription_user_is_allowed(), 1,
+                            ), else_=0)), 0
                         ),
                         func.coalesce(
                             func.sum(

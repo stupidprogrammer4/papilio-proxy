@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from bot.infra.db.models import Base, SubscriptionModel, SubscriptionTermsModel, UserModel
 from bot.infra.db.pool import create_mysql_engine
+from bot.infra.db.user_access import require_user_access
 from bot.models.subscriptions import SubscriptionStatus
 
 
@@ -29,6 +30,7 @@ class MysqlTestAccessRepository:
         if quota_bytes <= 0 or not 1 <= duration_days <= 7:
             raise ValueError("Invalid pilot entitlement")
         async with self._sessions() as session, session.begin():
+            await require_user_access(session, telegram_id)
             user = await session.scalar(
                 select(UserModel).where(UserModel.telegram_id == telegram_id).with_for_update()
             )

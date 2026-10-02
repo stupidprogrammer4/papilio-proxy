@@ -17,6 +17,7 @@ from bot.infra.db.models import (
     UserModel,
 )
 from bot.infra.db.pool import create_mysql_engine
+from bot.infra.db.user_access import require_user_access
 from bot.models.branding import DEFAULT_BRANDING, BotBranding
 from bot.services.subscriptions import (
     Plan,
@@ -217,6 +218,7 @@ class MysqlSubscriptionRepository(SubscriptionRepository, PlanRepository):
         if subscription.duration_days <= 0:
             raise ValueError("A purchased duration snapshot is required")
         async with self._session_factory() as session, session.begin():
+            await require_user_access(session, subscription.telegram_id)
             session.add(model)
             session.add(
                 SubscriptionTermsModel(

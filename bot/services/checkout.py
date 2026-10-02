@@ -7,6 +7,7 @@ from uuid import UUID
 from bot.models.checkout import CheckoutConfig, CheckoutOrder, CheckoutUnavailable
 from bot.models.payments import PaymentInitiation, PaymentProviderUnavailable
 from bot.models.subscriptions import SubscriptionStatus
+from bot.models.user_access import UserBlockedError
 from bot.services.payments import CallbackOutcome, PaymentRepository, PaymentVerificationService
 
 
@@ -62,7 +63,10 @@ class CheckoutService:
                 raise CheckoutUnavailable("سفارش پرداخت‌نشده پیدا نشد.")
             if order.checkout:
                 return order.checkout
-            await self.repository.claim(order_id)
+            try:
+                await self.repository.claim(order_id)
+            except UserBlockedError as exc:
+                raise CheckoutUnavailable(str(exc)) from exc
             config = await self.repository.get_config()
             try:
                 checkout = await self.provider.create_transaction(
