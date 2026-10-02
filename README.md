@@ -24,7 +24,7 @@ docker compose --profile admin run --rm tui
 The API exposes private subscription pages and the owner panel at `/admin`. Configure `ADMIN_PUBLIC_ORIGIN` with the exact HTTPS origin. Create the admin credential interactively:
 
 ```bash
-python -m papilio_proxy.tools.admin_web_credentials <username>
+docker compose exec callback python -m papilio_proxy.tools.admin_credentials <username>
 ```
 
 The panel uses vanilla JavaScript, secure revocable sessions, and CSRF protection. Owners can edit plans, card destinations, branding, pricing assumptions, and user access.
