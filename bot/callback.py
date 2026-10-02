@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
@@ -15,20 +16,24 @@ from papilio.core.config import Settings as FrameworkSettings
 from bot.core.config import ConfigurationError, Settings
 from bot.infra.db.access import MysqlAccessRepository
 from bot.infra.db.admin_web import MysqlAdminWebRepository
+from bot.infra.db.checkout import MysqlCheckoutRepository
 from bot.infra.db.credentials import MysqlCredentialVault
 from bot.infra.db.dashboard import MysqlDashboardRepository
 from bot.infra.db.mysql import MysqlSubscriptionRepository
 from bot.infra.db.payments import MysqlPaymentRepository
 from bot.infra.db.pricing import MysqlPricingRepository
 from bot.infra.kpay import KpayVerifier
+from bot.infra.node import XrayNodeClient
 from bot.presentation.admin_web.routes import ASSETS as ADMIN_ASSETS
 from bot.presentation.admin_web.routes import build_admin_web_router
 from bot.presentation.payment_callback import build_payment_router
 from bot.presentation.subscription_api import build_subscription_router
+from bot.presentation.subscription_view import ASSETS as SUBSCRIPTION_ASSETS
 from bot.services.access import AccessService
 from bot.services.admin_plans import AdminPlanService
 from bot.services.admin_web import AdminWebService
 from bot.services.branding import BrandingService
+from bot.services.checkout import CheckoutService
 from bot.services.dashboard import DashboardService
 from bot.services.payments import PaymentVerificationService
 from bot.services.pricing import PricingService
@@ -42,9 +47,13 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Authorities and subscription tokens can appear in URLs; never log them.
         logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+        logging.getLogger("httpcore").setLevel(logging.WARNING)
         vault: MysqlCredentialVault | None = None
+        node_client: XrayNodeClient | None = None
         client: httpx.AsyncClient | None = None
         repository: MysqlPaymentRepository | None = None
+        checkout_repository: MysqlCheckoutRepository | None = None
         access_repository: MysqlAccessRepository | None = None
         admin_repository: MysqlAdminWebRepository | None = None
         pricing_repository: MysqlPricingRepository | None = None
@@ -63,6 +72,12 @@ def create_app(
                     await repository.initialize()
                     app.state.payment_service = PaymentVerificationService(
                         KpayVerifier(settings.kpay_api_base_url, vault, client), repository
+                    )
+                    checkout_repository = MysqlCheckoutRepository(settings.database_url)
+                    await checkout_repository.initialize()
+                    app.state.checkout_service = CheckoutService(
+                        checkout_repository, KpayVerifier(settings.kpay_api_base_url, vault, client),
+                        repository, app.state.payment_service, settings.admin_ids,
                     )
                 admin_origin = os.getenv("ADMIN_PUBLIC_ORIGIN", "").strip().rstrip("/")
                 parsed_origin = urlsplit(admin_origin)
@@ -91,17 +106,25 @@ def create_app(
                     )
                     await access_repository.initialize()
                     app.state.access_service = AccessService(access_repository)
+                    if settings.node_socket_path:
+                        node_client = XrayNodeClient(settings.node_socket_path)
+                        app.state.access_service.node_links = node_client.hysteria_link
+                        app.state.private_node = node_client
             except ConfigurationError:
                 pass
         try:
             yield
         finally:
+            if node_client is not None:
+                await node_client.close()
             if client is not None:
                 await client.aclose()
             if vault is not None:
                 await vault.close()
             if repository is not None:
                 await repository.close()
+            if checkout_repository is not None:
+                await checkout_repository.close()
             if access_repository is not None:
                 await access_repository.close()
             if admin_subscription_repository is not None:
@@ -137,11 +160,16 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.payment_service = service
+    app.state.checkout_service = None
+    app.state.private_node = None
     app.state.access_service = access_service
     app.state.subscription_public_base_url = None
+    username = os.getenv("TELEGRAM_BOT_USERNAME", "")
+    app.state.bot_return_url = f"https://t.me/{username}" if re.fullmatch(r"[A-Za-z0-9_]{5,32}", username) else None
     app.state.admin_web_service = None
     app.state.admin_public_origin = None
     app.mount("/admin/assets", StaticFiles(directory=ADMIN_ASSETS), name="admin-assets")
+    app.mount("/subscription-assets", StaticFiles(directory=SUBSCRIPTION_ASSETS), name="subscription-assets")
 
     @app.middleware("http")
     async def admin_security_headers(

@@ -95,11 +95,12 @@ class UsageAlertTests(IsolatedAsyncioTestCase):
         with patch.object(dispatcher._qr, "render", new_callable=AsyncMock) as render:
             render.return_value = b"png"
             self.assertEqual(await dispatcher.send_pending(), 1)
-            render.assert_awaited_once_with("https://sub.example/s/private-token")
+            assert render.await_args is not None
+            self.assertTrue(render.await_args.args[0].startswith("https://sub.example/s/private-token#"))
         bot.send_photo.assert_awaited_once()
-        bot.send_message.assert_awaited_once()
-        self.assertIn("VLESS", bot.send_message.await_args.args[1])
-        self.assertIn("VMess", bot.send_message.await_args.args[1])
+        self.assertEqual(bot.send_message.await_count, 2)
+        self.assertIn("VLESS", bot.send_message.await_args_list[0].args[1])
+        self.assertIn("VMess", bot.send_message.await_args_list[1].args[1])
         repository.mark_delivery_sent.assert_awaited_once_with(access.subscription_id)
 
     async def test_delivery_job_is_registered_with_node_job(self) -> None:

@@ -3,7 +3,7 @@ from __future__ import annotations
 from hashlib import sha256
 from html import escape
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 from aiogram import F, Router
 from aiogram.enums import ChatType
@@ -20,7 +20,12 @@ from aiogram.types import (
 
 from bot.core.config import Settings
 from bot.infra.qr import QrRenderer
+from bot.models.checkout import CheckoutUnavailable
+from bot.models.payments import PaymentProviderUnavailable
+from bot.presentation.subscription_view import connection_links
 from bot.services.access import AccessInactive, AccessService, AccessUnavailable
+from bot.services.checkout import CheckoutService
+from bot.services.payments import CallbackOutcome, PaymentSettlementError
 from bot.services.subscriptions import (
     Plan,
     Protocol,
@@ -44,35 +49,37 @@ def _key(code: str) -> str:
     return sha256(code.encode("utf-8")).hexdigest()[:20]
 
 
-def _home_text(name: str) -> str:
+def _home_text(name: str, sales_enabled: bool = False) -> str:
     return (
         f"{RTL}🦋 <b>به پاپیلیو خوش آمدی</b>\n"
         f"{RTL}سلام {escape(name[:64])} 👋\n"
-        f"{RTL}این‌جا پنل شخصی تو برای انتخاب پلن و پیگیری سرویس است.\n\n"
+        f"{RTL}اتصال تو، ساده و مرتب؛ از انتخاب پلن تا مدیریت مصرف، همین‌جا.\n\n"
         f"{RTL}📦 <b>پلن‌ها</b> — حجم، مدت و قیمت را مقایسه کن.\n"
-        f"{RTL}📊 <b>سرویس‌های من</b> — درخواست‌ها و مصرف ثبت‌شده را ببین.\n"
+        f"{RTL}📊 <b>سرویس‌های من</b> — لینک‌ها، مصرف، مانده و اعتبار.\n"
+        f"{RTL}🔄 <b>ساب اختصاصی</b> — مسیرهای اتصال در یک لینک خصوصی.\n"
         f"{RTL}🧭 <b>راهنمای اتصال</b> — با مراحل استفاده از لینک آشنا شو.\n"
         f"{RTL}💬 <b>پشتیبانی</b> — اطلاعات لازم برای پیگیری مشکل را پیدا کن.\n\n"
         f"{RTL}👇 برای شروع، یکی از گزینه‌های زیر را انتخاب کن.\n"
-        f"{RTL}🧪 <i>نسخهٔ پیش‌نمایش؛ پرداخت و تحویل سرویس هنوز فعال نیست.</i>"
+        + (f"{RTL}💳 <i>پرداخت امن کارت‌به‌کارت با KPay؛ تحویل پس از تأیید پرداخت.</i>"
+           if sales_enabled else f"{RTL}🧪 <i>پیش‌نمایش؛ خرید عمومی هنوز فعال نیست. سرویس فعال را از «سرویس‌های من» بگیر.</i>")
     )
 
 
-async def _show_welcome(message: Message, name: str) -> None:
+async def _show_welcome(message: Message, name: str, sales_enabled: bool = False) -> None:
     if ANIMATION_PATH.is_file():
         await message.answer_animation(
             FSInputFile(ANIMATION_PATH),
-            caption=_home_text(name),
+            caption=_home_text(name, sales_enabled),
             reply_markup=_home_keyboard(),
         )
     elif BANNER_PATH.is_file():
         await message.answer_photo(
             FSInputFile(BANNER_PATH),
-            caption=_home_text(name),
+            caption=_home_text(name, sales_enabled),
             reply_markup=_home_keyboard(),
         )
     else:
-        await message.answer(_home_text(name), reply_markup=_home_keyboard())
+        await message.answer(_home_text(name, sales_enabled), reply_markup=_home_keyboard())
 
 
 def _toman(value: int) -> str:
@@ -231,7 +238,7 @@ def _order_keyboard(order_id: str | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _subscription_url(settings: Settings, token: str) -> str:
+def _subscription_url(settings: Settings, token: str, name: str = "🦋 Papilio") -> str:
     base = settings.subscription_public_base_url
     parsed = urlsplit(base or "")
     if (
@@ -239,7 +246,7 @@ def _subscription_url(settings: Settings, token: str) -> str:
         or parsed.username or parsed.password or parsed.path not in {"", "/"}
     ):
         raise AccessUnavailable("Public subscription URL is not configured")
-    return f"{base}/s/{token}"
+    return f"{base}/s/{token}#{quote(name[:40], safe='')}"
 
 
 def _subscriptions_keyboard(records: list[Subscription]) -> InlineKeyboardMarkup:
@@ -251,23 +258,32 @@ def _subscriptions_keyboard(records: list[Subscription]) -> InlineKeyboardMarkup
         )]
         for record in records[:8] if record.status == SubscriptionStatus.ACTIVE
     ]
+    rows.extend([InlineKeyboardButton(text=f"💳 پرداخت سفارش {record.id[:8]}",
+                                     callback_data=f"pay:{record.id}", style="primary")]
+                for record in records[:8] if record.status == SubscriptionStatus.PENDING_PAYMENT)
     rows.append([InlineKeyboardButton(text="📦 پلن‌ها", callback_data="plans", style="primary")])
     rows.append([InlineKeyboardButton(text="🏠 خانه", callback_data="home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _access_keyboard(order_id: str, subscription_url: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
+def _access_keyboard(order_id: str, subscription_url: str, hysteria: bool = False) -> InlineKeyboardMarkup:
+    rows = [
         [InlineKeyboardButton(
-            text="📋 کپی لینک اشتراک", copy_text=CopyTextButton(text=subscription_url),
+            text="📋 کپی لینک اشتراک", copy_text=CopyTextButton(text=subscription_url.split('#')[0]),
             style="success",
         )],
-        [InlineKeyboardButton(text="🖼 QR اشتراک", callback_data=f"accessqr:{order_id}")],
+        [InlineKeyboardButton(text="📊 مصرف و اعتبار", url=subscription_url.split('/s/')[0] + '/usage/' + subscription_url.split('/s/')[1].split('#')[0], style="primary"),
+         InlineKeyboardButton(text="🖼 QR اشتراک", callback_data=f"accessqr:{order_id}")],
+        [InlineKeyboardButton(text="⚡ VLESS", callback_data=f"link:vless:{order_id}"),
+         InlineKeyboardButton(text="🌐 VMess", callback_data=f"link:vmess:{order_id}")],
         [InlineKeyboardButton(text="📊 سرویس‌های من", callback_data="subscriptions")],
-    ])
+    ]
+    if hysteria:
+        rows.insert(1, [InlineKeyboardButton(text="🚀 دریافت Hysteria2", callback_data=f"link:hysteria2:{order_id}", style="success")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _plans_text(plans: list[Plan], page: int) -> str:
+def _plans_text(plans: list[Plan], page: int, sales_enabled: bool = False) -> str:
     pages = max(1, (len(plans) + PAGE_SIZE - 1) // PAGE_SIZE)
     visible = plans[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
     return (
@@ -276,11 +292,12 @@ def _plans_text(plans: list[Plan], page: int) -> str:
         + "\n\n".join(_plan_card(plan) for plan in visible)
         + f"\n\n{RTL}🔎 برای جزئیات و ثبت اولیه، دکمهٔ همان پلن را بزن.\n"
         + f"{RTL}ℹ️ مبنای حجم: هر گیگ برابر ۱۰۲۴ مگابایت.\n"
-        + f"{RTL}🧪 <i>پرداخت و فعال‌سازی هنوز در دسترس نیست.</i>"
+        + (f"{RTL}💳 <i>پرداخت با KPay · فعال‌سازی پس از تأیید واقعی پرداخت</i>" if sales_enabled
+           else f"{RTL}🧪 <i>خرید عمومی هنوز فعال نیست؛ فعلاً مبلغی واریز نکن.</i>")
     )
 
 
-def _guide_text() -> str:
+def _guide_text(sales_enabled: bool = False) -> str:
     return (
         f"{RTL}🧭 <b>راهنمای اتصال، قدم‌به‌قدم</b>\n\n"
         f"{RTL}۱️⃣ پس از فعال‌سازی سرویس، لینک اشتراک اختصاصی را دریافت کن.\n"
@@ -290,7 +307,9 @@ def _guide_text() -> str:
         f"{RTL}🔐 لینک اشتراک مثل رمز است؛ آن را در گروه یا برای دیگران نفرست.\n"
         f"{RTL}🔄 پس از تغییر تنظیمات سرویس، اشتراک را در برنامه به‌روزرسانی کن.\n"
         f"{RTL}💬 اگر وصل نشد، نام برنامه، سیستم‌عامل و متن خطا را آماده کن.\n\n"
-        f"{RTL}🧪 <i>این راهنما برای سرویس فعال است؛ تحویل لینک از طریق بات هنوز فعال نیست.</i>"
+        f"{RTL}🚀 <b>در Hiddify:</b> علامت + ← افزودن از کلیپ‌بورد ← به‌روزرسانی اشتراک.\n"
+        f"{RTL}📊 حجم و اعتبار را در صفحهٔ مصرف ساب هم می‌بینی.\n"
+        + ("" if sales_enabled else f"{RTL}🧪 <i>خرید عمومی هنوز فعال نیست؛ این راهنما برای سرویس فعال است.</i>")
     )
 
 
@@ -315,27 +334,55 @@ async def _show_view(
         await message.edit_text(text, reply_markup=keyboard)
 
 
-async def _show_home(callback: CallbackQuery) -> None:
+async def _show_home(callback: CallbackQuery, sales_enabled: bool = False) -> None:
     message = callback.message
     if not isinstance(message, Message):
         return
     name = callback.from_user.first_name
     if message.photo or message.animation:
-        await _show_view(callback, _home_text(name), _home_keyboard(), caption_ok=True)
+        await _show_view(callback, _home_text(name, sales_enabled), _home_keyboard(), caption_ok=True)
     else:
         await message.edit_reply_markup(reply_markup=None)
-        await _show_welcome(message, name)
+        await _show_welcome(message, name, sales_enabled)
 
 
 def build_router(
     service: SubscriptionService,
     settings: Settings,
     access_service: AccessService | None = None,
+    checkout_service: CheckoutService | None = None,
 ) -> Router:
     router = Router(name="papilio")
     qr_renderer = QrRenderer()
     router.message.filter(F.chat.type == ChatType.PRIVATE)
     router.callback_query.filter(F.message.chat.type == ChatType.PRIVATE)
+
+    async def sales(telegram_id: int | None) -> bool:
+        return await checkout_service.enabled(telegram_id) if checkout_service else False
+
+    async def payment_view(callback: CallbackQuery, order_id: str) -> None:
+        if checkout_service is None:
+            await callback.answer("خرید عمومی هنوز باز نشده است.", show_alert=True)
+            return
+        try:
+            checkout = await checkout_service.begin(callback.from_user.id, order_id)
+        except CheckoutUnavailable as exc:
+            await callback.answer(str(exc), show_alert=True)
+            return
+        await callback.answer()
+        await _show_view(callback,
+            f"{RTL}💳 <b>پرداخت امن با KPay</b>\n\n"
+            f"{RTL}مبلغ سفارش: <b>{_toman(checkout.amount_rial // 10)}</b>\n"
+            f"{RTL}🔖 پیگیری: <code>{escape(order_id[:8])}</code>\n\n"
+            f"{RTL}۱️⃣ درگاه را باز کن و دستور انتقال را دقیق دنبال کن.\n"
+            f"{RTL}۲️⃣ بعد از انتقال، به همین صفحه برگرد و «بررسی پرداخت» را بزن.\n"
+            f"{RTL}۳️⃣ پس از تأیید پرداخت، لینک خصوصی و QR خودکار ارسال می‌شود.\n\n"
+            f"{RTL}🔐 تصویر رسید به‌تنهایی تأیید پرداخت نیست.",
+            InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="💳 ورود به درگاه KPay", url=checkout.payment_url, style="success")],
+                [InlineKeyboardButton(text="🔎 بررسی پرداخت", callback_data=f"paycheck:{order_id}", style="primary")],
+                [InlineKeyboardButton(text="📊 سفارش‌های من", callback_data="subscriptions")],
+            ]))
 
     async def selected_plan(key: str) -> Plan:
         for plan in await service.list_plans():
@@ -372,11 +419,11 @@ def build_router(
                 TelegramUser(sender.id, sender.full_name or "کاربر پاپیلیو", sender.username)
             )
         name = sender.first_name if sender else "دوست عزیز"
-        await _show_welcome(message, name)
+        await _show_welcome(message, name, await sales(sender.id if sender else None))
 
     @router.message(Command("help"))
     async def help_command(message: Message) -> None:
-        await message.answer(_guide_text(), reply_markup=_section_keyboard("پلن‌ها", "plans"))
+        await message.answer(_guide_text(await sales(message.from_user.id if message.from_user else None)), reply_markup=_section_keyboard("پلن‌ها", "plans"))
 
     @router.message(Command("plans"))
     async def plans_command(message: Message) -> None:
@@ -388,7 +435,7 @@ def build_router(
             )
             return
         await message.answer(
-            _plans_text(available_plans, 0),
+            _plans_text(available_plans, 0, await sales(message.from_user.id if message.from_user else None)),
             reply_markup=_plans_keyboard(available_plans),
         )
 
@@ -405,7 +452,7 @@ def build_router(
     @router.callback_query(F.data == "home")
     async def home(callback: CallbackQuery) -> None:
         await callback.answer()
-        await _show_home(callback)
+        await _show_home(callback, await sales(callback.from_user.id))
 
     @router.callback_query((F.data == "plans") | F.data.startswith("plans:"))
     async def plans(callback: CallbackQuery) -> None:
@@ -426,7 +473,7 @@ def build_router(
         page = min(int(raw_page), (len(available_plans) - 1) // PAGE_SIZE)
         await _show_view(
             callback,
-            _plans_text(available_plans, page),
+            _plans_text(available_plans, page, await sales(callback.from_user.id)),
             _plans_keyboard(available_plans, page),
         )
 
@@ -446,10 +493,12 @@ def build_router(
         await _show_view(
             callback,
             f"{RTL}{_plan_card(plan)}\n\n"
-            f"{RTL}🔗 <b>یک اشتراک، دو روش اتصال</b>\n"
-            f"{RTL}پس از فعال‌سازی، لینک‌های VLESS و VMess و یک لینک ساب اختصاصی می‌گیری؛ همه از همین حجم استفاده می‌کنند.\n\n"
+            f"{RTL}🔗 <b>یک اشتراک، مسیرهای متنوع اتصال</b>\n"
+            f"{RTL}🚀 Hysteria2 · ⚡ VLESS · 🌐 VMess\n"
+            f"{RTL}لینک ساب اختصاصی، QR و صفحهٔ مصرف؛ همه از یک حجم مشترک استفاده می‌کنند.\n\n"
             f"{RTL}🔖 با انتخاب زیر فقط درخواست و کد پیگیری ساخته می‌شود.\n"
-            f"{RTL}🧪 <i>این مرحله پرداخت یا فعال‌سازی نیست؛ فعلاً مبلغی واریز نکن.</i>",
+            + (f"{RTL}💳 سپس وارد درگاه KPay می‌شوی؛ فعال‌سازی فقط پس از تأیید پرداخت است."
+               if await sales(callback.from_user.id) else f"{RTL}🧪 <i>خرید عمومی هنوز باز نیست؛ فعلاً مبلغی واریز نکن.</i>"),
             _protocol_keyboard(plan.code),
         )
 
@@ -474,6 +523,9 @@ def build_router(
         except (UnknownPlanError, ValueError):
             await callback.answer("درخواست معتبر نیست.", show_alert=True)
             return
+        if await sales(callback.from_user.id):
+            await payment_view(callback, order.id)
+            return
         await callback.answer("درخواست ثبت شد")
         await _show_view(
             callback,
@@ -484,6 +536,26 @@ def build_router(
             f"{RTL}🧪 <i>پرداخت و فعال‌سازی انجام نشده است؛ فعلاً مبلغی واریز نکن.</i>",
             _order_keyboard(order.id),
         )
+
+    @router.callback_query(F.data.startswith("pay:"))
+    async def pay_order(callback: CallbackQuery) -> None:
+        await payment_view(callback, (callback.data or "").removeprefix("pay:"))
+
+    @router.callback_query(F.data.startswith("paycheck:"))
+    async def check_payment(callback: CallbackQuery) -> None:
+        if checkout_service is None:
+            await callback.answer("بررسی پرداخت در دسترس نیست.", show_alert=True)
+            return
+        try:
+            outcome = await checkout_service.check(callback.from_user.id, (callback.data or "").removeprefix("paycheck:"))
+        except (CheckoutUnavailable, PaymentProviderUnavailable, PaymentSettlementError):
+            await callback.answer("تأیید قطعی دریافت نشد؛ کمی بعد دوباره بررسی کن.", show_alert=True)
+            return
+        if outcome == CallbackOutcome.NOT_PAID:
+            await callback.answer("پرداخت هنوز توسط KPay تأیید نشده است.", show_alert=True)
+            return
+        await callback.answer("پرداخت تأیید شد ✅")
+        await _show_view(callback, f"{RTL}✅ <b>پرداخت تأیید شد</b>\n\n{RTL}سفارشت وارد صف فعال‌سازی شد. پس از صدور، لینک و QR خودکار همین‌جا ارسال می‌شوند.", _section_keyboard("سرویس‌های من", "subscriptions"))
 
     @router.callback_query(F.data == "subscriptions")
     async def subscriptions(callback: CallbackQuery) -> None:
@@ -505,7 +577,7 @@ def build_router(
             if access is None:
                 await callback.answer("سرویس فعالی با این شناسه پیدا نشد.", show_alert=True)
                 return
-            subscription_url = _subscription_url(settings, access.token)
+            subscription_url = _subscription_url(settings, access.token, access.profile_name)
         except AccessInactive:
             await callback.answer("اعتبار سرویس یا حجم آن تمام شده است.", show_alert=True)
             return
@@ -514,15 +586,36 @@ def build_router(
             return
         await callback.answer()
         text = (
-            f"{RTL}🦋 <b>لینک‌های اختصاصی تو</b>\n\n"
+            f"{RTL}🦋 <b>{escape(access.plan_title)}</b>\n"
+            f"{RTL}✅ سرویس فعال · یک حجم مشترک برای همهٔ اتصال‌ها\n\n"
             f"{RTL}🔄 <b>اشتراک و مشاهدهٔ مصرف:</b>\n<code>{escape(subscription_url)}</code>\n\n"
-            f"{RTL}⚡ <b>VLESS:</b>\n<code>{escape(access.vless_link)}</code>\n\n"
-            f"{RTL}🌐 <b>VMess:</b>\n<code>{escape(access.vmess_link)}</code>\n\n"
             f"{RTL}📊 مصرف: {_size(access.traffic_used_bytes)} از {_size(access.traffic_limit_bytes)}"
             f" · مانده: {_size(access.traffic_remaining_bytes)}\n"
+            f"{RTL}🗓 انقضا: {access.expires_at.astimezone().strftime('%Y/%m/%d')}\n\n"
+            f"{RTL}🚀 کانفیگ‌های جداگانه را از دکمه‌ها بگیر یا ساب را یک‌بار وارد کن.\n"
             f"{RTL}🔐 این لینک‌ها خصوصی‌اند؛ در گروه منتشرشان نکن."
         )
-        await _show_view(callback, text, _access_keyboard(order_id, subscription_url))
+        await _show_view(callback, text, _access_keyboard(order_id, subscription_url, bool(access.hysteria_link)))
+
+    @router.callback_query(F.data.startswith("link:"))
+    async def individual_link(callback: CallbackQuery) -> None:
+        parts = (callback.data or "").split(":")
+        if len(parts) != 3 or access_service is None:
+            await callback.answer("درخواست معتبر نیست.", show_alert=True)
+            return
+        try:
+            access = await access_service.get_for_user(callback.from_user.id, parts[2])
+        except AccessUnavailable:
+            await callback.answer("اطلاعات سرویس در دسترس نیست.", show_alert=True)
+            return
+        links = connection_links(access) if access else []
+        link = next((value for value in links if value.startswith(parts[1]+"://")), None)
+        if link is None:
+            await callback.answer("این مسیر برای سرویس فعال نیست.", show_alert=True)
+            return
+        await callback.answer()
+        if isinstance(callback.message, Message):
+            await callback.message.answer(f"{RTL}🔗 <b>{escape(access.profile_name if access else '')}</b>\n\n<code>{escape(link)}</code>\n\n{RTL}🔐 فقط برای استفادهٔ شخصی؛ در گروه منتشر نکن.")
 
     @router.callback_query(F.data.startswith("accessqr:"))
     async def show_access_qr(callback: CallbackQuery) -> None:
@@ -535,7 +628,7 @@ def build_router(
             if access is None:
                 await callback.answer("سرویس فعالی با این شناسه پیدا نشد.", show_alert=True)
                 return
-            subscription_url = _subscription_url(settings, access.token)
+            subscription_url = _subscription_url(settings, access.token, access.profile_name)
             image = await qr_renderer.render(subscription_url)
         except AccessInactive:
             await callback.answer("اعتبار سرویس یا حجم آن تمام شده است.", show_alert=True)
@@ -553,7 +646,7 @@ def build_router(
     @router.callback_query(F.data == "guide")
     async def guide(callback: CallbackQuery) -> None:
         await callback.answer()
-        await _show_view(callback, _guide_text(), _section_keyboard("پلن‌ها", "plans"))
+        await _show_view(callback, _guide_text(await sales(callback.from_user.id)), _section_keyboard("پلن‌ها", "plans"))
 
     @router.callback_query(F.data == "support")
     async def support(callback: CallbackQuery) -> None:
@@ -587,7 +680,8 @@ def build_router(
             f"{RTL}📊 نمایش مصرف و انقضای ثبت‌شدهٔ سرویس\n"
             f"{RTL}🧭 راهنمای استفاده و نگهداری امن لینک\n\n"
             f"{RTL}💳 همهٔ قیمت‌ها به تومان نمایش داده می‌شوند.\n"
-            f"{RTL}🧪 <i>نسخهٔ پیش‌نمایش؛ پرداخت و تحویل سرویس فعال نیست.</i>"
+            + (f"{RTL}💳 <i>پرداخت KPay؛ تحویل فقط پس از تأیید واقعی تراکنش.</i>"
+               if await sales(callback.from_user.id) else f"{RTL}🧪 <i>خرید عمومی هنوز باز نیست؛ سرویس‌های فعال قابل استفاده‌اند.</i>")
         )
         if isinstance(callback.message, Message) and LOGO_PATH.is_file():
             await callback.message.edit_reply_markup(reply_markup=None)

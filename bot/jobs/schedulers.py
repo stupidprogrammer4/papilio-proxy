@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from html import escape
 from typing import Any, ClassVar
+from urllib.parse import quote
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
@@ -12,6 +13,9 @@ from papilio_tasks.apps.schedulers import Scheduler
 
 from bot.infra.db.access import MysqlAccessRepository
 from bot.infra.qr import QrRenderer
+from bot.presentation.subscription_view import connection_links
+from bot.presentation.ui import _access_keyboard
+from bot.services.access import AccessService, AccessUnavailable
 from bot.services.node import NodeReconciler
 
 logger = logging.getLogger(__name__)
@@ -89,18 +93,25 @@ class NodeReconcileProvider(Provider):
 
 
 class ProvisionDeliveryDispatcher:
-    def __init__(self, repository: MysqlAccessRepository, bot: Bot, public_base: str) -> None:
+    def __init__(self, repository: MysqlAccessRepository, bot: Bot, public_base: str,
+                 access_service: AccessService | None = None) -> None:
         self._repository = repository
         self._bot = bot
         self._public_base = public_base
         self._qr = QrRenderer()
+        self._access_service = access_service
 
     async def send_pending(self) -> int:
         sent = 0
         for notice in await self._repository.claim_deliveries():
             access = notice.access
-            subscription_url = f"{self._public_base}/s/{access.token}"
             try:
+                if self._access_service:
+                    current = await self._access_service.get_for_user(access.telegram_id, access.subscription_id)
+                    if current is None:
+                        raise AccessUnavailable("Active delivery is unavailable")
+                    access = current
+                subscription_url = f"{self._public_base}/s/{access.token}#{quote(access.profile_name[:40], safe='')}"
                 image = await self._qr.render(subscription_url)
                 await self._bot.send_photo(
                     access.telegram_id,
@@ -111,16 +122,14 @@ class ProvisionDeliveryDispatcher:
                         f"🔗 لینک اشتراک و مشاهدهٔ مصرف:\n<code>{escape(subscription_url)}</code>\n\n"
                         "🔐 لینک‌ها را برای دیگران نفرست."
                     ),
+                    reply_markup=_access_keyboard(access.subscription_id, subscription_url, bool(access.hysteria_link)),
                 )
-                await self._bot.send_message(
-                    access.telegram_id,
-                    "⚡ <b>VLESS</b>\n"
-                    f"<code>{escape(access.vless_link)}</code>\n\n"
-                    "🌐 <b>VMess</b>\n"
-                    f"<code>{escape(access.vmess_link)}</code>\n\n"
-                    "📊 با لینک اشتراک می‌توانی مصرف و حجم باقی‌مانده را هم ببینی.",
-                )
-            except (TelegramAPIError, ValueError) as exc:
+                for link in connection_links(access):
+                    protocol = "🚀 Hysteria2" if link.startswith("hysteria2:") else "⚡ VLESS" if link.startswith("vless:") else "🌐 VMess"
+                    await self._bot.send_message(access.telegram_id,
+                        f"{protocol} · <b>{escape(access.profile_name)}</b>\n\n<code>{escape(link)}</code>\n\n"
+                        "📊 حجم همهٔ مسیرها مشترک است؛ مصرف و مانده در ساب نمایش داده می‌شود.")
+            except (TelegramAPIError, ValueError, AccessUnavailable) as exc:
                 await self._repository.release_delivery(notice.subscription_id)
                 logger.warning(
                     "Provision delivery failed for order %s: %s",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hmac
 from dataclasses import asdict
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Literal, cast
 
@@ -9,11 +10,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
+from bot.infra.node import NodeUnavailable, XrayNodeClient
 from bot.models.admin_web import AdminLoginDenied, AdminSession
 from bot.models.branding import BrandingValidationError
+from bot.models.checkout import CheckoutConfig
 from bot.models.pricing import PricingAssumptions, PricingValidationError
 from bot.services.admin_plans import PlanValidationError
 from bot.services.admin_web import AdminWebService
+from bot.services.checkout import CheckoutService
 from bot.services.subscriptions import Plan, UnknownPlanError
 
 COOKIE_NAME = "papilio_admin_session"
@@ -63,6 +67,14 @@ class ActiveBody(BaseModel):
 class BrandingBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     value: str
+
+
+class CheckoutBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    shop_id: str = Field(max_length=36)
+    card_id: str = Field(max_length=36)
+    callback_url: str = Field(max_length=2048)
 
 
 def _service(request: Request) -> AdminWebService:
@@ -200,16 +212,45 @@ def build_admin_web_router() -> APIRouter:
     async def readiness(
         request: Request, _: Annotated[AdminSession, Depends(_session)]
     ) -> dict[str, bool]:
+        node = cast("XrayNodeClient | None", request.app.state.private_node)
+        connected = False
+        fresh = False
+        if node:
+            try:
+                snapshots = await node.usage()
+                connected = True
+                fresh = all((datetime.now(UTC)-s.measured_at).total_seconds() < 10 for s in snapshots)
+            except NodeUnavailable:
+                pass
+        checkout = cast("CheckoutService | None", request.app.state.checkout_service)
         return {
             "callback_configured": request.app.state.payment_service is not None,
             "subscription_api_configured": (
                 request.app.state.access_service is not None
                 and request.app.state.subscription_public_base_url is not None
             ),
-            "xray_provisioning_connected": False,
-            "live_usage_connected": False,
-            "sales_enabled": False,
+            "xray_provisioning_connected": connected,
+            "live_usage_connected": connected and fresh,
+            "sales_enabled": await checkout.enabled() if checkout else False,
         }
+
+    @router.get("/admin/api/checkout")
+    async def checkout_settings(request: Request, _: Annotated[AdminSession, Depends(_session)]) -> dict[str, object]:
+        checkout = cast("CheckoutService | None", request.app.state.checkout_service)
+        if checkout is None:
+            raise HTTPException(503, "درگاه تنظیم نشده است.")
+        return asdict(await checkout.repository.get_config())
+
+    @router.put("/admin/api/checkout")
+    async def save_checkout(body: CheckoutBody, request: Request, _: Annotated[AdminSession, Depends(_mutating_session)]) -> dict[str, object]:
+        checkout = cast("CheckoutService | None", request.app.state.checkout_service)
+        if checkout is None:
+            raise HTTPException(503, "درگاه تنظیم نشده است.")
+        try:
+            await checkout.save_config(CheckoutConfig(body.enabled, body.shop_id, body.card_id, body.callback_url))
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return asdict(await checkout.repository.get_config())
 
     @router.get("/admin/api/users")
     async def users(

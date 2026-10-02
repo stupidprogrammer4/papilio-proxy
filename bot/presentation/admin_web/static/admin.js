@@ -328,6 +328,7 @@
       paged(box, "orders", rows, () => orders().catch(fail)));
   }
   async function payments() {
+    const config = await api('/checkout');
     const rows = await api(`/payments?offset=${state.offsets.payments}`);
     const notice = node("div", "notice");
     add(notice, node("strong", "", "تأیید پرداخت از KPay: "),
@@ -338,7 +339,24 @@
       ["وضعیت", row => statusBadge(row.status)],
       ["ساخته‌شده", row => date(row.created_at)], ["تأییدشده", row => date(row.paid_at)],
     ], rows, "هنوز تراکنشی به سفارشی متصل نشده است.");
-    root.replaceChildren(notice, paged(box, "payments", rows, () => payments().catch(fail)));
+    const form = node('form', 'panel form-panel');
+    add(form, node('h2', '', 'تنظیمات زندهٔ KPay'), node('p', '', 'تغییرات در MySQL ذخیره می‌شوند. خرید عمومی را فقط پس از تست پرداخت، تحویل و سهمیه باز کن.'));
+    const fields = {};
+    for (const [key, label] of [['shop_id', 'شناسهٔ فروشگاه'], ['card_id', 'شناسهٔ کارت'], ['callback_url', 'آدرس HTTPS کالبک']]) {
+      const input = node('input', 'field'); input.value = config[key]; input.required = true; input.dir = 'ltr';
+      fields[key] = input; add(form, node('label', '', label), input);
+    }
+    const enabled = node('input'); enabled.type = 'checkbox'; enabled.checked = config.enabled;
+    const toggle = node('label', '', ' خرید عمومی فعال باشد '); toggle.prepend(enabled); form.append(toggle);
+    const submit = node('button', 'btn btn-primary', 'ذخیرهٔ تنظیمات درگاه'); submit.type = 'submit'; form.append(submit);
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault(); submit.disabled = true;
+      try {
+        await api('/checkout', {method: 'PUT', body: JSON.stringify({enabled: enabled.checked, shop_id: fields.shop_id.value.trim(), card_id: fields.card_id.value.trim(), callback_url: fields.callback_url.value.trim()})});
+        toast('تنظیمات درگاه ذخیره شد.');
+      } catch (error) { toast(error.message, true); } finally { submit.disabled = false; }
+    });
+    root.replaceChildren(form, notice, paged(box, "payments", rows, () => payments().catch(fail)));
   }
   async function branding() {
     const data = await api("/branding");

@@ -42,7 +42,7 @@ async def usage_warning_scheduler(
     if public_base is not None:
         registrar.include(ProvisionDeliveryJob)
         providers.append(ProvisionDeliveryProvider(
-            ProvisionDeliveryDispatcher(repository, bot, public_base)
+            ProvisionDeliveryDispatcher(repository, bot, public_base, reconciler.access if reconciler else None)
         ))
     broker = create_broker(registrar=registrar, providers=providers)
     source = Source(LabelScheduleSource(broker))
