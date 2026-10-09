@@ -1,3 +1,3 @@
-module github.com/stupidprogrammer4/papilio-proxy
+module papilio-proxy/proxy
 
-go 1.25.0
+go 1.26
