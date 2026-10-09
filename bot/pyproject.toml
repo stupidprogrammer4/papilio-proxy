@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "papilio-telegram"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = ["aiogram>=3.22,<4", "httpx>=0.28,<1", "aiohttp>=3.11,<4", "pydantic>=2,<3"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["papilio_telegram"]
+
+[tool.ruff]
+line-length = 79
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pyright]
+include = ["papilio_telegram"]
+pythonVersion = "3.13"
+typeCheckingMode = "standard"
