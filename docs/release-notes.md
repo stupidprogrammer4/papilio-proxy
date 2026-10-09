@@ -42,7 +42,70 @@ Ordinary core startup, provisioning and usage were disabled.
   remaining node and traffic admitted from a second IP. Later executions passed,
   but neither cause is established or declared fixed.
 
-## Open gates
+## Subsequent lease corrections
+
+An isolated native regression reproduced loss of fractional expiry timestamps in
+MySQL presence rows. Migration57 preserves microseconds; the unchanged regression
+and a populated migration gate passed. Previously lost fractions cannot be
+recovered, so outstanding old leases must expire before upgrade. The ordinary
+local database has since upgraded56→58 after a verified encrypted backup.
+
+A separate Go regression reproduced a socket remaining open while its renewal
+authorizer was held beyond lease expiry. Expiry now closes the socket independently
+of that response, and a late positive response cannot revive it. The unchanged
+regression passed. Two actual node/admission and policy-drain gates then passed
+with a freshly built binary and unchanged policy limits. These concrete repairs
+do not establish the cause of the historical EOF.
+
+A second held-response regression reproduced delayed closure after parent-context
+cancellation. The unchanged test and complete admission package passed after
+adding independent cancellation closure. A fresh cancellation-aware binary passed
+the native CLOSED installation integration gate; the physical two-node
+gates above used the earlier expiry-aware binary.
+
+Native usage allocation and provisioning refunds also reproduced two real MySQL
+deadlocks against IP admission. All three original regressions—including an old
+node key incorrectly accepted after rotation—passed after aligning lock order and
+revalidating allocation authorization. Separate reseller-funded refund/replay and
+owner/payer-change gates passed with unchanged wallet assertions. Acceptance is
+limited to those exercised operations; other lifecycle lock intersections remain open.
+A separate native report-key regression reproduced acceptance of a rotated key
+after waiting for the node lock. The unchanged regression passed after current
+authorization was revalidated: rejection left accounting unchanged, while the
+current key and replay produced exactly one usage event.
+
+## Native CLOSED installation
+
+A separate native issue/claim/ACK operation now captures immutable runtime and
+membership expectations, with independently configured executable/material/policy
+hashes. An actual freshly built Go agent launched the real managed Xray TLS child
+and acknowledged its original CLOSED receipt. Concurrent issue/ACK, changed scope,
+replay and populated migration gates passed. A customer/node deadlock was
+reproduced before correction and the unchanged business oracle passed afterward.
+
+Migration58 also repairs the epoch table name to the native framework name while
+preserving prior evidence and foreign-key references. Legacy installations stay
+unverified; conflicting tables and duplicate epochs are rejected before DDL.
+Claim evidence prevents a destructive downgrade.
+
+Strict native settings were selected through the JSON editor before immutable
+capture. Default stock warning-log artifacts fail closed. CLOSED receipts are
+historical; paid activation and final accounting remain unavailable. These gates
+did not enable ordinary cores or modify ordinary business data.
+
+## Ordinary local rollout
+
+Schema58 is applied with business counts preserved and eleven automation schedules.
+Owner login/logout and eight admin reads passed. The compiled Vue preview passed
+six desktop/mobile screens, the plan creation modal and real API reads with no
+JavaScript or unexpected HTTP errors and no business writes. The preview uses the
+configured loopback port and API proxy. Ordinary proxy cores and adapters remain off.
+
+Memory measurements are snapshots, not a load benchmark. Preview RSS was lower
+than the previous development server; backend RSS was higher after restart and
+its cause remains under investigation. No overall memory reduction is claimed.
+
+## Remaining gates
 
 Native managed authority remains `storage_only`; paid bootstrap and final receipt
 are unavailable. Remaining lifecycle lock ordering, key-rotation concurrency,

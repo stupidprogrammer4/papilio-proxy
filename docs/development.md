@@ -14,6 +14,12 @@ limits; repositories receive those decisions. Samples contain placeholders, not
 usable credentials. The retained Android prototype is canceled and is not part
 of this release.
 
+For local use with prebuilt frontend assets, run `pnpm build` followed by
+`pnpm preview` from `panel/frontend`. Both development and preview use the
+configured `PAPILIO_PANEL_PORT` and `PAPILIO_BACKEND_URL`, bind to loopback and
+retain the same `/api` proxy. Preview serves the last successful build; rebuild
+after frontend source changes. Use `pnpm dev` for live frontend editing.
+
 ## Database compatibility
 
 The rebuild uses a new schema. Its migration chain does not import records from
@@ -28,14 +34,30 @@ the recovery CLI. Keep the encryption key separately. Apply migrations from
 python -m alembic upgrade head
 ```
 
-Current head is `0056_ip_lease_transitions`, after `0055_purchased_ip_policy`.
-It adds lease history/transition state; it does not fabricate historical issuance
+The ordinary local database is on `0058_managed_installation_claims`.
+Migration56 adds lease history/transition state; it does not fabricate historical issuance
 deadlines for old subscriptions. Unknown history blocks tightening. New purchase
 and trial operations initialize tracking in their existing transaction.
 Downgrade refuses to drop populated lease-state records. An older writer is not
 an automatic rollback strategy: first verify schema compatibility and retain
 financial records created after the backup. Do not restore automatically over
 new payments.
+
+Migration57 preserves microseconds in IP presence and ban timestamps. Let old
+issued leases expire before upgrading: fractions already discarded by the old
+columns cannot be reconstructed. Its downgrade refuses to truncate populated
+presence records.
+
+Migration58 adds separate managed-installation claims and preserves old records
+as `legacy_unknown`. It repairs the epoch table name to the framework-owned
+`tbl_managed_epoches`, preserving epoch/window/barrier references. Conflicting
+tables and duplicate process epochs are rejected before DDL; resolve those
+explicitly before retrying. Downgrade refuses to discard claim evidence. The
+populated migration and actual CLOSED installation/native ACK gates passed on
+isolated targets. The ordinary56→58 rollout also passed after a freshly verified
+encrypted backup: business counts and eleven schedules were preserved, owner
+login/logout and eight admin reads passed, and the compiled Vue panel passed
+desktop/mobile read-only checks. Core startup and the managed adapter remain disabled.
 
 After migration, verify the head, business counts, automation registrations,
 API health and protected-route rejection. Start API, worker and scheduler with

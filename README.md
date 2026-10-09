@@ -474,6 +474,15 @@ invoice becomes available; actual physical forwarding still needs enrollment.
 
 Purchases remain `pending_provision` until their node work is independently acknowledged. The native Papilio Tasks → Go agent → actual Xray/sing-box installation and paid-purchase delivery paths have passed isolated local integration tests. Runtime ACK alone cannot activate a purchase. Usage observation, quota enforcement, expiry and source-IP admission have separate acceptance gates; `enforced` mode remains unavailable. Ordinary startup and automatic core provisioning remain disabled.
 
+A separate managed installation operation now derives an immutable native manifest,
+leases it to an authenticated node, and stores the original CLOSED startup receipt
+with exact replay. An isolated actual Go agent/Xray TLS gate passed this path.
+`installed_closed` records a historical observation; current connectivity, paid
+admission and final accounting still require separate gates. Strict configuration
+must be selected through native editing before capture: the tested artifact uses
+`loglevel: none`; default stock warning-log artifacts fail closed. The adapter is
+disabled in ordinary local execution.
+
 The bounded first Xray usage slice passed an isolated native two-core workflow: payment and installation, actual traffic and counters, accounting replay, and subscriber isolation from Stats APIs. Its configured Stats ports are reserved across managed cores on the same node, and managed runtime exports restrict custom egress to the validated isolation policy. Configuration availability in the panel does not prove an observed process or connectivity. Continuous grant renewal, safe changes to a shared core with active customers, and adapters for other engines remain open.
 
 WireGuard profiles download as `.conf`; the URI feed excludes file-only WireGuard and OpenVPN. No subscription is activated merely by exporting a file. Failed provisioning can wait for operator recovery or request revocation followed by exactly one wallet refund; an unreachable node keeps revocation pending. Expiry or exhausted quota does not refund consumed service.
