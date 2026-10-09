@@ -7,6 +7,8 @@
 *.crt
 data/
 backups/
+!panel/backend/src/modules/operations/backups/
+!panel/backend/src/modules/operations/backups/**
 
 # Python / Go build output
 __pycache__/
@@ -18,11 +20,24 @@ __pycache__/
 bin/
 coverage.xml
 *.egg-info/
+node_modules/
+dist/
+panel/backend/config.yml
+proxy/config.json
 
-# Internal planning stays local; README files are public project documentation.
-docs/
+# Internal planning stays local; reviewed usage/release documents are public.
+docs/*
+!docs/development.md
+!docs/release-notes.md
 AGENTS.md
 START-HERE.fa.md
 PROJECT-BRIEF.md
 TASKS.md
 proxy/PROTOCOL-POLICY.md
+
+# Android local tools and generated packages
+.gradle/
+**/local.properties
+android/**/build/
+*.apk
+*.aab
