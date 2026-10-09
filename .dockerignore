@@ -10,3 +10,16 @@ backups
 docs
 tests
 proxy
+**/node_modules
+**/dist
+**/__pycache__
+**/*.pyc
+**/.env
+**/.env.*
+!**/.env.example
+**/config.yml
+**/*.egg-info
+.pytest_cache
+.ruff_cache
+android
+assets/screenshots

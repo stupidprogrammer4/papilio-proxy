@@ -1,0 +1,155 @@
+name: ${PROJECT_NAME:-papilio-proxy}
+x-api: &api
+  image: papilio-proxy-api:deployment-${PROJECT_NAME}
+  build:
+    context: ..
+    dockerfile: deployment/api.Dockerfile
+    args:
+      PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.13-slim-bookworm}
+  user: "${RUN_UID:-1000}:${RUN_GID:-1000}"
+  volumes:
+    - ${STATE_DIR:?Run install.sh first}/config.yml:/app/config.yml:ro
+    - ${STATE_DIR}/media:/app/media
+    - ${STATE_DIR}/tmp:/app/tmp
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+  labels:
+    io.papilio-proxy.state: ${STATE_DIR}
+  init: true
+  restart: unless-stopped
+  depends_on:
+    mysql: {condition: service_healthy}
+    redis: {condition: service_healthy}
+services:
+  mysql:
+    image: ${MYSQL_IMAGE:-mysql:8.4}
+    labels: {io.papilio-proxy.state: "${STATE_DIR}"}
+    environment:
+      MYSQL_DATABASE: papilio
+      MYSQL_USER: papilio
+    entrypoint: [/bin/sh, /opt/deployment/mysql-entrypoint.sh]
+    command: [mysqld]
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql-entrypoint.sh:/opt/deployment/mysql-entrypoint.sh:ro
+    secrets: [mysql-root-password, mysql-password]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, mysqladmin, ping, --host=127.0.0.1, --silent]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: ${REDIS_IMAGE:-redis:7.4}
+    labels: {io.papilio-proxy.state: "${STATE_DIR}"}
+    entrypoint: [/bin/sh, /opt/deployment/redis-entrypoint.sh]
+    volumes:
+      - redis-data:/data
+      - ./redis-entrypoint.sh:/opt/deployment/redis-entrypoint.sh:ro
+    secrets: [redis-password]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD-SHELL, 'REDISCLI_AUTH=$$(cat /run/secrets/redis-password) redis-cli ping | grep -qx PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+  bootstrap:
+    <<: *api
+    profiles: [tools]
+    restart: "no"
+    environment:
+      OWNER_USERNAME: ${OWNER_USERNAME:?Missing owner username}
+    secrets: [owner-password]
+    command: [python, /opt/deployment/bootstrap.py]
+  api:
+    <<: *api
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+  worker:
+    <<: *api
+    command: [python, -m, taskiq, worker, "src.apps.scheduler:broker", --workers, "${WORKER_COUNT:-1}", --max-async-tasks, "${WORKER_CONCURRENCY:-8}"]
+    depends_on:
+      api: {condition: service_healthy}
+  scheduler:
+    <<: *api
+    command: [python, -m, taskiq, scheduler, "src.apps.scheduler:scheduler", --skip-first-run, --update-interval, "${SCHEDULER_INTERVAL:-15}"]
+    depends_on:
+      api: {condition: service_healthy}
+  bot:
+    profiles: [bot]
+    image: papilio-proxy-bot:deployment-${PROJECT_NAME}
+    labels: {io.papilio-proxy.state: "${STATE_DIR}"}
+    build:
+      context: ..
+      dockerfile: deployment/bot.Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.13-slim-bookworm}
+    user: "${RUN_UID:-1000}:${RUN_GID:-1000}"
+    env_file: ${STATE_DIR}/bot.env
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    init: true
+    restart: unless-stopped
+    depends_on:
+      api: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -c, "import socket; socket.create_connection(('127.0.0.1', 8020), timeout=2).close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+  web:
+    image: papilio-proxy-web:deployment-${PROJECT_NAME}
+    labels: {io.papilio-proxy.state: "${STATE_DIR}"}
+    build:
+      context: ..
+      dockerfile: deployment/web.Dockerfile
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-bookworm-slim}
+        CADDY_IMAGE: ${CADDY_IMAGE:-caddy:2.10}
+    networks:
+      default:
+        ipv4_address: ${CADDY_IPV4:?Run install.sh first}
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${HTTP_PORT:-8080}:8080"
+    volumes:
+      - ${STATE_DIR}/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+    depends_on:
+      api: {condition: service_healthy}
+    healthcheck:
+      test: [CMD-SHELL, 'wget -q -O /dev/null http://127.0.0.1:8080/healthz']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+volumes:
+  mysql-data:
+    labels: {io.papilio-proxy.state: "${STATE_DIR}"}
+  redis-data:
+    labels: {io.papilio-proxy.state: "${STATE_DIR}"}
+  caddy-data:
+    labels: {io.papilio-proxy.state: "${STATE_DIR}"}
+  caddy-config:
+    labels: {io.papilio-proxy.state: "${STATE_DIR}"}
+secrets:
+  mysql-root-password:
+    file: ${STATE_DIR}/secrets/mysql-root-password
+  mysql-password:
+    file: ${STATE_DIR}/secrets/mysql-password
+  redis-password:
+    file: ${STATE_DIR}/secrets/redis-password
+  owner-password:
+    file: ${STATE_DIR}/secrets/owner-password
+
+networks:
+  default:
+    labels: {io.papilio-proxy.state: "${STATE_DIR}"}
+    ipam:
+      config:
+        - subnet: ${NETWORK_SUBNET:-172.30.58.0/24}
