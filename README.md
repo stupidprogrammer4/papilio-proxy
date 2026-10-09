@@ -182,6 +182,22 @@ Staff with `network:manage` can open **Full core JSON and history** for Xray and
 
 These are offline drafts. Arbitrary core fields are not validated against an installed core version, and a valid JSON document does not establish routing safety, working transport, quota enforcement or connectivity. OpenVPN/WireGuard use their typed settings JSON and native file exports. No core is started by either editor.
 
+## Install the complete application
+
+Use the Bash installer with Docker on Linux/macOS, or WSL2 with Docker Desktop
+on Windows. Address, ports, service capacities and bot enablement are configurable:
+
+```bash
+bash scripts/deploy/install.sh --public-url http://127.0.0.1:8080 --http-port 8080 --owner-username myadmin
+```
+
+It creates private configuration, builds images, starts the panel/API, database,
+queue, worker and scheduler, then prints the panel URL after readiness checks.
+For the Telegram webhook bot, use a public HTTPS domain and `--enable-bot`.
+Passwords and the bot token are entered privately. Proxy cores remain disabled.
+See [deployment instructions](docs/deployment.md) for HTTPS, platform requirements,
+start/stop/status, persistence and verification boundaries.
+
 ## Local setup
 
 Use Python 3.13+, MySQL 8, Redis, Go, and pnpm. Create an isolated local database and Redis instance, then install `panel/backend` from its `pyproject.toml`. The bootstrap script reads the following environment variables only when it first creates the ignored private `panel/backend/config.yml`:

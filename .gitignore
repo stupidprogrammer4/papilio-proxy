@@ -28,6 +28,7 @@ proxy/config.json
 # Internal planning stays local; reviewed usage/release documents are public.
 docs/*
 !docs/development.md
+!docs/deployment.md
 !docs/release-notes.md
 AGENTS.md
 START-HERE.fa.md

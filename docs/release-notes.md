@@ -105,6 +105,18 @@ Memory measurements are snapshots, not a load benchmark. Preview RSS was lower
 than the previous development server; backend RSS was higher after restart and
 its cause remains under investigation. No overall memory reduction is claimed.
 
+## Installation scripts
+
+New Bash install/start/stop/status entrypoints use Docker Compose with a
+configurable public origin, ports, capacities and optional webhook bot. Native
+settings, random private secrets and an idempotent native owner bootstrap are
+preserved across reruns. Installation ownership labels protect other projects;
+proxy cores remain disabled. See [deployment instructions](deployment.md).
+Native configuration/bootstrap, actual MySQL/Redis persistence, Caddy HTTP/HTTPS
+validation and Bash ownership gates passed on Linux. The full image/application
+stack remains unverified because the API dependency build hit external PyPI DNS
+failure; live TLS/Telegram and macOS/Windows acceptance are also pending.
+
 ## Remaining gates
 
 Native managed authority remains `storage_only`; paid bootstrap and final receipt
