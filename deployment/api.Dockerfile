@@ -10,7 +10,7 @@ COPY panel/backend/alembic.ini ./alembic.ini
 COPY panel/backend/scripts ./scripts
 COPY panel/backend/config.yml.sample /opt/deployment/config.yml.sample
 COPY bot/.env.example /opt/deployment/bot.env.example
-COPY deployment/configure.py deployment/bootstrap.py /opt/deployment/
+COPY deployment/configure.py deployment/bootstrap.py deployment/check_gateway.py /opt/deployment/
 RUN mkdir -p media tmp && chown -R 10001:10001 /app
 USER 10001:10001
 CMD ["python", "-m", "uvicorn", "src.apps.api:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log", "--no-proxy-headers"]

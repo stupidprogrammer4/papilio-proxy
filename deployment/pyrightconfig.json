@@ -1,6 +1,16 @@
 {
-  "include": ["configure.py", "bootstrap.py", "test_configuration.py", "test_bootstrap.py"],
-  "extraPaths": ["../panel/backend", "../bot"],
+  "include": [
+    "configure.py",
+    "bootstrap.py",
+    "test_configuration.py",
+    "test_bootstrap.py",
+    "check_gateway.py",
+    "test_gateway.py"
+  ],
+  "extraPaths": [
+    "../panel/backend",
+    "../bot"
+  ],
   "venvPath": "..",
   "venv": ".venv",
   "pythonVersion": "3.13",
