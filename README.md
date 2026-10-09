@@ -1,6 +1,18 @@
-# Papilio Proxy rebuild
+# Papilio Proxy
 
-This is a local, from-scratch rebuild with three parts:
+A configurable subscription control plane for customers, commerce and proxy infrastructure.
+Built with **Papilio**, **Papilio Tasks**, **Vue 3**, **aiogram** and **Go**.
+
+**Development preview:** local workflows and bounded core tests are available;
+permanent proxy cores remain stopped. Complete protocol enforcement and production
+readiness are still open gates.
+
+[Features](#features) · [Screenshots](#screenshots) · [Local setup](#local-setup) ·
+[Verification](#verification) · [Known limits](#current-limits)
+
+## Architecture
+
+The project is a from-scratch rebuild with three parts:
 
 | Part | Source | Responsibility |
 | --- | --- | --- |
@@ -10,24 +22,67 @@ This is a local, from-scratch rebuild with three parts:
 
 The Auryx backend/frontend conventions guide the source layout. Old application source has been removed. Historical data has not been migrated into this new schema. Nothing in this rebuild has been deployed to the remote server.
 
-## Working local workflows
+## Features
 
-- Customer and plan records; scoped staff login with CSRF and secure session cookies.
-- Wallet top-up requests, manual bank-reference approval, unique bank settlement reference, and wallet ledger.
-- Wallet purchases with replay-safe purchase keys, opt-in wallet auto renewal, scheduled renewal scans, and an idempotent wallet refund for a recorded provisioning failure.
-- Enrolled SMS sources with encrypted signing keys, sender filters, expiry, rotation and revocation. Manual mode retains bank verification; owner-approved `unique_sms` mode trusts authenticated enrolled-source SMS only when one eligible full-amount/account match and one unused settlement identity are established. Ambiguous matches remain under manual review. Use an external webhook sender; native Android app work is canceled.
-- Native Papilio Tasks schedules for payment review, node health, subscription attention, and funded renewal. Application policy supplies cron expressions, scan caps, recheck intervals, and retry limits.
-- English automation center with paginated check results, ambiguity/staleness flags, manual rechecks, and links to the underlying records. Subscription attention identifies expiry, insufficient renewal balance, delayed provisioning, and recorded failures.
-- Customer wallet history with paginated credit/debit/refund entries and reason filters.
-- Node inventory and client-network probe summaries. Quality scores require configurable sample count and success ratio.
-- Subscription IP-limit policies with a shared cross-node lease budget, normalized IPv4/IPv6, configurable activity/ban durations, reject-new or replace-oldest mode, and scoped manual ban/unban. The subscription detail provides policy controls and paginated source-IP records. Node admission requires an enabled, assigned node and an active, unexpired subscription.
-- Panel configuration drafts for VLESS/REALITY, VLESS/TLS, VMess/TLS, Trojan/TLS, Shadowsocks 2022, Hysteria 2, WireGuard, and OpenVPN; per-subscription profile assignment and private server/client downloads. Xray exports target the reviewed [v26.3.27 schema](https://raw.githubusercontent.com/XTLS/Xray-core/v26.3.27/infra/conf/vless.go); Hysteria and WireGuard drafts follow their [server schema](https://v2.hysteria.network/docs/advanced/Full-Server-Config/) and [configuration guide](https://www.wireguard.com/quickstart/). The listed generated exports now have [real local core acceptance](proxy/CORE-ACCEPTANCE.md); remote reachability and production node enforcement remain separate gates.
-- Encrypted configuration credentials, stable individual subscription links with token rotation, and native Papilio Redis login throttling. Public subscription refresh requires an active entitlement and an enabled node.
-- Multiple draft core instances per node and multiple inbounds per core, with per-inbound ports and node-wide TCP/UDP port conflict checks. Existing configuration records are backfilled without changing their credentials or subscription tokens. Sing-box inbounds produce their own JSON drafts. OpenVPN inbounds export server drafts and individual `.ovpn` files with centrally encrypted certificate material.
-- Inbound-owned hosts, reusable host groups and separate per-group host label/address/port/SNI overrides. Plans can select one delivery group. Purchases snapshot that group; the active URI feed uses its enabled members. Ungrouped existing subscriptions retain direct inbound addresses.
-- Versioned business settings with operator history and optimistic concurrency: panel branding, payment instructions, Telegram support handle, rial top-up options, plan-duration ceiling, payment/node/expiry/provisioning warning thresholds, and IP policy form defaults. API and native worker executions read effective values from MySQL. Private infrastructure credentials and scheduler/security capacities remain file configuration; runtime schedule policies are editable in the panel.
-- English LTR admin/customer UI with grouped navigation, accessible mobile drawer, native creation/edit dialogs, retained failed drafts and scoped actions. The API stores integer rial; the UI displays toman. Plan details list connection options; customer details list assigned configurations and their plan/subscription/node context.
+| Area | Capabilities |
+| --- | --- |
+| Customers and access | Customer profiles, assigned configurations, separate customer/reseller sessions, staff roles and scoped actions. |
+| Plans and bundles | Quota + duration, quota without expiry, or duration with unlimited data; per-plan prices and one or more configurations; immutable purchased terms. |
+| Wallet and renewal | Paged credit/debit/refund ledger, wallet checkout, funded opt-in automatic renewal and recoverable provisioning failures with idempotent refunds. |
+| Payments | Editable card/IBAN/account destinations, encrypted receipts, manual bank-reference approval, replay protection and an optional four-digit **rial** amount identifier. |
+| SMS reconciliation | Enrolled webhook sources, encrypted keys, sender/account/parser rules, rotation and revocation; explicit unique-match approval and manual review for ambiguous evidence. |
+| Loyalty and discounts | Editable Normal/Bronze/Silver/Gold tiers, purchased-quota thresholds, unlimited-plan quota equivalents, first-purchase discounts and configurable discount combinations. |
+| Automation | Native scheduler → Redis → worker execution for payment review, node health, checkout recovery, renewal and subscription notices; editable schedules and application-owned capacities. |
+| Proxy inventory | Nodes, multiple cores/inbounds per node, port reservations, reusable hosts/delivery groups, capability reports and network-specific probe summaries. |
+| Configuration editing | Typed saved settings and versioned full Xray/sing-box JSON, managed/experimental modes, private server/client exports and revision history. |
+| IP allowance | One/N/unlimited active source IPs shared across assigned configurations/nodes; purchased snapshots, operational overrides, timed bans and pending lease-drain transitions. IP count is not device count. |
+| Delivery and operations | Stable revocable subscription URLs, private profile downloads/QRs, provisioning status, notifications, support inbox and reseller workflows. |
+| Panel and security | English LTR Vue UI, responsive navigation, creation/edit dialogs, retained failed drafts, searchable paged selectors, CSRF, secure session cookies, Redis login throttling and encrypted recovery. |
 
+Configuration drafts cover **VLESS/REALITY, VLESS/TLS, VMess/TLS, Trojan/TLS,
+Shadowsocks 2022, Hysteria 2, WireGuard and OpenVPN**. Export, installation,
+connectivity and ongoing enforcement are separate capabilities; see
+[core acceptance](proxy/CORE-ACCEPTANCE.md) and [current limits](#current-limits).
+The aiogram adapter presents Persian bot workflows; live Telegram and physical
+SMS forwarding remain unverified. The native Android prototype is canceled.
+
+## Screenshots
+
+Captured from the actual local Vue panel and Papilio API on **2026-10-09**.
+These show the existing workspace, including empty collections, without fabricated
+customer/payment data. The plan dialog is an unsaved draft. Operator identity is
+masked; no financial or provisioning records were created for the images.
+Click an image to open its full resolution.
+
+### Workspace overview
+
+Customer, payment-review and pending-delivery summaries, grouped navigation and
+quick access to the purchase lifecycle.
+
+[![Papilio workspace overview with customer, payment and delivery summaries](assets/screenshots/overview.png)](assets/screenshots/overview.png)
+
+### Plans and automation
+
+| Plan creation | Native automation schedules |
+| --- | --- |
+| [![Create-plan dialog with plan type, quota, duration, price and configuration bundle](assets/screenshots/plan-builder.png)](assets/screenshots/plan-builder.png) | [![Automation table with registered schedules, capacities and recheck intervals](assets/screenshots/automation.png)](assets/screenshots/automation.png) |
+| Configure plan limits, pricing and the delivery bundle in a modal. | Review schedule registration, enabled/paused state and per-run policy. |
+
+### Payments and customer loyalty
+
+| Payment workspace | Loyalty and discounts |
+| --- | --- |
+| [![Payments page with review queue, receiving destinations and trusted SMS device enrollment](assets/screenshots/payments.png)](assets/screenshots/payments.png) | [![Loyalty page showing discount policy and Normal, Bronze, Silver and Gold tiers](assets/screenshots/loyalty.png)](assets/screenshots/loyalty.png) |
+| Review top-ups and manage payment destinations and enrolled SMS senders. | Configure purchased-quota tiers and discount policy; the shown tier discounts are zero. |
+
+<details>
+<summary>Mobile workspace</summary>
+
+The same overview at a 390-pixel viewport, with stacked metrics and a navigation drawer.
+
+<a href="assets/screenshots/overview-mobile.png"><img src="assets/screenshots/overview-mobile.png" alt="Mobile Papilio overview with stacked customer, payment and pending delivery cards" width="280" /></a>
+
+</details>
 
 ## Selected-plan checkout and purchase notices
 
@@ -194,17 +249,17 @@ existing notification queue and bot delivery bridge.
 
 ## Core, host and settings administration
 
-Open **شبکه و نودها → هسته‌ها → مدیریت ورودی‌ها** to register a core and create its encrypted inbound drafts. Each inbound owns its protocol and listening port. The legacy node protocol/port remain compatibility defaults; an explicit core/inbound can use another supported protocol/port. A reserved TCP or UDP port cannot be assigned twice on one node. Server downloads remain individual inbound drafts, not a combined running-core configuration.
+Open **Nodes → Cores → Configurations** to register a core and create its encrypted inbound drafts. Each inbound owns its protocol and listening port. The legacy node protocol/port remain compatibility defaults; an explicit core/inbound can use another supported protocol/port. A reserved TCP or UDP port cannot be assigned twice on one node. Per-configuration downloads export individual inbound drafts; use **Export core** for an explicit combined Xray/sing-box export. Neither download starts a core.
 
 Sing-box supports the existing REALITY, VLESS/VMess/Trojan TLS, Shadowsocks and Hysteria 2 inbound models. The API returns each core's supported protocols; the panel retains the selected core while loading, offers explicit read retry, and shows its supported choices. Server downloads use the selected core's exporter. Node claims identify both core ID and kind. Existing client credentials, revocable URLs, purchased fulfillment policy, export capacities and node socket reservations are retained.
 
 Sing-box exports use the documented [TLS/REALITY format](https://sing-box.sagernet.org/configuration/shared/tls/) and [V2Ray transport fields](https://sing-box.sagernet.org/configuration/shared/v2ray-transport/). TCP omits a V2Ray transport object; WebSocket/gRPC retain their configured path/service name. gRPC requires an appropriate Sing-box build. [Hysteria 2 compatibility](https://sing-box.sagernet.org/configuration/inbound/hysteria2/) uses the combined username/password as its authentication password. Draft generation is available locally. [Real core acceptance](proxy/CORE-ACCEPTANCE.md) verifies the listed exports with temporary TLS files and local traffic. Production installation, accounting and enforcement still require the node adapters.
 
-From an inbound's management view, add its public hosts. Open **گروه‌های هاست**, select a group and search all hosts to add a membership or edit its overrides. Empty override fields inherit the host values. Removing a membership affects only that group. REALITY SNI overrides must match the inbound. TLS certificate coverage and actual endpoint reachability still require testing.
+From an inbound's management view, add its public hosts. Open **Delivery groups**, select a group and search all hosts to add a membership or edit its overrides. Empty override fields inherit the host values. Removing a membership affects only that group. REALITY SNI overrides must match the inbound. TLS certificate coverage and actual endpoint reachability still require testing.
 
-In **پلن‌ها**, choose a delivery group using the paged searchable picker. A disabled group rejects new purchases. Existing subscriptions retain their purchased group even after a plan changes. Group/host/membership availability filters subsequent subscription refreshes; it does not disconnect existing proxy connections. Purchases create a durable provisioning request in the wallet-debit transaction. Automatic preparation selects enabled group inbounds, creates profiles and queues node work; manual policy waits for **آماده‌سازی کارهای نود** in the subscription. Activation waits for authenticated node acknowledgements under the purchased all/any/quorum policy. Draft exports alone do not activate a subscription.
+In **Plans & bundles**, choose a delivery group using the paged searchable picker. A disabled group rejects new purchases. Existing subscriptions retain their purchased group even after a plan changes. Group/host/membership availability filters subsequent subscription refreshes; it does not disconnect existing proxy connections. Purchases create a durable provisioning request in the wallet-debit transaction. Automatic preparation selects enabled group inbounds, creates profiles and queues node work; manual policy waits for **Prepare node tasks** in the subscription. Activation waits for authenticated node acknowledgements under the purchased all/any/quorum policy. Draft exports alone do not activate a subscription.
 
-Open **تنظیمات سامانه** to edit business settings and review saved versions. Writes require `settings:update`, reads/history require `settings:read`; navigation follows staff scopes. Concurrent edits return a conflict and retain form input until you explicitly reload the current version. Amounts are entered in toman and stored as integer rial. The branding endpoint exposes only the title to authenticated staff. IP defaults populate new policy forms and do not rewrite existing subscription policies.
+Open **Settings** to edit business settings and review saved versions. Writes require `settings:update`, reads/history require `settings:read`; navigation follows staff scopes. Concurrent edits return a conflict and retain form input until you explicitly reload the current version. Amounts are entered in toman and stored as integer rial. The branding endpoint exposes only the title to authenticated staff. IP defaults populate new policy forms and do not rewrite existing subscription policies.
 
 Migrations `0014_network_foundations` through `0036_openvpn_management_sockets` preserve the prior rebuilt schema (`0013`) and its data. Every listening transport is reserved atomically; Shadowsocks reserves both TCP and UDP. The upgrade stops before changing the schema if older drafts already overlap. The initial network expansion requires a backup for rollback; later schema downgrades can remove new records and are not a substitute for a tested restore. This is separate from migration of historical application data.
 
@@ -218,13 +273,13 @@ The server draft requires a held management connection and certificate-based adm
 
 ## Staff and customer administration
 
-Open **مدیران و دسترسی‌ها** to search staff, read current grants, create an account, edit its access or reset its password. Each operation requires its own `staff` capability. A delegated manager can grant only capabilities they hold and cannot alter an account above their authority. Concurrent removal or deactivation cannot remove the last active staff member with full access. Access updates require the selected account's original state; stale edits retain form input until you reload. Passwords require at least eight characters. Password reset and deactivation invalidate all existing sessions; authentication locks the account through password verification and session creation to serialize a concurrent reset.
+Open **Team & access** to search staff, read current grants, create an account, edit its access or reset its password. Each operation requires its own `staff` capability. A delegated manager can grant only capabilities they hold and cannot alter an account above their authority. Concurrent removal or deactivation cannot remove the last active staff member with full access. Access updates require the selected account's original state; stale edits retain form input until you reload. Passwords require at least eight characters. Password reset and deactivation invalidate all existing sessions; authentication locks the account through password verification and session creation to serialize a concurrent reset.
 
 Staff grant capacity is set by `operations.max_staff_grants`; search/paging capacities stay in the owning application settings. From a selected customer, edit their display name, open their wallet or open their subscriptions with the same customer ID. Telegram identity is retained by profile editing. Reseller tenancy remains separate roadmap work.
 
 ## Named staff roles
 
-Open **نقش‌ها** to search roles, edit grants/activation with a reason and expected revision, page through immutable history, or open an assigned staff record. On that staff record, add, remove or replace role membership; search and paging preserve selections. Refreshing after a conflict preserves the draft. Read-only staff cannot submit changes.
+Open **Roles** to search roles, edit grants/activation with a reason and expected revision, page through immutable history, or open an assigned staff record. On that staff record, add, remove or replace role membership; search and paging preserve selections. Refreshing after a conflict preserves the draft. Read-only staff cannot submit changes.
 
 Effective permissions combine direct grants with active roles and are read again on each API request. Disabling a role preserves membership while removing its authority; reactivation restores that authority. Previously accepted requests are not cancelled. Global owner authority requires a direct grant and cannot be stored in a shared role. Delegated editors cannot exceed their current authority or edit a role belonging to a more privileged account. Role changes do not reset passwords or erase existing direct permissions.
 
@@ -232,15 +287,15 @@ Owning capacities are `operations.max_staff_grants`, `max_staff_roles` and `max_
 
 ## Free trials
 
-**تنظیمات سامانه → سیاست اشتراک آزمایشی** selects a searchable, paged source plan and configures availability, eligibility (no prior paid purchase/any customer), concurrent trials (reject active/allow multiple), per-account claim limit, cooldown, quota and duration. Source network/group/IP policies are snapshotted; the source plan price is never charged. Private `trials` configuration owns the operational ceilings. Trials are initially disabled and require an active source plan before claims can succeed.
+**Settings → Trial policy** selects a searchable, paged source plan and configures availability, eligibility (no prior paid purchase/any customer), concurrent trials (reject active/allow multiple), per-account claim limit, cooldown, quota and duration. Source network/group/IP policies are snapshotted; the source plan price is never charged. Private `trials` configuration owns the operational ceilings. Trials are initially disabled and require an active source plan before claims can succeed.
 
-The selected customer record and the customer account's **خرید سرویس** expose the same API-owned eligibility/claim workflow. The thin bot has an **اشتراک آزمایشی** action. Accepted replay keys retain the original trial after policy changes; simultaneous claims cannot exceed the account cap. Failed requests retain their key. Trials use normal acknowledged provisioning, private delivery, quota/expiry revocation and recovery, and cannot enable automatic renewal. An uncharged failed trial creates no wallet credit. Accepted claims, including finalized failures, count toward the configured cap; operator provisioning recovery or an explicit policy change is required for another attempt. Per-account limits do not establish resistance to multiple Telegram accounts.
+The selected customer record and the customer account's **Purchase service** expose the same API-owned eligibility/claim workflow. The thin bot has an **Trial subscription** action. Accepted replay keys retain the original trial after policy changes; simultaneous claims cannot exceed the account cap. Failed requests retain their key. Trials use normal acknowledged provisioning, private delivery, quota/expiry revocation and recovery, and cannot enable automatic renewal. An uncharged failed trial creates no wallet credit. Accepted claims, including finalized failures, count toward the configured cap; operator provisioning recovery or an explicit policy change is required for another attempt. Per-account limits do not establish resistance to multiple Telegram accounts.
 
 ## Customer notifications and delivery
 
-Open **اعلان‌ها** from navigation or a customer record. Search/paging keeps the actual customer and selected notice. Scoped staff can create a notice from the configured manual template or supply both title and body, inspect delivery attempts, explicitly dispatch one notice, and retry/cancel an eligible record with a reason and expected revision. A stale write retains the draft; refresh updates its revision. Read-only staff can inspect records and paged history. Customers open **اعلان‌های من**, filter their own inbox, mark one notice read/unread and open its actual support, payment or subscription record. Inbox responses omit staff identities and lease credentials.
+Open **Notifications** from navigation or a customer record. Search/paging keeps the actual customer and selected notice. Scoped staff can create a notice from the configured manual template or supply both title and body, inspect delivery attempts, explicitly dispatch one notice, and retry/cancel an eligible record with a reason and expected revision. A stale write retains the draft; refresh updates its revision. Read-only staff can inspect records and paged history. Customers open **My notifications**, filter their own inbox, mark one notice read/unread and open its actual support, payment or subscription record. Inbox responses omit staff identities and lease credentials.
 
-**تنظیمات سامانه** configures recording, new-notice channels (inbox/Telegram/both), delivery pause, per-kind templates/activation, fixed/exponential retry timing, attempt budgets and ambiguous-outcome hold/retry. Manual templates are static defaults and can be overridden. Automatic templates accept `{id}`, `{amount_toman}` and `{status}`; rial conversion is exact. Private `notifications` configuration owns capacities, deadlines, response/request size budgets and the authenticated adapter connection. Long inbox-only messages and Telegram's protocol length boundary are distinct. Tightened capacities pause expansion without erasing existing records. Safe retries retain the accepted event's snapshot across later policy changes.
+**Settings** configures recording, new-notice channels (inbox/Telegram/both), delivery pause, per-kind templates/activation, fixed/exponential retry timing, attempt budgets and ambiguous-outcome hold/retry. Manual templates are static defaults and can be overridden. Automatic templates accept `{id}`, `{amount_toman}` and `{status}`; rial conversion is exact. Private `notifications` configuration owns capacities, deadlines, response/request size budgets and the authenticated adapter connection. Long inbox-only messages and Telegram's protocol length boundary are distinct. Tightened capacities pause expansion without erasing existing records. Safe retries retain the accepted event's snapshot across later policy changes.
 
 Payment approval, staff support replies, provisioning activation and expiry/funding/failure attention checks record durable notices inside their owning transaction. Native Papilio Tasks scans dispatch eligible records; disabled delivery avoids expanding paused work while expired leases remain recoverable. Attempts use a monotonic history and a separate budget reset by audited operator recovery. A failed paid operation remains governed by its original payment/provisioning recovery rules.
 
@@ -273,15 +328,15 @@ use the recovery CLI to create and verify an encrypted backup first.
 
 ## Support tickets
 
-Customers open **پشتیبانی** from their account, subscription or payment; staff open it from a customer or related record. The known customer and optional source stay attached to creation. Search, status filters, messages and immutable history are paged. Staff need `support:read` to view, `support:create` to create for a known customer and `support:update` to reply or change status. Customer cookies remain separate from staff cookies, and customer reads expose no internal staff IDs.
+Customers open **Support** from their account, subscription or payment; staff open it from a customer or related record. The known customer and optional source stay attached to creation. Search, status filters, messages and immutable history are paged. Staff need `support:read` to view, `support:create` to create for a known customer and `support:update` to reply or change status. Customer cookies remain separate from staff cookies, and customer reads expose no internal staff IDs.
 
-In **تنظیمات سامانه**, configure new tickets, customer/staff replies, customer closure/manual reopening, the status after staff replies, and whether replying to a closed ticket rejects or reopens it. Configure open-ticket, message and character limits within private `support` capacities. Tightening a capacity preserves existing threads and allows closure while blocking new expansion until corrected. Unicode character counting matches the API; failed or stale writes retain drafts, and explicit refresh updates the revision without discarding input. Replay keys prevent duplicate creation/messages.
+In **Settings**, configure new tickets, customer/staff replies, customer closure/manual reopening, the status after staff replies, and whether replying to a closed ticket rejects or reopens it. Configure open-ticket, message and character limits within private `support` capacities. Tightening a capacity preserves existing threads and allows closure while blocking new expansion until corrected. Unicode character counting matches the API; failed or stale writes retain drafts, and explicit refresh updates the revision without discarding input. Replay keys prevent duplicate creation/messages.
 
 The bot support action requests a one-use customer login link from the Papilio API. If customer login is disabled, the API returns the configured support contact or explicit unavailability. The aiogram adapter remains thin. This workflow supports text only; attachments, SLA reminders, automatic closure and actual Telegram notification delivery are not implemented or exercised.
 
 ## Editable automation schedules
 
-In **مرکز اتوماسیون**, select a schedule to edit its enabled state, cron/time zone or fixed interval, batch size and recheck interval. Changes require settings-update permission and access to the owning section. Revisions detect conflicting edits; failed drafts remain available for review, and history is paged.
+In **Automation**, select a schedule to edit its enabled state, cron/time zone or fixed interval, batch size and recheck interval. Changes require settings-update permission and access to the owning section. Revisions detect conflicting edits; failed drafts remain available for review, and history is paged.
 
 MySQL retains the desired policy and audit history. Native Papilio Tasks registers it in Redis, restores missing registrations at worker startup and during periodic reconciliation, and carries native retry labels. The panel distinguishes saved policies from registered revisions and offers explicit reconciliation. Paused or obsolete queued scans decline new work; previously accepted individual checks may finish. Operational capacities live in the owning application configuration; a saved policy exceeding tightened capacities is visibly blocked until corrected. Native queue delivery remains at least once, with financial effects protected by their existing transaction/replay invariants.
 
@@ -289,17 +344,17 @@ Initial modes/cadences, registration cron/prefix, interval bounds, batch/recheck
 
 ## Independent customer access
 
-The selected customer’s **دسترسی‌های مشتری** separates login, service access and automatic renewal. Disabling login revokes existing sessions and one-use links while preserving paid service access. Disabling renewal prevents scheduled renewal debits. Disabling service access blocks new purchases, configuration delivery, IP admission and usage grants immediately at the API boundary; native scheduler/worker jobs revoke active or pending provisioning on every target and retain final usage reports. Physical enforcement still depends on node acknowledgements.
+The selected customer’s **Customer access** separates login, service access and automatic renewal. Disabling login revokes existing sessions and one-use links while preserving paid service access. Disabling renewal prevents scheduled renewal debits. Disabling service access blocks new purchases, configuration delivery, IP admission and usage grants immediately at the API boundary; native scheduler/worker jobs revoke active or pending provisioning on every target and retain final usage reports. Physical enforcement still depends on node acknowledgements.
 
 Choose an explicit continue/pause clock when stopping services. A quick re-enable preserves the pending stop until every revocation completes; subscriptions stay suspended until explicitly resumed. A never-activated purchase can resume and allocate its first profiles without another wallet charge. Changes retain actor/reason/history and bind retry keys to the original request. Stale edits preserve choices for review.
 
-New account defaults live in versioned **تنظیمات سامانه** (`customer_creation_access`), falling back to private `customers.creation_access`. Admin creation supports an explicit override; new Telegram identities use the owning application policy without changing existing identities. `operations.customer_hold_scan_cron` and `customer_hold_batch_size` control scans. Unfinished finalization rotates through the batch so one unavailable node cannot starve later customers.
+New account defaults live in versioned **Settings** (`customer_creation_access`), falling back to private `customers.creation_access`. Admin creation supports an explicit override; new Telegram identities use the owning application policy without changing existing identities. `operations.customer_hold_scan_cron` and `customer_hold_batch_size` control scans. Unfinished finalization rotates through the batch so one unavailable node cannot starve later customers.
 
 ## Provisioning, customer delivery and usage
 
-In **پلن‌ها**, inherit business defaults or set per-plan delivery, renewal, quota and IP policies. They are saved with a purchase; later plan/default edits do not change that purchase. Renewal supports expiry/quota/either triggers, purchased/current-plan pricing and reset/carry-unused quota. In **اشتراک‌ها**, select a record to inspect node tasks, prepare manually, retry with a reason, check expiry/quota, and view usage. A retry retains the paid generation and does not debit again. An inbound edit increments its revision; its old acknowledgement cannot publish a changed profile.
+In **Plans & bundles**, inherit business defaults or set per-plan delivery, renewal, quota and IP policies. They are saved with a purchase; later plan/default edits do not change that purchase. Renewal supports expiry/quota/either triggers, purchased/current-plan pricing and reset/carry-unused quota. In **Subscriptions**, select a record to inspect node tasks, prepare manually, retry with a reason, check expiry/quota, and view usage. A retry retains the paid generation and does not debit again. An inbound edit increments its revision; its old acknowledgement cannot publish a changed profile.
 
-For an active subscription, **تعلیق و ادامهٔ سرویس** accepts a reason and an explicit expiry policy: continue counting time or pause it. Delivery closes as revocation begins; physical revocation still needs every node's acknowledgement and final usage report. Resumption requires completed revocation and remaining time/quota. It reapplies the same profiles without changing the subscription URL, renewing the generation or debiting the wallet. Its failure remains recoverable; the original purchase cannot be refunded through provisioning failure once service has been activated. Request keys bind the operation and inputs, so old retries cannot repeat a later suspension or add paused time twice. The record retains a paged history with actor, reason, time and clock choice.
+For an active subscription, **Suspend and resume service** accepts a reason and an explicit expiry policy: continue counting time or pause it. Delivery closes as revocation begins; physical revocation still needs every node's acknowledgement and final usage report. Resumption requires completed revocation and remaining time/quota. It reapplies the same profiles without changing the subscription URL, renewing the generation or debiting the wallet. Its failure remains recoverable; the original purchase cannot be refunded through provisioning failure once service has been activated. Request keys bind the operation and inputs, so old retries cannot repeat a later suspension or add paused time twice. The record retains a paged history with actor, reason, time and clock choice.
 
 Agents authenticate with `X-Papilio-Node-Key` under `/v1/nodes/{code}/provisioning`. They page tasks, claim individual work and acknowledge applied/failed/revoked outcomes using the current private claim token. Claims include generation, inbound revision, encrypted-at-rest settings/credentials, expiry and quota policy. Keep access logs disabled; task metadata never includes credentials. Revoke work remains available on disabled nodes. The agent must serialize changes to a profile, honor claim versions and stop traffic before final usage/revocation; the API acknowledgement alone is not proof of a tested core adapter.
 
@@ -309,13 +364,13 @@ Nodes allocate usage grants at `POST /v1/nodes/{code}/usage/grants`, then report
 
 `reported` mode relies on timely node reports and can overshoot while reports are delayed. `reserved` mode shares the remaining quota across node grants; consumed plus open reserved bytes cannot be allocated again. Nodes must enforce byte and time budgets. Expiry of a grant does not release its uncertain remainder; final usage confirmation closes it. Actual consumption exceeding a budget remains recorded and is shown as a budget violation; further allocation is refused once no global quota remains. Renewal waits for final reports and all old-generation revocations before another debit. There is no claim of live strict enforcement while adapters and cores are stopped.
 
-**نمای کل** combines statistics with dated usage totals; subscription records retain their own usage context. Admin usage/grant lists are paged, and summaries cover the entire requested range. The API uses UTC; displayed report dates use the configured panel timezone and English calendar. Business quota defaults are versioned in settings; operational ceilings, scheduler crons and batch capacities are private configuration.
+**Overview** summarizes customers, pending payment reviews and pending delivery; subscription records retain their own usage context. Admin usage/grant lists are paged, and summaries cover the entire requested range. The API uses UTC; displayed report dates use the configured panel timezone and English calendar. Business quota defaults are versioned in settings; operational ceilings, scheduler crons and batch capacities are private configuration.
 
 ## Private connection QR images
 
-The customer's **دریافت کانفیگ‌ها** page offers a QR image for the stable subscription link and each ready profile, retaining the selected host. The image contains the same URL or client configuration as the ordinary download; it is a private credential. Customers can view, close or download the PNG. Link/file delivery remains available when QR rendering is disabled or the configuration exceeds rendering capacity. Scanner support for individual configuration formats varies by client.
+The customer's **Configuration downloads** page offers a QR image for the stable subscription link and each ready profile, retaining the selected host. The image contains the same URL or client configuration as the ordinary download; it is a private credential. Customers can view, close or download the PNG. Link/file delivery remains available when QR rendering is disabled or the configuration exceeds rendering capacity. Scanner support for individual configuration formats varies by client.
 
-Versioned **کد تصویری اتصال** settings control activation, error correction, pixel size and white border. Private `qr_codes` configuration sets maximum box/border size, image dimensions, payload bytes and PNG bytes. Omitting the section disables QR generation; older preference records inherit configured defaults. After capacity tightening, disable the policy or reduce its dimensions to recover. The four-module white margin is a QR protocol requirement. Rendering uses [python-qrcode](https://github.com/lincolnloop/python-qrcode) in a standard worker thread; Papilio continues to own access, configuration and errors.
+Versioned **Connection QR code** settings control activation, error correction, pixel size and white border. Private `qr_codes` configuration sets maximum box/border size, image dimensions, payload bytes and PNG bytes. Omitting the section disables QR generation; older preference records inherit configured defaults. After capacity tightening, disable the policy or reduce its dimensions to recover. The four-module white margin is a QR protocol requirement. Rendering uses [python-qrcode](https://github.com/lincolnloop/python-qrcode) in a standard worker thread; Papilio continues to own access, configuration and errors.
 
 `GET /s/{token}/qr` renders the subscription URL only when ready feed delivery exists. `GET /s/{token}/profiles/{profile_id}/qr?host_id={host_id}` renders an owned ready profile. Existing entitlement, hold, expiry, acknowledgement and token-rotation rules apply. Successful images have no-store, no-referrer and nosniff headers; image filenames contain no identifiers or credentials. No proxy core or Telegram runtime is needed to render images.
 
@@ -357,7 +412,7 @@ Run `ruff check src tests scripts migrations`, `ruff format --check src tests sc
 
 ## Customer accounts and payment review
 
-`/account` is a Persian customer account separate from `/service/:token` delivery. The trusted aiogram bot calls `POST /v1/bot/account-link` to issue a short one-use login URL. The token is in the URL fragment, is exchanged through a request body, and is removed from browser history. The subscription token never authorizes wallet/payment operations. Customer sessions use separate HTTP-only cookies and CSRF tokens; every customer financial operation derives the customer identity from that session. Disabled customers cannot exchange or use sessions.
+`/account` is a customer account separate from `/service/:token` delivery. The trusted aiogram bot calls `POST /v1/bot/account-link` to issue a short one-use login URL. The token is in the URL fragment, is exchanged through a request body, and is removed from browser history. The subscription token never authorizes wallet/payment operations. Customer sessions use separate HTTP-only cookies and CSRF tokens; every customer financial operation derives the customer identity from that session. Disabled customers cannot exchange or use sessions.
 
 The customer account provides wallet balance and paged ledger/top-ups, searchable paged payment destinations and active plans, wallet purchase, owned service status, renewal choice and permitted link rotation. Failed requests retain input and idempotency keys. New customer purchases must confirm the displayed rial price. A changed price rejects the purchase before any debit; the UI refreshes the same selected plan for confirmation. Stable purchase-key replays return the existing owned purchase before evaluating current plan prices, including after renewal. The bot displays active plan price/duration and embeds its confirmed price in purchase callbacks. Successful purchases await the durable provisioning workflow; viewing the account does not start a proxy core.
 
