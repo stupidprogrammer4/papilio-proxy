@@ -1,0 +1,13 @@
+<script setup lang="ts">
+import { onMounted,ref } from "vue";
+import { item,type ResellerDefaults,type StaffScopeCatalog } from "@papilio/api";
+import { useAuth } from "@papilio/auth";
+import ResellerPolicyEditor from "./ResellerPolicyEditor.vue";
+import StaffScopeEditor from "./StaffScopeEditor.vue";
+const values=defineModel<ResellerDefaults>({required:true});
+const props=defineProps<{disabled?:boolean}>();
+const auth=useAuth(),catalog=ref<StaffScopeCatalog|null>(null),error=ref("");
+async function load():Promise<void>{error.value="";try{catalog.value=await item<StaffScopeCatalog>("/v1/admin/resellers/scope-catalog");}catch(cause){error.value=cause instanceof Error?cause.message:"The operation failed. Please try again.";}}
+onMounted(()=>{if(auth.can("resellers"))void load();});
+</script>
+<template><section class="form-grid"><h3>New reseller defaults</h3><p class="hint-box">Used for future registrations. Existing resellers and purchases retain their saved policies.</p><label class="check-row"><input v-model="values.access.login_enabled" type="checkbox" :disabled="props.disabled"/>New reseller sign-in enabled</label><label class="check-row"><input v-model="values.access.sales_enabled" type="checkbox" :disabled="props.disabled"/>New reseller sales enabled</label><label class="check-row"><input v-model="values.access.renewals_enabled" type="checkbox" :disabled="props.disabled"/>New reseller renewals enabled</label><label class="check-row"><input v-model="values.owner_is_active" type="checkbox" :disabled="props.disabled"/>Initial owner account enabled</label><p v-if="error" class="message error">{{error}} <button type="button" class="btn secondary" @click="load">Retry</button></p><StaffScopeEditor v-if="catalog" v-model="values.owner_access.scopes" :catalog="catalog" :grants="['*']" owner-label="Full access within this reseller account" :disabled="props.disabled"/><p v-else class="hint-box">Load the reseller scope catalog to edit the initial owner permissions. Existing selections are retained.</p><ResellerPolicyEditor v-model="values.policy" :disabled="props.disabled"/><h4>New reseller wallet account</h4><label class="check-row"><input v-model="values.wallet_customer_access.is_active" type="checkbox" :disabled="props.disabled"/>Account enabled</label><label class="check-row"><input v-model="values.wallet_customer_access.services_enabled" type="checkbox" :disabled="props.disabled"/>Purchase with wallet Enabled</label><label class="check-row"><input v-model="values.wallet_customer_access.renewals_enabled" type="checkbox" :disabled="props.disabled"/>Allow wallet-funded renewals</label></section></template>

@@ -1,0 +1,59 @@
+<script setup lang="ts">
+import Modal from "@papilio/ui/Modal.vue";
+import { onMounted, ref, watch } from "vue";
+import { useAuth } from "@papilio/auth";
+import { item, query, request, type Page, type Reseller, type ResellerDefaults, type ResellerChange, type CreatedReseller, type StaffScopeCatalog } from "@papilio/api";
+import { faNumber } from "@papilio/ui";
+import ResellerPolicyEditor from "../components/ResellerPolicyEditor.vue";
+import StaffScopeEditor from "../components/StaffScopeEditor.vue";
+const auth = useAuth();
+const rows=ref<Reseller[]>([]), selected=ref<Reseller|null>(null), draft=ref<Reseller|null>(null), defaults=ref<ResellerDefaults|null>(null), creation=ref<ResellerDefaults|null>(null), catalog=ref<StaffScopeCatalog|null>(null);
+const page=ref(1), pages=ref(1), total=ref(0), q=ref(""), loading=ref(false), busy=ref(false), error=ref(""), defaultsError=ref(""), notice=ref("");
+const code=ref(""), title=ref(""), username=ref(""), password=ref(""), reason=ref("");
+const history=ref<ResellerChange[]>([]), historyPage=ref(1), historyPages=ref(1), historyTotal=ref(0), historyLoading=ref(false), historyError=ref("");
+let listVersion=0, selectionVersion=0, historyVersion=0;
+async function load(): Promise<void> {
+  const version=++listVersion; loading.value=true; error.value="";
+  try { const result=await request<Page<Reseller>>(`/v1/admin/resellers?${query({q:q.value,page:page.value})}`); if(version!==listVersion)return; rows.value=result.data; pages.value=result.meta.pager?.total_pages??1; total.value=result.meta.pager?.total_items??0; }
+  catch(cause){if(version===listVersion)error.value=cause instanceof Error?cause.message:"The operation failed. Please try again.";}
+  finally {if(version===listVersion)loading.value=false;}
+}
+async function loadDefaults(): Promise<void> {
+  defaultsError.value="";
+  try {const [values, scopes]=await Promise.all([item<ResellerDefaults>("/v1/admin/resellers/defaults"),item<StaffScopeCatalog>("/v1/admin/resellers/scope-catalog")]);defaults.value=values;catalog.value=scopes;if(!creation.value)creation.value=structuredClone(values);}
+  catch(cause){defaultsError.value=cause instanceof Error?cause.message:"The operation failed. Please try again.";}
+}
+async function loadHistory(): Promise<void> {
+  const row=selected.value;if(!row)return;const version=++historyVersion;historyLoading.value=true;historyError.value="";
+  try {const result=await request<Page<ResellerChange>>(`/v1/admin/resellers/${row.id}/history?${query({page:historyPage.value})}`);if(version!==historyVersion||selected.value?.id!==row.id)return;history.value=result.data;historyPages.value=result.meta.pager?.total_pages??1;historyTotal.value=result.meta.pager?.total_items??0;}
+  catch(cause){if(version===historyVersion)historyError.value=cause instanceof Error?cause.message:"The operation failed. Please try again.";}
+  finally {if(version===historyVersion)historyLoading.value=false;}
+}
+async function select(row: Reseller, preserve=false): Promise<void> {
+  if(busy.value)return;const version=++selectionVersion;error.value="";
+  try {const fresh=await item<Reseller>(`/v1/admin/resellers/${row.id}`);if(version!==selectionVersion)return;const same=selected.value?.id===fresh.id;selected.value=fresh;if(!preserve||!same){draft.value=structuredClone(fresh);reason.value="";}history.value=[];historyPage.value=1;void loadHistory();}
+  catch(cause){if(version===selectionVersion)error.value=cause instanceof Error?cause.message:"The operation failed. Please try again.";}
+}
+async function create(): Promise<void> {
+  const values=creation.value;if(!values||busy.value||!auth.can("resellers","create"))return;busy.value=true;error.value="";notice.value="";
+  try {const result=await item<CreatedReseller>("/v1/admin/resellers","POST",{code:code.value,title:title.value,owner:{username:username.value,password:password.value},access:values.access,policy:values.policy,owner_access:values.owner_access,owner_is_active:values.owner_is_active});password.value="";code.value="";title.value="";username.value="";selected.value=result.reseller;draft.value=structuredClone(result.reseller);reason.value="";historyPage.value=1;notice.value="Reseller account, owner login and wallet created.";page.value=1;await Promise.all([load(),loadHistory()]);}
+  catch(cause){error.value=cause instanceof Error?cause.message:"The operation failed. Please try again.";}
+  finally{busy.value=false;}
+}
+async function save(): Promise<void> {
+  const row=selected.value, values=draft.value;if(!row||!values||busy.value||!auth.can("resellers","update"))return;busy.value=true;error.value="";notice.value="";
+  try{const result=await item<Reseller>(`/v1/admin/resellers/${row.id}`,"PUT",{expected_revision:row.revision,title:values.title,access:{login_enabled:values.login_enabled,sales_enabled:values.sales_enabled,renewals_enabled:values.renewals_enabled},policy:values.policy,reason:reason.value});selected.value=result;draft.value=structuredClone(result);reason.value="";notice.value=(row.login_enabled!==result.login_enabled||row.sales_enabled!==result.sales_enabled||row.renewals_enabled!==result.renewals_enabled)?"Policy saved. Existing sessions must sign in again.":"Policy saved. Subsequent operations use the updated settings.";await Promise.all([load(),loadHistory()]);}
+  catch(cause){error.value=cause instanceof Error?cause.message:"The operation failed. Please try again.";}
+  finally{busy.value=false;}
+}
+watch(q,()=>{page.value=1;void load();});onMounted(()=>{void load();void loadDefaults();});
+const createOpen=ref(false);
+</script>
+<template>
+  <div class="page-head"><div><p class="eyebrow">RESELLER MANAGEMENT</p><h1>Resellers</h1><p class="subtitle">Manage each reseller's sales policy, wallet and team.</p></div><button class="btn secondary" :disabled="busy||loading" @click="load">Refresh</button><button v-if="auth.can('resellers','create')" class="btn" :disabled="busy" @click="createOpen=true">+ Create reseller</button></div>
+  <p v-if="error" class="message error" role="alert">{{error}}</p><p v-if="notice" class="message" role="status">{{notice}}</p>
+  <div :class="{split:!!selected}"><div class="card"><div class="card-pad"><label class="field"><span>Search code or name</span><input v-model="q" maxlength="120" /></label></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Reseller</th><th>Sign in</th><th>Sales</th><th>Renewal</th></tr></thead><tbody><tr v-for="row in rows" :key="row.id" tabindex="0" :class="{'selected-row':selected?.id===row.id}" @click="select(row)" @keydown.enter="select(row)"><td>{{row.title}}<br/><small dir="ltr">{{row.code}}</small></td><td>{{row.login_enabled?'Active':'Paused'}}</td><td>{{row.sales_enabled?'Active':'Paused'}}</td><td>{{row.renewals_enabled?'Active':'Paused'}}</td></tr></tbody></table><div v-if="loading" class="empty">Loading…</div><div v-else-if="!rows.length&&!error" class="empty">No resellers found.</div></div><div class="pager"><button :disabled="page<=1||loading||busy" @click="page--;load()">‹</button><span>{{faNumber(page)}} · {{faNumber(total)}} resellers</span><button :disabled="page>=pages||loading||busy" @click="page++;load()">›</button></div></div>
+  <div class="stack"><section v-if="selected&&draft" class="card card-pad"><h2>{{selected.title}}</h2><p>Revision {{faNumber(selected.revision)}} · Code {{selected.code}}</p><div class="toolbar"><RouterLink :to="`/resellers/${selected.id}/team`" class="btn secondary">Reseller team</RouterLink><RouterLink :to="`/resellers/${selected.id}/plans`" class="btn secondary">Plan agreements</RouterLink><RouterLink v-if="auth.can('payments')" :to="`/customers/${selected.wallet_customer_id}/wallet`" class="btn secondary">Reseller wallet</RouterLink></div><form v-if="auth.can('resellers','update')" class="form-grid" @submit.prevent="save"><fieldset :disabled="busy" class="form-grid"><label class="field"><span>Name</span><input v-model="draft.title" minlength="2" maxlength="120" required/></label><label class="check-row"><input v-model="draft.login_enabled" type="checkbox"/>Sign-in enabled</label><label class="check-row"><input v-model="draft.sales_enabled" type="checkbox"/>Sales enabled</label><label class="check-row"><input v-model="draft.renewals_enabled" type="checkbox"/>Renewals enabled</label><ResellerPolicyEditor v-model="draft.policy" :disabled="busy"/><label class="field"><span>Change reason</span><input v-model="reason" minlength="3" maxlength="250" required/></label><button class="btn" :disabled="reason.trim().length<3">Save</button></fieldset></form><ResellerPolicyEditor v-else v-model="selected.policy" disabled/><button class="btn secondary" :disabled="busy" @click="select(selected,true)">Refresh and retain draft</button><p class="hint-box">Compare your retained draft with the refreshed policy before saving.</p><h3>Policy history</h3><p v-if="historyError" class="message error">{{historyError}} <button class="btn small secondary" @click="loadHistory">Retry</button></p><p v-if="historyLoading">Loading…</p><details v-for="change in history" :key="change.id"><summary>Revision {{faNumber(change.revision)}} · {{change.reason}}</summary><p>Staff {{faNumber(change.staff_id)}} · {{new Date(change.created_at).toLocaleString('en-GB')}}</p><p>Sign in: {{change.login_enabled?'Active':'Paused'}} · Sales: {{change.sales_enabled?'Active':'Paused'}} · Renewal: {{change.renewals_enabled?'Active':'Paused'}}</p><ResellerPolicyEditor :model-value="change.policy" disabled/></details><div class="pager"><button :disabled="historyPage<=1||historyLoading" @click="historyPage--;loadHistory()">‹</button><span>{{faNumber(historyPage)}} · {{faNumber(historyTotal)}} changes</span><button :disabled="historyPage>=historyPages||historyLoading" @click="historyPage++;loadHistory()">›</button></div></section>
+  <Modal v-if="auth.can('resellers','create')" v-model="createOpen" title="Create reseller" :busy="busy" wide><p v-if="error" class="message error" role="alert">{{error}}</p><p v-if="defaultsError" class="message error">{{defaultsError}} <button class="btn secondary" @click="loadDefaults">Reload defaults</button></p><form v-if="creation" class="form-grid" @submit.prevent="create"><fieldset :disabled="busy" class="form-grid"><label class="field"><span>Unique code</span><input v-model="code" dir="ltr" pattern="[a-z0-9_-]+" minlength="2" maxlength="64" required/></label><label class="field"><span>Name</span><input v-model="title" minlength="2" maxlength="120" required/></label><label class="field"><span>Reseller owner username</span><input v-model="username" dir="ltr" pattern="[a-z0-9_.-]+" minlength="3" maxlength="64" autocomplete="off" required/></label><label class="field"><span>Owner password (at least 8 characters)</span><input v-model="password" type="password" minlength="8" maxlength="256" autocomplete="new-password" required/></label><label class="check-row"><input v-model="creation.owner_is_active" type="checkbox"/>Owner account enabled</label><StaffScopeEditor v-model="creation.owner_access.scopes" :catalog="catalog" :grants="['*']" owner-label="Full access within this reseller account" :disabled="busy"/><label class="check-row"><input v-model="creation.access.login_enabled" type="checkbox"/>Sign-in enabled</label><label class="check-row"><input v-model="creation.access.sales_enabled" type="checkbox"/>Sales enabled</label><label class="check-row"><input v-model="creation.access.renewals_enabled" type="checkbox"/>Renewals enabled</label><ResellerPolicyEditor v-model="creation.policy" :disabled="busy"/><button class="btn" :disabled="!catalog||password.length<8">Create reseller</button></fieldset></form></Modal></div></div>
+</template>
+<style scoped>fieldset{border:0;padding:0;margin:0}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}details{padding:12px 0;border-bottom:1px solid var(--line)}summary{cursor:pointer}</style>
