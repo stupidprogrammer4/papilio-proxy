@@ -1,7 +1,11 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
 
-from papilio.errors.exceptions import ConflictException, NotFoundException
+from papilio.errors.exceptions import (
+    ConflictException,
+    NotFoundException,
+    UnAuthorizedException,
+)
 from papilio.infra.db.tools.conflicts import handle_conflicts
 from papilio.infra.db.tools.decorators import transactional
 from papilio.security.crypto import hash_sha256, secure_compare
@@ -53,22 +57,44 @@ class UsageCommand:
         self, code: str, key: str, data: UsageAllocation
     ) -> UsageGrantModel:
         node = await self.nodes.authenticate(code, key)
-        node = await self.nodes.locked(node.id)
         initial = await self.facts.assignment(data.profile_id, node.id)
         if initial is None:
             raise _missing("profile", data.profile_id)
+        subscription_id = initial.profile.subscription_id
+        core_id = initial.configuration.core_id
+        hint = await self.subscriptions.get_by_id(subscription_id)
+        if hint is None:
+            raise _missing("subscription", subscription_id)
+        customer_id = hint.customer_id
+        customer = await self.customers.locked(customer_id)
+        node = await self.nodes.locked(node.id)
+        digest = await asyncio.to_thread(hash_sha256, key)
+        if node.code != code or not secure_compare(
+            digest, node.agent_key_hash
+        ):
+            raise UnAuthorizedException(
+                message="Node authorization changed while waiting.",
+                message_code="node_unauthorized",
+            )
         if data.installed_revision_id is not None:
-            await self.installed.lock_core(initial.configuration.core_id)
-        subscription = await self.subscriptions.locked(
-            initial.profile.subscription_id
-        )
+            await self.installed.lock_core(core_id)
+        subscription = await self.subscriptions.locked(subscription_id)
         if subscription is None:
-            raise _missing("subscription", initial.profile.subscription_id)
+            raise _missing("subscription", subscription_id)
+        if subscription.customer_id != customer_id:
+            raise _conflict(
+                "usage_subscription_owner_changed", subscription.id
+            )
         facts = await self.facts.assignment(
             data.profile_id, node.id, lock=True
         )
-        assert facts is not None
-        customer = await self.customers.locked(subscription.customer_id)
+        if facts is None:
+            raise _missing("profile", data.profile_id)
+        if (
+            facts.profile.subscription_id != subscription_id
+            or facts.configuration.core_id != core_id
+        ):
+            raise _conflict("usage_assignment_changed", data.profile_id)
         if not CustomerAccessPolicy.services_available(customer):
             raise _conflict("customer_services_disabled", subscription.id)
         existing = await self.grants.allocation(

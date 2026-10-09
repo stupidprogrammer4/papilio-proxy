@@ -389,9 +389,30 @@ class SubscriptionCommand:
     async def fail_provision(
         self, id: int, data: ProvisionFailure, staff_id: int
     ) -> SubscriptionModel:
+        hint = await self.subscriptions.get_by_id(id)
+        if hint is None:
+            raise _missing(id)
+        customer_id = hint.customer_id
+        payer_customer_id = hint.payer_customer_id
+        payer_id = payer_customer_id or customer_id
+        if payer_id != customer_id:
+            await self.customers.locked_many(
+                sorted([customer_id, payer_id]), ascending=True
+            )
+        else:
+            await self.customers.locked(customer_id)
         subscription = await self.subscriptions.locked(id)
         if subscription is None:
             raise _missing(id)
+        if (
+            subscription.customer_id != customer_id
+            or subscription.payer_customer_id != payer_customer_id
+        ):
+            raise _conflict(
+                "مالک یا پرداخت‌کنندهٔ اشتراک هنگام انتظار تغییر کرده است.",
+                "subscription_owner_changed",
+                id,
+            )
         if subscription.status == "failed":
             return subscription
         if subscription.status != "pending_provision":
@@ -412,11 +433,9 @@ class SubscriptionCommand:
             )
             result = await self.get(id)
             return result
-        await self.customers.locked(subscription.customer_id)
         wallet = await self.wallets.locked_for_customer(
             WalletModel(
-                customer_id=subscription.payer_customer_id
-                or subscription.customer_id,
+                customer_id=payer_id,
                 balance_rial=0,
             )
         )
