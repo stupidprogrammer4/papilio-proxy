@@ -83,28 +83,36 @@ func (g Guard) ProtectLease(ctx context.Context, subscriptionID int64, sourceIP 
 	}
 	ownedContext, cancel := context.WithCancel(ctx)
 	protected := &ProtectedConnection{connection: connection, cancel: cancel, done: make(chan struct{}), closed: make(chan struct{})}
-	go g.renew(ownedContext, protected, lease)
+	stopCancellation := context.AfterFunc(ownedContext, func() { protected.Close() })
+	go g.renew(ownedContext, protected, lease, stopCancellation)
 	return protected, nil
 }
 
-func (g Guard) renew(ctx context.Context, connection *ProtectedConnection, lease Lease) {
-	defer func() { connection.Close(); close(connection.done) }()
+func (g Guard) renew(ctx context.Context, connection *ProtectedConnection, lease Lease, stopCancellation func() bool) {
+	defer func() { stopCancellation(); connection.Close(); close(connection.done) }()
 	for {
 		wait := time.Until(lease.ValidUntil) - g.RenewBefore
 		if wait <= 0 {
 			return
 		}
+		// Socket expiry is independent of transport cancellation/join. A late
+		// response cannot extend ownership after this lease has already ended.
+		expiry := time.AfterFunc(time.Until(lease.ValidUntil), func() { connection.Close() })
 		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
+			expiry.Stop()
 			return
 		case <-timer.C:
 		}
 		deadlineContext, cancel := context.WithDeadline(ctx, lease.ValidUntil)
 		next, err := g.Authorizer.Authorize(deadlineContext, lease.SubscriptionID, lease.SourceIP)
+		expired := !expiry.Stop()
+		cancelled := deadlineContext.Err() != nil
 		cancel()
-		if err != nil || !next.ValidAt(time.Now()) || next.SubscriptionID != lease.SubscriptionID || next.SourceIP != lease.SourceIP || !next.ValidUntil.After(lease.ValidUntil) {
+		now := time.Now()
+		if expired || cancelled || err != nil || !lease.ValidAt(now) || !next.ValidAt(now) || next.SubscriptionID != lease.SubscriptionID || next.SourceIP != lease.SourceIP || !next.ValidUntil.After(lease.ValidUntil) {
 			return
 		}
 		lease = next
