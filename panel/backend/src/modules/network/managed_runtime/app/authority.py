@@ -13,6 +13,7 @@ class ManagedRuntimeAuthority:
 
     def require_paid_activation(self) -> None:
         raise ConflictException(
+            unique_dict={},
             message="Managed admission authority is not available.",
             message_code="managed_authority_prerequisites_pending",
         )

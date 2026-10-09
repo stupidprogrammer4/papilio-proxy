@@ -26,10 +26,12 @@ from src.modules.network.managed_runtime.domain.wire import (
 class ManagedWireEncoding:
     @staticmethod
     def original_closed_startup(
-        payload: bytes,
+        payload: bytes | str,
         receipt: ManagedClosedStartupReceiptWire,
         capacity: ManagedRuntimeCapacity,
     ) -> ManagedOriginalClosedStartup:
+        if isinstance(payload, str):
+            payload = payload.encode()
         if not payload or len(payload) > capacity.max_snapshot_bytes:
             raise ValueError("Closed startup byte capacity exceeded")
         if receipt.bytes != len(payload) or not compare_digest(

@@ -3,6 +3,9 @@ from dishka import Provider, Scope, provide
 from src.modules.network.managed_runtime.app.authority import (
     ManagedRuntimeAuthority,
 )
+from src.modules.network.managed_runtime.app.installations import (
+    ManagedInstallationCommand,
+)
 from src.modules.network.managed_runtime.app.services import (
     ManagedAdmissionService,
     ManagedBarrierService,
@@ -17,10 +20,14 @@ from src.modules.network.managed_runtime.infra.mysql import (
     ManagedInstallationRepository,
     ManagedWindowRepository,
 )
+from src.modules.network.managed_runtime.infra.scopes import (
+    ManagedInstallationScopeReader,
+)
 from src.modules.network.managed_runtime.interfaces import (
     IManagedAdmissionService,
     IManagedBarrierService,
     IManagedEpochService,
+    IManagedInstallationCommand,
     IManagedInstallationService,
     IManagedRuntimeAuthority,
     IManagedWindowService,
@@ -29,6 +36,10 @@ from src.modules.network.managed_runtime.interfaces import (
 
 class ManagedRuntimeProvider(Provider):
     scope = Scope.REQUEST
+    installation_scope_reader = provide(ManagedInstallationScopeReader)
+    installation_command = provide(
+        ManagedInstallationCommand, provides=IManagedInstallationCommand
+    )
     authority = provide(
         ManagedRuntimeAuthority, provides=IManagedRuntimeAuthority
     )

@@ -24,6 +24,9 @@ from src.modules.network.core_runtime.domain.memberships import (
 )
 from src.modules.network.core_runtime.domain.usage import CoreUsageCapacity
 from src.modules.network.cores.domain.exports import CoreExportCapacity
+from src.modules.network.managed_runtime.domain.installations import (
+    ManagedAdapterPolicy,
+)
 from src.modules.network.node_capabilities.domain.contracts import (
     NodeCapabilityCapacity,
 )
@@ -457,6 +460,7 @@ class SubscriptionAlertCapacity(BaseModel):
 
 
 class PapilioSettings(Settings):
+    managed_adapter: "ManagedAdapterPolicy | None" = None
     subscription_alerts_capacity: SubscriptionAlertCapacity = Field(
         default_factory=SubscriptionAlertCapacity
     )

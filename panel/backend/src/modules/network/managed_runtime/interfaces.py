@@ -4,6 +4,12 @@ from typing import Protocol
 from src.modules.network.managed_runtime.domain.contracts import (
     ManagedRuntimeReadiness,
 )
+from src.modules.network.managed_runtime.domain.installations import (
+    ManagedClosedStartupAcknowledgement,
+    ManagedInstallationClaim,
+    ManagedInstallationCreate,
+    ManagedInstalledClosedOut,
+)
 from src.modules.network.managed_runtime.domain.models import (
     ManagedAdmissionModel,
     ManagedBarrierModel,
@@ -18,6 +24,13 @@ class IManagedInstallationService(Protocol):
     def create(
         self, data: ManagedInstallationModel
     ) -> Awaitable[ManagedInstallationModel]: ...
+    def locked(self, id: int) -> Awaitable[ManagedInstallationModel]: ...
+    def by_identity(
+        self, core_id: int, revision_id: int, digest: str
+    ) -> Awaitable[ManagedInstallationModel | None]: ...
+    def change(
+        self, row: ManagedInstallationModel, patch: ManagedInstallationModel
+    ) -> Awaitable[ManagedInstallationModel]: ...
 
 
 class IManagedEpochService(Protocol):
@@ -25,6 +38,23 @@ class IManagedEpochService(Protocol):
     def create(
         self, data: ManagedEpochModel
     ) -> Awaitable[ManagedEpochModel]: ...
+    def by_epoch(self, epoch: str) -> Awaitable[ManagedEpochModel | None]: ...
+
+
+class IManagedInstallationCommand(Protocol):
+    def issue(
+        self, core_id: int, data: ManagedInstallationCreate
+    ) -> Awaitable[ManagedInstallationModel]: ...
+    def claim(
+        self, code: str, key: str, id: int
+    ) -> Awaitable[ManagedInstallationClaim]: ...
+    def acknowledge(
+        self,
+        code: str,
+        key: str,
+        id: int,
+        data: ManagedClosedStartupAcknowledgement,
+    ) -> Awaitable[ManagedInstalledClosedOut]: ...
 
 
 class IManagedWindowService(Protocol):
