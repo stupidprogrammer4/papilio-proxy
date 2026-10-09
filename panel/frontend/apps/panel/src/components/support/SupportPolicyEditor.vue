@@ -1,0 +1,9 @@
+<script setup lang="ts">
+import type { SupportPolicy } from "@papilio/api";
+import NumField from "@papilio/ui/NumField.vue";
+const model=defineModel<SupportPolicy>({required:true});
+const flags=[{key:"new_tickets_enabled",label:"Allow new tickets"},{key:"customer_replies_enabled",label:"Customer replies"},{key:"staff_replies_enabled",label:"Staff replies"},{key:"customer_closure_enabled",label:"Allow customers to close tickets"},{key:"customer_reopen_enabled",label:"Allow customers to reopen tickets"}] as const;
+const sizes=[{key:"max_open_tickets",label:"Open tickets per customer"},{key:"max_messages_per_ticket",label:"Messages per ticket"},{key:"max_message_chars",label:"Characters per message"}] as const;
+</script>
+<template><div class="form-grid"><label v-for="flag in flags" :key="flag.key" class="support-flag"><input v-model="model[flag.key]" type="checkbox" />{{flag.label}}</label><label class="field"><span>Replies to closed tickets</span><select v-model="model.closed_reply_mode" aria-label="Replies to closed tickets"><option value="reject">Reject; manual reopen required</option><option value="reopen">Accept using author's status policy</option></select></label><label class="field"><span>Status after staff reply</span><select v-model="model.staff_reply_status" aria-label="Status after staff reply"><option value="open">Pending Support</option><option value="waiting_customer">Pending Customer</option><option value="closed">Closed</option></select></label><NumField v-for="size in sizes" :key="size.key" :label="size.label" :model-value="String(model[size.key])" @update:model-value="model[size.key]=Number($event)" /><p class="hint-box">Customer and staff reply statuses are independent. Pausing creation or replies retains existing conversations. Open-ticket capacity is checked when reopening too.</p></div></template>
+<style scoped>.support-flag{display:flex;align-items:center;gap:8px}.support-flag input{width:auto;min-height:0}</style>

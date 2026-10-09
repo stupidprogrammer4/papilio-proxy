@@ -1,0 +1,13 @@
+<script setup lang="ts">
+import { computed } from "vue";
+import { type CheckoutPolicy, type PaymentIdentifierCapabilities } from "@papilio/api";
+import PaymentIdentifierPolicyEditor from "./payments/PaymentIdentifierPolicyEditor.vue";
+import NumField from "@papilio/ui/NumField.vue";
+const props = defineProps<{ modelValue: CheckoutPolicy; identifierCapabilities?:PaymentIdentifierCapabilities }>(); const emit = defineEmits<{ "update:modelValue": [value: CheckoutPolicy]; valid:[value:boolean] }>();
+function change<K extends keyof CheckoutPolicy>(key: K, value: CheckoutPolicy[K]): void { emit("update:modelValue", { ...props.modelValue, [key]: value }); }
+const minimum = computed({ get: () => String(props.modelValue.minimum_topup_rial / 10), set: value => change("minimum_topup_rial", Math.round(Number(value) * 10)) });
+const maximum = computed({ get: () => String(props.modelValue.maximum_topup_rial / 10), set: value => change("maximum_topup_rial", Math.round(Number(value) * 10)) });
+const methods: { value: CheckoutPolicy["allowed_methods"][number]; label: string }[] = [{ value:"card",label:"Bank card" },{ value:"iban",label:"IBAN" },{ value:"bank_account",label:"Bank account" }];
+function toggle(value: CheckoutPolicy["allowed_methods"][number], checked: boolean): void { change("allowed_methods", checked ? [...props.modelValue.allowed_methods,value] : props.modelValue.allowed_methods.filter(row => row !== value)); }
+</script>
+<template><div class="form-grid"><label class="field"><span>Payment destination selection</span><select :value="modelValue.destination_mode" @change="change('destination_mode', ($event.target as HTMLSelectElement).value as CheckoutPolicy['destination_mode'])"><option value="required">Required</option><option value="optional">Optional</option><option value="legacy">Legacy text instructions only</option></select></label><NumField v-model="minimum" label="Minimum top-up (toman)" /><NumField v-model="maximum" label="Maximum top-up (toman)" /><div><label v-for="method in methods" :key="method.value" class="check-row"><input type="checkbox" :checked="modelValue.allowed_methods.includes(method.value)" @change="toggle(method.value, ($event.target as HTMLInputElement).checked)" />{{ method.label }}</label></div><PaymentIdentifierPolicyEditor v-if="identifierCapabilities" :model-value="modelValue.payment_identifier??null" :capabilities="identifierCapabilities" @update:model-value="change('payment_identifier',$event)" @valid="emit('valid',$event)"/><p v-else class="hint-box" role="status">Payment identifier settings are unavailable in this API version.</p></div></template>
