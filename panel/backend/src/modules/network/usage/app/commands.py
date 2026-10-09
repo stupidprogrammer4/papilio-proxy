@@ -207,6 +207,14 @@ class UsageCommand:
     ) -> UsageEventModel:
         node = await self.nodes.authenticate(code, key)
         node = await self.nodes.locked(node.id)
+        node_digest = await asyncio.to_thread(hash_sha256, key)
+        if node.code != code or not secure_compare(
+            node_digest, node.agent_key_hash
+        ):
+            raise UnAuthorizedException(
+                message="Node authorization changed while waiting.",
+                message_code="node_unauthorized",
+            )
         initial = await self.grants.get_by_id(grant_id)
         if initial is None or initial.node_id != node.id:
             raise _missing("usage_grant", grant_id)
