@@ -1,0 +1,8 @@
+{
+  "include": ["configure.py", "bootstrap.py", "test_configuration.py", "test_bootstrap.py"],
+  "extraPaths": ["../panel/backend", "../bot"],
+  "venvPath": "..",
+  "venv": ".venv",
+  "pythonVersion": "3.13",
+  "typeCheckingMode": "standard"
+}
