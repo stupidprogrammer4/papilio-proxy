@@ -1,0 +1,42 @@
+// Actual Vue and controlled HTTP: amount presentation and policy operations, not native credits.
+import assert from 'node:assert/strict';
+import {pathToFileURL} from 'node:url';
+const {chromium}=await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE).href);
+const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_EXECUTABLE});
+const page=await browser.newPage(),errors=[],writes=[];
+let scopes=['payments:read','settings:read','settings:update'],capacity={max_adjustment_rial:2000,max_candidate_amounts:2001,max_active_codes:10000},settingsFail=true;
+const topup={id:91,customer_id:31,amount_rial:120007,requested_amount_rial:120000,payment_identifier_mode:'rial_suffix4',payment_identifier_code4:'0007',status:'pending',bank_reference:null,approved_by_staff_id:null};
+const instruction={destination_id:20,title:'Controlled account',kind:'card',account:'6037990000000001',recipient:'Controlled recipient',bank_name:'Controlled bank',instructions:'Follow the captured exact amount',topup_id:91,requested_amount_rial:120000,payable_amount_rial:120007,payment_identifier_mode:'rial_suffix4',payment_identifier_code4:'0007'};
+const checkout={id:71,customer_id:31,plan_id:42,revision:1,state:'awaiting_funding',funding_mode:'approved_topup',delivery_mode:'manual_profiles',price_rial:90000,offer_sha256:'a'.repeat(64),auto_renew:false,expires_at:'2026-10-08T10:00:00Z',changed_offer_action:'require_confirmation',topup_id:91,subscription_id:null,reason_code:null};
+const values={brand_title:'Papilio',payment_instructions:null,support_handle:null,topup_options_rial:[120000],customer_creation_access:{is_active:true,services_enabled:true,renewals_enabled:true},customer_link_rotation:false,receipts:{enabled:false,max_per_topup:1,allowed_formats:['PNG']},checkout:{destination_mode:'required',allowed_methods:['card'],minimum_topup_rial:10000,maximum_topup_rial:500000,payment_identifier:{mode:'rial_suffix4',max_adjustment_rial:1000,amount_step_rial:1}},quota_policy:{mode:'reported',grant_bytes:1024,grant_seconds:60,report_max_age_seconds:60,report_future_seconds:5},fulfillment:{renewal_trigger:'expiry',automatic:false,activation:'all',minimum_successes:1,expiry_start:'purchase',failure_action:'hold',max_attempts:3,claim_seconds:60,retry_seconds:60,deadline_minutes:5,renewal_quota:'reset',renewal_price:'purchased'},ip_defaults:{enabled:false,mode:'reject_new',max_ips:2,lease_seconds:60,ban_seconds:60},max_plan_duration_days:365,payment_stale_hours:24,node_health_stale_seconds:60,subscription_expiry_warning_hours:24,provisioning_attention_minutes:5};
+const settings=()=>({revision:1,values,capabilities:{supported_notification_kinds:[],checkout_transient_conflict_modes:[],payment_identifiers:{capacity,supported_modes:['exact_requested','rial_suffix4'],suffix_digits:4,suffix_modulus:10000}}});
+const respond=(route,data,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(data)}),paged=data=>({data,meta:{pager:{total_pages:1,total_items:data.length}}});
+page.on('pageerror',e=>errors.push(e.message));
+await page.route(url=>url.pathname.startsWith('/api/'),route=>{
+ const req=route.request(),path=new URL(req.url()).pathname.slice(4),method=req.method();
+ if(method!=='GET')writes.push({path,body:req.postDataJSON()});
+ if(path==='/v1/admin/auth/me')return respond(route,{username:'controlled',scopes,csrf_token:'controlled'});
+ if(path==='/v1/customer/auth/me')return respond(route,{customer_id:31,display_name:'Controlled customer',csrf_token:'controlled'});
+ if(path==='/v1/admin/preferences')return respond(route,{data:{brand_title:'Papilio'}});
+ if(path==='/v1/admin/settings'&&method==='PUT'){if(settingsFail){settingsFail=false;return respond(route,{error:{message_code:'request_failed'}},503);}Object.assign(values,req.postDataJSON().values);return respond(route,{data:settings()});}
+ if(path==='/v1/admin/settings')return respond(route,{data:settings()});
+ if(path==='/v1/admin/payments/sms-origins/capabilities')return respond(route,{data:{supported:true,configured:false,read_available:true,enabled:false,capacity:null,parser_modes:[],identity_modes:[]}});
+ if(path==='/v1/customer/preferences')return respond(route,{data:{...values}});
+ if(path==='/v1/customer/wallet')return respond(route,{data:{balance_rial:0}});
+ if(path==='/v1/customer/topups'||path==='/v1/admin/payments/topups')return respond(route,paged([topup]));
+ if(path==='/v1/customer/topups/91'||path==='/v1/admin/payments/topups/91')return respond(route,{data:topup});
+ if(path.endsWith('/topups/91/instruction'))return respond(route,{data:[instruction]});
+ if(path==='/v1/customer/checkouts/71')return respond(route,{data:checkout});
+ return respond(route,paged([]));
+});
+async function exactAmount(container){const amount=container.getByRole('region',{name:'Exact payment amount'});await amount.getByText('120007 RIAL',{exact:true}).first().waitFor();assert.match(await amount.innerText(),/120000 RIAL/);assert.match(await amount.innerText(),/\+7 RIAL/);assert.match(await amount.innerText(),/0007/);assert.match(await amount.innerText(),/full 120007 RIAL/);}
+try{
+ await page.goto(process.env.PANEL_ORIGIN+'/payments?topup_id=91');await exactAmount(page);assert.equal(writes.length,0);
+ await page.goto(process.env.PANEL_ORIGIN+'/account?topup_id=91');await exactAmount(page);assert.equal(writes.length,0);
+ await page.goto(process.env.PANEL_ORIGIN+'/account?checkout_id=71');const dialog=page.getByRole('dialog',{name:'Plan checkout'});await exactAmount(dialog);assert.match(await dialog.innerText(),/saved plan price above is charged separately/);await page.setViewportSize({width:390,height:844});assert(await dialog.evaluate(el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth;}));
+ await page.goto(process.env.PANEL_ORIGIN+'/settings');const policy=page.getByRole('region',{name:'Payment identifier policy'});await policy.getByText('2000 RIAL',{exact:true}).waitFor();await policy.getByLabel('Maximum identifier adjustment (RIAL)').fill('');await page.getByRole('button',{name:'Save settings',exact:true}).click();assert.equal(writes.length,0);await page.getByText('Review the payment identifier adjustment and step before saving settings.',{exact:true}).waitFor();
+ await policy.getByLabel('Maximum identifier adjustment (RIAL)').fill('1500');await policy.getByLabel('Payable amount step (RIAL)').fill('10');await page.getByRole('button',{name:'Save settings',exact:true}).click();await page.getByRole('alert').first().waitFor();assert.equal(writes.length,1);assert.equal(await policy.getByLabel('Maximum identifier adjustment (RIAL)').inputValue(),'1500');await page.getByRole('button',{name:'Save settings',exact:true}).click();await page.getByText('Settings saved. Subsequent requests and checks use the updated values.',{exact:true}).waitFor();assert.deepEqual(writes[0],writes[1]);assert.deepEqual(writes[1].body.values.checkout.payment_identifier,{mode:'rial_suffix4',max_adjustment_rial:1500,amount_step_rial:10});
+ capacity=null;values.checkout.payment_identifier=null;await page.reload();await policy.getByText('Identifier allocation is unavailable in this runtime. Historical codes remain readable; new four-digit allocations cannot be enabled.',{exact:true}).waitFor();await policy.getByLabel('Set an explicit payment identifier policy').check();const suffixOption=policy.getByRole('option',{name:'Four-digit identifier in the RIAL amount',exact:true});assert(await suffixOption.evaluate(el=>el.disabled&&el.hasAttribute('disabled')));
+ scopes=['settings:read'];await page.reload();await policy.getByLabel('Set an explicit payment identifier policy').waitFor();assert(await policy.getByLabel('Set an explicit payment identifier policy').isDisabled());assert.equal(writes.length,2);assert.deepEqual(errors,[]);
+ console.log(JSON.stringify({boundary:'controlled HTTP, actual Vue; no native financial claim',cases:7,pageErrors:errors.length,settingsRequests:writes.length}));
+}finally{await browser.close();}

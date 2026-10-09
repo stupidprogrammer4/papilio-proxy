@@ -1,0 +1,62 @@
+// Actual Vue interaction with controlled HTTP; this does not prove bank settlement or native credits.
+import assert from 'node:assert/strict';
+import {pathToFileURL} from 'node:url';
+const {chromium}=await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE).href);
+const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_EXECUTABLE});
+const page=await browser.newPage(),errors=[],writes=[];
+let scope=['payments:read','payments:update'],attempt=0,heldReview=null,holdReview=false,foreignReceipt=false;
+const truthFence=process.env.SMS_REVIEW_CASE==='truth_fence';
+const capacity={enabled:true,page_size:2,max_page_size:20,max_profiles:50,max_profile_bytes:200000,max_rules_per_field:20,max_marker_chars:200,max_clauses:50,max_message_bytes:4000,max_realms:50,max_aliases_per_realm:20,max_match_candidates:20,original_timestamp_future_seconds:60,original_timestamp_max_age_seconds:86400};
+const capabilities={supported:true,configured:true,read_available:true,enabled:true,capacity,parser_modes:['legacy_strict_reference','labelled_credit'],identity_modes:['bank_reference_required','trusted_origin_fingerprint'],amount_relations:['label_before_amount','amount_before_label'],units:['rial','toman'],required_origin_fields:['kind','original_provider_timestamp_ms','original_sender','canonicalization_revision'],canonicalization_revision:1,source_assurance:'enrolled_sender_declared_metadata',bank_settlement_verified:false};
+const observation=id=>({id,event_id:'controlled-'+id,device_id:87,sender:'Controlled bank',amount_rial:100000,balance_rial:900000,bank_reference:null,sent_at:'2026-10-08T00:00:00Z',direction:'credit',parser_revision_id:194,parser_definition_sha256:'a'.repeat(64),receiving_realm_id:70,receiving_alias_id:79,captured_destination_id:61,captured_destination_revision:3,parse_reason_code:null,origin_reason_code:null,origin_kind:'direct_sms',original_provider_timestamp_ms:1791417600000,canonicalization_revision:1,declared_notification_sha256:'d'.repeat(64),canonical_message_digest:'b'.repeat(64),origin_identity_sha256:'c'.repeat(64)});
+const reviews=new Map([101,102].map(id=>[id,{sms_event_id:id,device_id:87,device_revision:3,receiving_realm_id:70,realm_revision:4,destination_id:61,destination_revision:5,status:'ambiguous',reason_code:'sms_matches_ambiguous',checked_at:'2026-10-08T00:00:00Z',candidate_count:3,topup_id:null,settlement_id:null,evidence_kind:null,manual_approval_available:true}]));
+const candidate=(id,status='pending',selectable=true)=>({topup_id:id,customer_id:id+1000,amount_rial:100000,status,destination_id:61,captured_receiving_realm_id:selectable?70:null,association_kind:selectable?'captured_realm':'unresolved',created_at:'2026-10-08T00:00:00Z',updated_at:'2026-10-08T00:01:00Z',already_linked:false,selectable});
+const respond=(route,data,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(data)});
+const paged=(data,pages=1)=>({data,meta:{pager:{total_pages:pages,total_items:data.length}}});
+page.on('pageerror',error=>errors.push(error.message));
+await page.route(url=>url.pathname.startsWith('/api/'),route=>{
+ const req=route.request(),url=new URL(req.url()),path=url.pathname.slice(4),method=req.method();
+ if(method!=='GET')writes.push({path,body:req.postDataJSON()});
+ if(path==='/v1/admin/auth/me')return respond(route,{username:'controlled-financial-review',scopes:scope,csrf_token:'controlled-csrf'});
+ if(path==='/v1/admin/preferences')return respond(route,{data:{revision:0,values:{brand_title:'Papilio'}}});
+ if(path==='/v1/admin/payments/sms-origins/capabilities')return respond(route,{data:capabilities});
+ if(path==='/v1/admin/payments/sms')return respond(route,paged([observation(101),observation(102)]));
+ if(path==='/v1/admin/payments/sms/101'||path==='/v1/admin/payments/sms/102')return respond(route,{data:observation(Number(path.split('/').at(-1)))});
+ const match=path.match(/^\/v1\/admin\/payments\/sms-origins\/sms-events\/(101|102)\/(review|candidates|approve)$/);
+ if(match){const id=Number(match[1]),action=match[2],review=reviews.get(id);
+  if(action==='review'){if(holdReview){heldReview=route;return;}return respond(route,{data:review});}
+  if(action==='candidates')return respond(route,paged(id===102?[candidate(88,'approved')]:Number(url.searchParams.get('page'))===2?[candidate(77)]:[candidate(55,'approved',false),candidate(66)],id===102?1:2));
+  const body=req.postDataJSON();assert.deepEqual(Object.keys(body).sort(),['expected_destination_revision','expected_device_revision','expected_realm_revision','reason','topup_id']);
+  if(foreignReceipt)return respond(route,{data:{...review,sms_event_id:102,status:'approved',topup_id:88,settlement_id:999,evidence_kind:'trusted_sms_origin',manual_approval_available:false}});
+  if(id===101&&!truthFence){attempt++;if(attempt===1)return respond(route,{error:{message_code:'controlled_outage'}},503);if(attempt===2){Object.assign(review,{device_revision:4,realm_revision:5,destination_revision:6});return respond(route,{error:{message_code:'sms_review_revision_conflict'}},409);}assert.deepEqual(body,{topup_id:77,expected_device_revision:4,expected_realm_revision:5,expected_destination_revision:6,reason:'Reviewed controlled receiving-account association'});}
+  else if(id===102)assert.equal(body.topup_id,88);
+  Object.assign(review,{status:'approved',reason_code:null,topup_id:body.topup_id,settlement_id:id+900,evidence_kind:'trusted_sms_origin',manual_approval_available:false});return respond(route,{data:review});
+ }
+ return respond(route,paged([]));
+});
+async function openSelected(){
+ await page.goto(process.env.PANEL_ORIGIN+'/payments');await page.getByRole('button',{name:'Inspect SMS',exact:true}).first().click();const dialog=page.getByRole('dialog',{name:'SMS observation'}),panel=dialog.getByRole('region',{name:'Recorded SMS settlement review'}),candidates=dialog.getByRole('region',{name:'Payment candidates for this SMS'});await panel.getByText('sms_matches_ambiguous',{exact:true}).waitFor();await candidates.getByRole('button',{name:'›',exact:true}).click();await candidates.getByRole('button',{name:'Select',exact:true}).click();await panel.getByLabel('Manual review reason').fill('Reviewed controlled receiving-account association');return {dialog,panel};
+}
+async function staleRead(){
+ const {panel}=await openSelected();const stale={...reviews.get(101)};holdReview=true;const observed=page.waitForRequest(req=>new URL(req.url()).pathname.endsWith('/sms-events/101/review'));await panel.getByRole('button',{name:'Reload recorded decision'}).click();await observed;
+ await panel.getByRole('button',{name:'Approve selected SMS payment'}).click();await panel.getByText('Linked settlement',{exact:true}).waitFor();holdReview=false;assert(heldReview);await respond(heldReview,{data:stale});heldReview=null;await panel.getByText('Loading recorded settlement decision…',{exact:true}).waitFor({state:'hidden'});assert.equal(await panel.getByText('Linked settlement',{exact:true}).count(),1,'delayed GET overwrote the committed approval receipt');
+}
+async function wrongIdentity(){
+ Object.assign(reviews.get(101),{status:'ambiguous',reason_code:'sms_matches_ambiguous',topup_id:null,settlement_id:null,evidence_kind:null,manual_approval_available:true});foreignReceipt=true;const {panel}=await openSelected();await panel.getByRole('button',{name:'Approve selected SMS payment'}).click();await panel.getByRole('button',{name:'Retry retained SMS approval'}).waitFor({timeout:3000});assert.equal(await panel.getByText('Linked settlement',{exact:true}).count(),0,'foreign receipt was advertised as this SMS settlement');assert.equal(await panel.getByLabel('Manual review reason').inputValue(),'Reviewed controlled receiving-account association');
+}
+try{
+ if(truthFence){await staleRead();await wrongIdentity();assert.equal(errors.length,0);console.log(JSON.stringify({boundary:'controlled HTTP, actual Vue receipt/read conformance',cases:2,pageErrors:errors.length}));}
+ else {
+ await page.goto(process.env.PANEL_ORIGIN+'/payments');await page.getByRole('button',{name:'Inspect SMS',exact:true}).first().click();
+ let dialog=page.getByRole('dialog',{name:'SMS observation'}),panel=dialog.getByRole('region',{name:'Recorded SMS settlement review'}),candidates=dialog.getByRole('region',{name:'Payment candidates for this SMS'});
+ await panel.getByText('sms_matches_ambiguous',{exact:true}).waitFor();assert.match(await panel.innerText(),/last recorded settlement decision/);assert.match(await dialog.innerText(),/Balance/);assert.match(await dialog.innerText(),/Actual bank reference/);
+ assert(await candidates.getByRole('row').filter({hasText:'Payment #55'}).getByRole('button',{name:'Not selectable'}).isDisabled());
+ await candidates.getByRole('button',{name:'›',exact:true}).click();await candidates.getByText('Payment #77 · Customer #1077',{exact:true}).waitFor();await candidates.getByRole('button',{name:'Select',exact:true}).click();await candidates.getByRole('button',{name:'‹',exact:true}).click();await candidates.getByText('Payment #66 · Customer #1066',{exact:true}).waitFor();assert.match(await candidates.innerText(),/Selected payment #77/);
+ await panel.getByLabel('Manual review reason').fill('Reviewed controlled receiving-account association');await panel.getByRole('button',{name:'Approve selected SMS payment'}).click();await panel.getByRole('alert').waitFor();assert(await panel.getByLabel('Manual review reason').isDisabled());assert.equal(writes[0].body.topup_id,77);
+ await dialog.getByRole('button',{name:'Close dialog'}).click();await page.getByRole('button',{name:'Inspect SMS',exact:true}).first().click();dialog=page.getByRole('dialog',{name:'SMS observation'});panel=dialog.getByRole('region',{name:'Recorded SMS settlement review'});await panel.getByRole('button',{name:'Retry retained SMS approval'}).click();await panel.getByText('The SMS source or receiving account changed. Reload the recorded decision and review its current revisions; your approval draft is retained.',{exact:true}).waitFor();assert.deepEqual(writes[0],writes[1]);
+ await panel.getByRole('button',{name:'Reload recorded decision'}).click();await panel.getByText('The attempted approval is retained for payment #77 with device revision 3, receiving-account revision 4 and destination revision 5. Retry preserves its payment and reason.',{exact:true}).waitFor();await panel.getByRole('button',{name:'Use reviewed current revisions for retained approval'}).click();await panel.getByRole('button',{name:'Retry retained SMS approval'}).click();await panel.getByText('Linked settlement',{exact:true}).waitFor();assert.equal(writes.length,3);assert.equal(writes[2].body.topup_id,77);assert.equal(writes[2].body.reason,writes[0].body.reason);
+ await dialog.getByRole('button',{name:'Close dialog'}).click();await page.getByRole('button',{name:'Inspect SMS',exact:true}).nth(1).click();dialog=page.getByRole('dialog',{name:'SMS observation'});panel=dialog.getByRole('region',{name:'Recorded SMS settlement review'});await panel.getByRole('button',{name:'Select',exact:true}).click();await panel.getByText('Attach the SMS to existing credit; no new credit is requested.',{exact:false}).waitFor();await panel.getByLabel('Manual review reason').fill('Associate the previously approved controlled payment');await panel.getByRole('button',{name:'Attach SMS to existing credit',exact:true}).click();await panel.getByText('Linked settlement',{exact:true}).waitFor();assert.equal(writes.length,4);
+ await page.setViewportSize({width:390,height:844});assert(await dialog.evaluate(el=>el.getBoundingClientRect().width<=innerWidth));await dialog.getByRole('button',{name:'Close dialog'}).click();scope=['payments:read'];await page.reload();await page.getByRole('button',{name:'Inspect SMS',exact:true}).first().click();dialog=page.getByRole('dialog',{name:'SMS observation'});await dialog.getByText('Linked settlement',{exact:true}).waitFor();assert.equal(await dialog.getByRole('button',{name:'Run settlement check'}).count(),0);assert.equal(await dialog.getByLabel('Manual review reason').count(),0);assert.equal(writes.length,4);assert.equal(errors.length,0);
+ console.log(JSON.stringify({boundary:'controlled HTTP, actual Vue; no native financial claim',cases:6,pageErrors:errors.length,manualRequests:writes.length}));
+}
+}finally{if(heldReview)await respond(heldReview,{data:reviews.get(101)});await browser.close();}
