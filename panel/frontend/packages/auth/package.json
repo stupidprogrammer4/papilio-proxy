@@ -1,0 +1,14 @@
+{
+  "name": "@papilio/auth",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./LoginForm.vue": "./src/LoginForm.vue"
+  },
+  "dependencies": {
+    "@papilio/api": "workspace:*",
+    "pinia": "^2.3.1",
+    "vue": "^3.5.13"
+  }
+}

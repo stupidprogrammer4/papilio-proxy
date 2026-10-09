@@ -1,0 +1,7 @@
+{
+  "name": "@papilio/ui",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts", "./NumField.vue": "./src/NumField.vue", "./Icon.vue": "./src/Icon.vue", "./Modal.vue": "./src/Modal.vue" },
+  "dependencies": { "vue": "^3.5.13" }
+}
