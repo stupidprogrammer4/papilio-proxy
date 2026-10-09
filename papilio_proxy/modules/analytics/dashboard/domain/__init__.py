@@ -1,1 +1,0 @@
-"""Dashboard domain records."""

@@ -1,8 +1,0 @@
-{
-  "include": ["papilio_proxy", "tests"],
-  "exclude": [".venv"],
-  "venvPath": ".",
-  "venv": ".venv",
-  "pythonVersion": "3.13",
-  "typeCheckingMode": "standard"
-}
