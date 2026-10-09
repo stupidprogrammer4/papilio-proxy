@@ -182,6 +182,13 @@ class NativeRelay:
                     assert self.path.startswith(
                         "/v1/nodes/"
                     ) and self.path.endswith("/ip-admission"), "relay_scope"
+                    body = self.rfile.read(length)
+                    source = json.loads(body).get("source_ip")
+                    source_alias = {
+                        "127.0.0.2": "A",
+                        "127.0.0.3": "B",
+                        "127.0.0.4": "C",
+                    }.get(source, "other")
                     response = owner.client.post(
                         self.path,
                         headers={
@@ -190,9 +197,24 @@ class NativeRelay:
                             ),
                             "Content-Type": "application/json",
                         },
-                        content=self.rfile.read(length),
+                        content=body,
                     )
-                    reason = response.json().get("data", {}).get("reason")
+                    data = response.json().get("data", {})
+                    reason = data.get("reason")
+                    valid_until = data.get("valid_until")
+                    remaining_ms = (
+                        round(
+                            (
+                                dt.datetime.fromisoformat(
+                                    valid_until.replace("Z", "+00:00")
+                                )
+                                - dt.datetime.now(dt.UTC)
+                            ).total_seconds()
+                            * 1000
+                        )
+                        if valid_until is not None
+                        else None
+                    )
                     safe_reason = (
                         reason
                         if reason
@@ -210,8 +232,10 @@ class NativeRelay:
                     owner.diagnostics.append(
                         {
                             "node": node_alias,
+                            "source": source_alias,
                             "status": response.status_code,
                             "reason": safe_reason,
+                            "lease_remaining_ms": remaining_ms,
                             "seconds": round(time.monotonic() - started, 3),
                         }
                     )
