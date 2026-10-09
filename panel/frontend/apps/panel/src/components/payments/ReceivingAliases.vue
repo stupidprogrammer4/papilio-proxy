@@ -1,0 +1,11 @@
+<script setup lang="ts">
+import { onUnmounted, ref, watch } from "vue";
+import { request, query, type Page, type SmsReceivingAlias } from "@papilio/api";
+import { faDate, faNumber } from "@papilio/ui";
+const props=defineProps<{realmId:number}>();
+const rows=ref<SmsReceivingAlias[]>([]),page=ref(1),pages=ref(1),loading=ref(false),error=ref("");let alive=true,sequence=0;
+async function load():Promise<void>{const id=props.realmId,key=++sequence;loading.value=true;error.value="";try{const result=await request<Page<SmsReceivingAlias>>(`/v1/admin/payments/sms-origins/receiving-realms/${id}/aliases?${query({page:page.value})}`);if(!alive||key!==sequence||props.realmId!==id)return;rows.value=result.data;pages.value=result.meta.pager?.total_pages??1;}catch(cause){if(alive&&key===sequence)error.value=cause instanceof Error?cause.message:"Could not read receiving aliases.";}finally{if(alive&&key===sequence)loading.value=false;}}
+watch(()=>props.realmId,()=>{page.value=1;rows.value=[];void load();},{immediate:true});onUnmounted(()=>{alive=false;++sequence;});
+</script>
+<template><section aria-label="Receiving account aliases"><div class="page-head"><h3>Associated aliases</h3><button class="btn small secondary" :disabled="loading" @click="load">Refresh aliases</button></div><p v-if="error" class="message error" role="alert">{{error}}</p><div class="table-wrap"><table class="data-table"><thead><tr><th>Alias</th><th>Method</th><th>Account identity digest</th><th>Bank namespace</th><th>Created</th></tr></thead><tbody><tr v-for="row in rows" :key="row.id"><td>#{{faNumber(row.id)}}</td><td>{{row.kind}}</td><td><code>{{row.account_sha256}}</code></td><td>{{row.bank_namespace??'Not required'}}</td><td>{{faDate(row.created_at)}}</td></tr></tbody></table></div><p v-if="loading">Loading aliases…</p><p v-else-if="!rows.length&&!error">No associated aliases. Bind a saved payment destination to this receiving account.</p><div class="pager"><button :disabled="loading||page<=1" @click="page--;load()">‹</button><span>{{faNumber(page)}} / {{faNumber(pages)}}</span><button :disabled="loading||page>=pages" @click="page++;load()">›</button></div></section></template>
+<style scoped>code{overflow-wrap:anywhere}</style>
