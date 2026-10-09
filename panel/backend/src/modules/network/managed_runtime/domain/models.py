@@ -18,6 +18,10 @@ class ManagedInstallationModel(PersistenceEntity):
     runtime_revision_id: int = ForeignKeyField("tbl_core_runtime_revisions.id")
     installation_sha256: str = CharField(64)
     encrypted_manifest: str = TextField()
+    state: str = CharField(16, default="issued")
+    claim_hash: str | None = CharField(64, default=None)
+    claim_until: datetime | None = TimestampField(default=None)
+    acknowledgement_sha256: str | None = CharField(64, default=None)
 
 
 class ManagedEpochModel(PersistenceEntity):
@@ -29,7 +33,7 @@ class ManagedEpochModel(PersistenceEntity):
 
 
 class ManagedBarrierModel(PersistenceEntity):
-    epoch_id: int = ForeignKeyField("tbl_managed_epochs.id")
+    epoch_id: int = ForeignKeyField("tbl_managed_epoches.id")
     barrier_id: str = CharField(32)
     acceptance_id: str = CharField(32)
     snapshot_sha256: str = CharField(64)
@@ -40,7 +44,7 @@ class ManagedBarrierModel(PersistenceEntity):
 
 
 class ManagedWindowModel(PersistenceEntity):
-    epoch_id: int = ForeignKeyField("tbl_managed_epochs.id")
+    epoch_id: int = ForeignKeyField("tbl_managed_epoches.id")
     grant_id: int = ForeignKeyField("tbl_usage_grants.id", unique=True)
     profile_id: int = ForeignKeyField("tbl_profiles.id")
     subscription_id: int = ForeignKeyField("tbl_subscriptions.id")

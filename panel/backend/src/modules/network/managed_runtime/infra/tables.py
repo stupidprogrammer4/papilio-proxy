@@ -1,6 +1,8 @@
+from datetime import datetime
+
 from papilio.infra.db.table import BaseTable
-from sqlalchemy import UniqueConstraint
-from sqlalchemy.dialects.mysql import LONGTEXT
+from sqlalchemy import Column, UniqueConstraint
+from sqlalchemy.dialects.mysql import DATETIME, LONGTEXT
 from sqlmodel import Field
 
 from src.modules.network.managed_runtime.domain.models import (
@@ -15,7 +17,10 @@ from src.modules.network.managed_runtime.domain.models import (
 class ManagedInstallationTable(
     ManagedInstallationModel, BaseTable, table=True
 ):
-    encrypted_manifest: str = Field(sa_type=LONGTEXT())
+    encrypted_manifest: str = Field(sa_type=LONGTEXT)
+    claim_until: datetime | None = Field(
+        default=None, sa_column=Column(DATETIME(fsp=6), nullable=True)
+    )
     __table_args__ = (
         UniqueConstraint(
             "core_id",
@@ -27,8 +32,12 @@ class ManagedInstallationTable(
 
 
 class ManagedEpochTable(ManagedEpochModel, BaseTable, table=True):
-    encrypted_receipt: str = Field(sa_type=LONGTEXT())
+    encrypted_receipt: str = Field(sa_type=LONGTEXT)
+    installed_closed_at: datetime = Field(
+        sa_column=Column(DATETIME(fsp=6), nullable=False)
+    )
     __table_args__ = (
+        UniqueConstraint("process_epoch", name="uq_managed_process_epoch"),
         UniqueConstraint(
             "installation_id",
             "process_epoch",
@@ -38,7 +47,7 @@ class ManagedEpochTable(ManagedEpochModel, BaseTable, table=True):
 
 
 class ManagedBarrierTable(ManagedBarrierModel, BaseTable, table=True):
-    encrypted_receipt: str = Field(sa_type=LONGTEXT())
+    encrypted_receipt: str = Field(sa_type=LONGTEXT)
     __table_args__ = (
         UniqueConstraint(
             "epoch_id", "barrier_id", name="uq_managed_barrier_identity"
@@ -50,7 +59,7 @@ class ManagedBarrierTable(ManagedBarrierModel, BaseTable, table=True):
 
 
 class ManagedWindowTable(ManagedWindowModel, BaseTable, table=True):
-    encrypted_window: str = Field(sa_type=LONGTEXT())
+    encrypted_window: str = Field(sa_type=LONGTEXT)
     __table_args__ = (
         UniqueConstraint(
             "profile_id",
@@ -62,4 +71,4 @@ class ManagedWindowTable(ManagedWindowModel, BaseTable, table=True):
 
 
 class ManagedAdmissionTable(ManagedAdmissionModel, BaseTable, table=True):
-    encrypted_receipt: str = Field(sa_type=LONGTEXT())
+    encrypted_receipt: str = Field(sa_type=LONGTEXT)
