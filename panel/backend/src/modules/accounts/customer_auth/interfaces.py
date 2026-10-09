@@ -1,0 +1,16 @@
+from collections.abc import Awaitable
+from typing import Protocol
+
+from src.modules.accounts.customer_auth.domain.results import (
+    CustomerLoginLink,
+    CustomerPrincipal,
+    IssuedCustomerSession,
+)
+
+
+class ICustomerAuthCommand(Protocol):
+    def revoke_customer(self, customer_id: int) -> Awaitable[None]: ...
+    def issue_link(self, customer_id: int) -> Awaitable[CustomerLoginLink]: ...
+    def exchange(self, token: str) -> Awaitable[IssuedCustomerSession]: ...
+    def current(self, token: str) -> Awaitable[CustomerPrincipal]: ...
+    def logout(self, token: str) -> Awaitable[None]: ...
