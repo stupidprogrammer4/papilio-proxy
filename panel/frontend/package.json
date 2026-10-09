@@ -5,6 +5,7 @@
   "packageManager": "pnpm@9.15.9",
   "scripts": {
     "dev": "pnpm --filter @papilio/panel dev",
+    "preview": "pnpm --filter @papilio/panel preview",
     "build": "pnpm --filter @papilio/panel build"
   }
 }

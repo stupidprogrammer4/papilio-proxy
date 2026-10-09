@@ -2,7 +2,7 @@
   "name": "@papilio/panel",
   "private": true,
   "type": "module",
-  "scripts": { "dev": "vite", "build": "vue-tsc --noEmit && vite build" },
+  "scripts": { "dev": "vite", "preview": "vite preview", "build": "vue-tsc --noEmit && vite build" },
   "dependencies": {
     "@papilio/api": "workspace:*",
     "@papilio/auth": "workspace:*",
