@@ -19,6 +19,7 @@ import (
 )
 
 type config struct {
+	ManagedInstallation  *noderuntime.ManagedInstallationPolicy  `json:"managed_installation"`
 	CapabilitySubmission *noderuntime.CapabilitySubmissionPolicy `json:"capability_submission"`
 	CapabilityProbe      *noderuntime.CapabilityPolicy           `json:"capability_probe"`
 	Enabled              bool                                    `json:"enabled"`
@@ -179,6 +180,9 @@ func run(ctx context.Context, path string, once bool) (result error) {
 		return err
 	}
 	defer client.Close()
+	if settings.ManagedInstallation != nil && settings.ManagedInstallation.Enabled {
+		return noderuntime.RunManagedInstallation(ctx, client, *settings.ManagedInstallation, once)
+	}
 	journal, err := noderuntime.OpenJournal(settings.StateDirectory, settings.MaxJournalBytes)
 	if err != nil {
 		return err
