@@ -1,0 +1,9 @@
+mysql_executable: mysql
+dump_executable: mysqldump
+command_timeout_seconds: 300
+io_chunk_bytes: 65536
+max_sql_bytes: 268435456
+max_payload_bytes: 536870912
+max_archive_bytes: 805306368
+consistency: online
+temporary_directory: /tmp

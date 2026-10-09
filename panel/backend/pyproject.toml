@@ -1,0 +1,51 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "papilio-api"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+  "aiohttp>=3.11,<4",
+  "papilio[server,mysql,crypto,passwords,rate-limit-redis] @ https://codeload.github.com/stupidprogrammer4/papilio/tar.gz/e026dbc9aa335ab4f6cc79f7ff2aecb198bd93ad",
+  "papilio-tasks[scheduler-redis] @ https://codeload.github.com/stupidprogrammer4/papilio-tasks/tar.gz/bca239763eab5c0d176b5ac8af9e878edb6997a7",
+  "Pillow>=11,<13",
+  "qrcode[pil]>=8.2,<9",
+  "aiomysql>=0.2,<1",
+  "PyMySQL==1.1.2",
+  "sqlmodel>=0.0.24,<1",
+  "alembic>=1.16,<2",
+  "taskiq>=0.12.6,<0.13",
+  "taskiq-redis>=1.2.3,<1.2.4",
+]
+
+[project.optional-dependencies]
+dev = ["ruff>=0.16,<1", "pyright>=1.1.400,<2", "pytest>=8,<10", "httpx>=0.28,<1"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.ruff]
+line-length = 79
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.13"
+typeCheckingMode = "standard"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--import-mode=importlib --strict-markers"
+markers = [
+  "unit: isolated behavior",
+  "integration: isolated real infrastructure",
+  "api: HTTP contracts",
+]

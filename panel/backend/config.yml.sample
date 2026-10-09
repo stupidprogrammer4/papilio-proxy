@@ -1,0 +1,483 @@
+app:
+  modules:
+  - src.modules
+  settings: src.config.settings.PapilioSettings
+fastapi:
+  title: Papilio API
+  description: Private subscription business control plane
+  version: 0.1.0
+run:
+  entrypoint: src.apps.api:app
+  backend: uvicorn
+  mode: dev
+  port: 8000
+storage:
+  path: media
+  temp_dir: tmp
+  max_file_size: 5242880
+  allowed_extensions:
+  - jpg
+  - jpeg
+  - png
+  - webp
+logging:
+  level: INFO
+  format: console
+  service: papilio-api
+db:
+  dsn: mysql+aiomysql://papilio:REPLACE@127.0.0.1:3306/papilio_new
+  test_dsn: mysql+aiomysql://papilio:REPLACE@127.0.0.1:3306/papilio_test
+  pool_size: 5
+  max_overflow: 5
+  pool_timeout: 30
+  pool_recycle: 1800
+tasks:
+  scheduler:
+    url: redis://127.0.0.1:6379/0
+    queue_name: papilio:jobs
+    schedule_prefix: papilio:schedules
+    consumer_group: papilio
+    consumer_id: '0'
+    result_prefix: papilio:results
+    result_ttl: 7200
+resellers:
+  enabled: true
+  portal_origin: https://dealer.example.com
+  session_seconds: 86400
+  max_customers_per_reseller: 10000
+  max_accounts_per_reseller: 100
+  max_plans_per_reseller: 1000
+  max_sessions_per_account: 32
+  max_scopes_per_account: 32
+  defaults:
+    access:
+      login_enabled: false
+      sales_enabled: false
+      renewals_enabled: false
+    owner_is_active: true
+    owner_access:
+      scopes: ['*']
+    wallet_customer_access:
+      is_active: true
+      services_enabled: true
+      renewals_enabled: true
+    policy:
+      require_active_owner: true
+      customer_creation_enabled: true
+      customer_access_override_enabled: false
+      new_customer_access:
+        is_active: true
+        services_enabled: true
+        renewals_enabled: true
+      customer_capacity: 100
+      account_capacity: 8
+      plan_capacity: 100
+      max_sessions_per_account: 8
+      session_limit_mode: replace_oldest
+      payer_mode: reseller_wallet
+      customer_self_purchase: false
+      renewal_price_mode: purchase_snapshot
+      renewal_availability_mode: current_agreement
+      customer_can_disable_reseller_renewal: true
+qr_codes:
+  policy:
+    enabled: true
+    error_correction: M
+    box_size: 8
+    border_modules: 4
+  max_box_size: 24
+  max_border_modules: 16
+  max_side_pixels: 2048
+  max_payload_bytes: 4096
+  max_png_bytes: 1000000
+operations:
+  automation_default_mode: cron
+  automation_default_interval_seconds: 60
+  automation_min_interval_seconds: 1
+  automation_max_interval_seconds: 604800
+  automation_enabled: true
+  automation_timezone: UTC
+  automation_registration_cron: '* * * * *'
+  automation_registration_prefix: 'papilio-business:'
+  automation_max_batch_size: 10000
+  automation_max_recheck_seconds: 86400
+  customer_hold_batch_size: 100
+  customer_hold_scan_cron: '* * * * *'
+  max_staff_grants: 64
+  max_staff_roles: 16
+  max_staff_role_members: 1000
+  staff_inactive_role_assignment: false
+  admin_page_size: 20
+  admin_page_size_max: 100
+  max_plan_duration_days: 3650
+  renewal_batch_size: 100
+  renewal_scan_cron: '*/5 * * * *'
+  bot_page_size: 10
+  quality_window_minutes: 30
+  quality_min_samples: 3
+  quality_min_success_ratio: 0.5
+  sms_clock_skew_seconds: 300
+  sms_match_window_hours: 48
+  sms_match_before_topup_minutes: 30
+  staff_session_hours: 8
+  bot_topup_options_rial:
+  - 1000000
+  - 2000000
+  - 5000000
+  max_request_body_bytes: 65536
+  configuration_export_max_profiles: 10000
+  payment_scan_cron: '*/2 * * * *'
+  payment_batch_size: 100
+  payment_recheck_seconds: 90
+  payment_stale_hours: 24
+  node_health_scan_cron: '*/2 * * * *'
+  node_health_batch_size: 100
+  node_health_recheck_seconds: 90
+  node_health_stale_seconds: 300
+  subscription_attention_scan_cron: '*/5 * * * *'
+  subscription_attention_batch_size: 100
+  subscription_attention_recheck_seconds: 240
+  subscription_expiry_warning_hours: 72
+  provisioning_attention_minutes: 15
+  automation_retry_attempts: 3
+  automation_retry_delay_seconds: 10
+  max_business_topup_options: 20
+  lifecycle_scan_cron: '* * * * *'
+  lifecycle_batch_size: 100
+fulfillment:
+  scan_cron: '* * * * *'
+  batch_size: 100
+  recheck_seconds: 30
+  max_targets: 100
+  max_address_scan: 10000
+  max_claim_seconds: 3600
+  max_attempts: 100
+  policy:
+    automatic: true
+    activation: all
+    minimum_successes: 1
+    expiry_start: activation
+    failure_action: hold
+    max_attempts: 5
+    claim_seconds: 120
+    retry_seconds: 30
+    deadline_minutes: 60
+    renewal_quota: reset
+    renewal_price: purchased
+    renewal_trigger: expiry
+security:
+  admin_session_key: REPLACE_WITH_32_RANDOM_CHARACTERS
+  sms_webhook_key: REPLACE_WITH_DIFFERENT_32_RANDOM_CHARACTERS
+  bot_service_key: REPLACE_WITH_ANOTHER_32_RANDOM_CHARACTERS
+ip_limits:
+  max_assignment_profiles: 10000
+  enabled: false
+  mode: reject_new
+  max_ips: 2
+  lease_seconds: 120
+  ban_seconds: 300
+  max_ips_ceiling: 100
+  max_lease_seconds: 3600
+  max_ban_seconds: 86400
+public:
+  customer_portal_origin: https://panel.example.com
+  customer_link_rotation: false
+  brand_title: پاپیلیو
+  subscription_origin: https://sub.example.com
+  admin_origin: https://admin.example.com
+  payment_instructions: null
+  support_handle: null
+  additional_admin_origins: []
+crypto:
+  encryption_key: REPLACE_WITH_DIFFERENT_32_RANDOM_CHARACTERS
+  password_salt: REPLACE_WITH_DIFFERENT_RANDOM_PASSWORD_PEPPER
+redis:
+  url: redis://127.0.0.1:6379/0
+  max_connections: 10
+  socket_timeout: 2
+  socket_connect_timeout: 2
+  health_check_interval: 30
+rate_limit:
+  enabled: true
+  trusted_proxies: []
+  general:
+    limit: 120
+    window_seconds: 60
+  rules:
+    papilio_reseller_login_ip:
+      limit: 10
+      window_seconds: 60
+    papilio_reseller_login_account:
+      limit: 5
+      window_seconds: 60
+    papilio_admin_login:
+      limit: 5
+      window_seconds: 60
+    papilio_customer_login:
+      limit: 10
+      window_seconds: 60
+usage:
+  policy:
+    mode: reported
+    grant_bytes: 16777216
+    grant_seconds: 120
+    report_max_age_seconds: 86400
+    report_future_seconds: 60
+  max_grant_bytes: 1073741824
+  max_grant_seconds: 3600
+  max_report_delta_bytes: 1099511627776
+checkout:
+  # Owning application ceilings; the audited panel policy selects actual limits.
+  payment_identifier_capacity:
+    max_adjustment_rial: 9999
+    max_candidate_amounts: 10000
+    max_active_codes: 10000
+  policy:
+    destination_mode: optional
+    allowed_methods:
+    - card
+    - iban
+    - bank_account
+    minimum_topup_rial: 1
+    maximum_topup_rial: 1000000000
+  maximum_topup_rial: 9007199254740991
+customer_auth:
+  enabled: true
+  login_seconds: 300
+  session_seconds: 86400
+receipts:
+  enabled: true
+  max_image_bytes: 5242880
+  max_request_bytes: 6291456
+  max_per_topup: 5
+  max_pixels: 16000000
+  allowed_formats:
+  - JPEG
+  - PNG
+  - WEBP
+  jpeg_quality: 85
+  max_concurrent_images: 2
+customers:
+  creation_access:
+    is_active: true
+    services_enabled: true
+    renewals_enabled: true
+support:
+  policy:
+    new_tickets_enabled: true
+    customer_replies_enabled: true
+    staff_reply_status: waiting_customer
+    staff_replies_enabled: true
+    customer_closure_enabled: true
+    customer_reopen_enabled: false
+    closed_reply_mode: reject
+    max_open_tickets: 3
+    max_messages_per_ticket: 100
+    max_message_chars: 4000
+  max_open_tickets: 100
+  max_messages_per_ticket: 1000
+  max_message_chars: 16000
+notifications:
+  policy:
+    enabled: true
+    channel_mode: inbox
+    delivery_enabled: false
+    ambiguous_mode: hold
+    backoff_mode: exponential
+    retry_seconds: 30
+    max_retry_seconds: 3600
+    max_attempts: 5
+    lease_seconds: 60
+    max_message_chars: 3500
+    templates:
+      manual:
+        enabled: true
+        title: پیام پشتیبانی
+        body: پیام جدیدی برای شما ثبت شده است.
+      support_reply:
+        enabled: true
+        title: پاسخ پشتیبانی
+        body: پاسخ تازه‌ای در تیکت {id} ثبت شده است. از بخش پشتیبانی حساب کاربری گفتگو
+          را ببینید.
+      tier_changed:
+        enabled: true
+        title: گروه مشتری شما تغییر کرد
+        body: گروه شما به {status} تغییر کرد. تخفیف جاری را در حساب کاربری ببینید.
+      discount_applied:
+        enabled: true
+        title: تخفیف خرید
+        body: در خرید اشتراک {id} مبلغ {amount_toman} تومان تخفیف دریافت کردید.
+      volume_low:
+        enabled: true
+        title: حجم اشتراک رو به پایان است
+        body: حجم باقیمانده اشتراک {id} کم شده است. برای تمدید وارد حساب کاربری شوید.
+      renewal_available:
+        enabled: true
+        title: امکان تمدید اشتراک
+        body: اشتراک {id} قابل تمدید است. قیمت و موجودی را در حساب کاربری بررسی کنید.
+      payment_approved:
+        enabled: true
+        title: تأیید پرداخت
+        body: پرداخت {id} به مبلغ {amount_toman} تومان تأیید و کیف پول شارژ شد.
+      expiry_soon:
+        enabled: true
+        title: پایان نزدیک اشتراک
+        body: اشتراک {id} به پایان اعتبار نزدیک است. اعتبار و تمدید را در حساب کاربری
+          بررسی کنید.
+      renewal_unfunded:
+        enabled: true
+        title: موجودی ناکافی تمدید
+        body: موجودی کیف پول برای تمدید خودکار اشتراک {id} کافی نیست.
+      provisioning_failed:
+        enabled: true
+        title: نیاز به پیگیری اشتراک
+        body: آماده‌سازی اشتراک {id} نیاز به پیگیری دارد. مبلغ پرداخت‌شده در روند
+          بازیابی محفوظ است.
+      subscription_active:
+        enabled: true
+        title: اشتراک آماده است
+        body: اشتراک {id} آمادهٔ استفاده است. کانفیگ را از حساب کاربری دریافت کنید.
+  outbound_enabled: false
+  endpoint: null
+  delivery_key: null
+  allow_loopback_http: false
+  timeout_seconds: 15
+  http_pool:
+    max_connections: 50
+    max_connections_per_host: 50
+    keepalive_seconds: 15
+    dns_cache_seconds: 15
+  max_response_bytes: 4096
+  lease_margin_seconds: 5
+  max_attempts: 20
+  max_retry_seconds: 86400
+  max_lease_seconds: 3600
+  max_message_chars: 16000
+  batch_size: 50
+  scan_cron: '* * * * *'
+trials:
+  policy:
+    enabled: false
+    plan_id: null
+    eligibility: no_paid_purchase
+    concurrent_mode: reject_active
+    max_claims_per_customer: 1
+    cooldown_seconds: 0
+    quota_bytes: 1073741824
+    duration_days: 1
+  max_claims_per_customer: 20
+  max_cooldown_seconds: 31536000
+  max_quota_bytes: 107374182400
+  max_duration_days: 30
+
+openvpn:
+  enabled: true
+  max_ca_validity_days: 7300
+  max_server_validity_days: 1825
+  max_client_validity_days: 1825
+  max_crl_validity_seconds: 604800
+  max_clients: 10000
+  max_routes: 100
+  max_dns_servers: 10
+  max_keepalive_seconds: 300
+  max_restart_seconds: 3600
+  allowed_key_types: [ec_p256, rsa_2048, rsa_3072, rsa_4096]
+
+configuration_json:
+  enabled: true
+  max_document_bytes: 131072
+  max_depth: 32
+
+sms_devices:
+  max_match_candidates: 100
+  enabled: true
+  max_senders_per_device: 32
+  max_key_validity_days: 365
+
+# Enable management to enroll actual receiving-account and SMS metadata.
+sms_origins:
+  enabled: false
+  page_size: 20
+  max_page_size: 100
+  max_profiles: 32
+  max_profile_bytes: 16384
+  max_rules_per_field: 32
+  max_marker_chars: 128
+  max_clauses: 128
+  max_message_bytes: 65536
+  max_realms: 32
+  max_aliases_per_realm: 32
+  max_match_candidates: 100
+  original_timestamp_future_seconds: 30
+  original_timestamp_max_age_seconds: 86400
+
+loyalty:
+  max_plan_overrides: 128
+  max_tiers: 32
+  defaults:
+    enabled: true
+    tier_basis: net_purchases
+    unlimited_credit_mode: equivalent
+    unlimited_equivalent_bytes: 107374182400
+    unlimited_plan_bytes: {}
+    first_purchase_basis: net_purchases
+    first_purchase_discount_bps: 0
+    combination_mode: best
+    maximum_discount_bps: 10000
+    minimum_qualifying_rial: 1
+    renewal_tier_discount: true
+    notify_tier_changes: true
+    notify_discounts: true
+  initial_tiers:
+    - {code: normal, title: Normal, minimum_bytes: 0, discount_bps: 0, is_enabled: true}
+    - {code: bronze, title: Bronze, minimum_bytes: 107374182400, discount_bps: 0, is_enabled: true}
+    - {code: silver, title: Silver, minimum_bytes: 536870912000, discount_bps: 0, is_enabled: true}
+    - {code: gold, title: Gold, minimum_bytes: 1073741824000, discount_bps: 0, is_enabled: true}
+
+core_exports:
+  enabled: true
+  max_configurations: 128
+  max_profiles: 16384
+  max_output_bytes: 16777216
+
+core_runtime:
+  enabled: true
+  allow_start: false
+  scan_batch_size: 100
+  scan_cron: '*/1 * * * *'
+  retry_seconds: 5
+  claim_seconds: 120
+  max_attempts: 5
+  max_profiles: 10000
+  max_configurations: 128
+  max_payload_bytes: 16777216
+
+core_provisioning:
+  mode: disabled
+  batch_size: 100
+  scan_cron: '*/1 * * * *'
+  max_memberships: 10000
+  observation_seconds: 30
+  max_attempts: 5
+  retry_seconds: 5
+
+# Runtime usage proof is disabled until local metering has been verified.
+core_usage:
+  mode: disabled # disabled | observe | polled_stop
+  stats_ports: {} # explicit core ID -> loopback Xray StatsService port
+  max_profiles: 10000
+  max_document_bytes: 20000000
+  observation_seconds: 30
+  max_node_endpoints: 10000
+  max_peer_usage_bytes: 20000000
+  max_open_usage_grants: 10000
+
+node_capabilities:
+  enabled: false
+  max_report_bytes: 16384
+  max_history_per_node: 128
+  page_size: 20
+  max_page_size: 100
+  freshness_seconds: 300
+  max_report_age_seconds: 3600
+  future_skew_seconds: 30
