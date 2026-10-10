@@ -47,6 +47,12 @@ class ManagedEpochTable(ManagedEpochModel, BaseTable, table=True):
 
 
 class ManagedBarrierTable(ManagedBarrierModel, BaseTable, table=True):
+    frozen_at: datetime = Field(
+        sa_column=Column(DATETIME(fsp=6), nullable=False)
+    )
+    accepted_at: datetime = Field(
+        sa_column=Column(DATETIME(fsp=6), nullable=False)
+    )
     encrypted_receipt: str = Field(sa_type=LONGTEXT)
     __table_args__ = (
         UniqueConstraint(
@@ -59,6 +65,12 @@ class ManagedBarrierTable(ManagedBarrierModel, BaseTable, table=True):
 
 
 class ManagedWindowTable(ManagedWindowModel, BaseTable, table=True):
+    issued_at: datetime = Field(
+        sa_column=Column(DATETIME(fsp=6), nullable=False)
+    )
+    valid_until: datetime = Field(
+        sa_column=Column(DATETIME(fsp=6), nullable=False)
+    )
     encrypted_window: str = Field(sa_type=LONGTEXT)
     __table_args__ = (
         UniqueConstraint(

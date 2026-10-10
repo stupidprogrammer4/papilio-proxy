@@ -4,6 +4,7 @@ from datetime import datetime
 
 from papilio.infra.db.schema.entity import PersistenceEntity
 from papilio.infra.db.schema.fields import (
+    BigIntField,
     CharField,
     ForeignKeyField,
     IntField,
@@ -56,9 +57,9 @@ class ManagedWindowModel(PersistenceEntity):
     request_key: str = CharField(128)
     request_sha256: str = CharField(64)
     window_sha256: str = CharField(64)
-    baseline_upload_bytes: int = IntField()
-    baseline_download_bytes: int = IntField()
-    allocated_bytes: int = IntField()
+    baseline_upload_bytes: int = BigIntField()
+    baseline_download_bytes: int = BigIntField()
+    allocated_bytes: int = BigIntField()
     issued_at: datetime = TimestampField()
     valid_until: datetime = TimestampField()
     predecessor_id: int | None = ForeignKeyField(

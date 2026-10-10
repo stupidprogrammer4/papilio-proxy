@@ -67,6 +67,10 @@ class ManagedEpochService:
         result = await self.repo.create(data)
         return result
 
+    async def locked(self, id: int) -> ManagedEpochModel | None:
+        result = await self.repo.locked(id)
+        return result
+
     async def by_epoch(self, epoch: str) -> ManagedEpochModel | None:
         result = await self.repo.by_epoch(epoch)
         return result
@@ -80,6 +84,30 @@ class ManagedWindowService:
         result = await self.repo.get_by_id(id)
         return result
 
+    async def by_identity(self, window_id: str) -> ManagedWindowModel | None:
+        result = await self.repo.by_identity(window_id)
+        return result
+
+    async def locked(self, id: int) -> ManagedWindowModel | None:
+        result = await self.repo.locked(id)
+        return result
+
+    async def by_request(
+        self, profile_id: int, generation: int, request_key: str
+    ) -> ManagedWindowModel | None:
+        result = await self.repo.by_request(
+            profile_id, generation, request_key
+        )
+        return result
+
+    async def initial_for_profile_epoch(
+        self, profile_id: int, epoch_id: int
+    ) -> ManagedWindowModel | None:
+        result = await self.repo.initial_for_profile_epoch(
+            profile_id, epoch_id
+        )
+        return result
+
     async def create(self, data: ManagedWindowModel) -> ManagedWindowModel:
         result = await self.repo.create(data)
         return result
@@ -91,6 +119,12 @@ class ManagedBarrierService:
 
     async def find(self, id: int) -> ManagedBarrierModel | None:
         result = await self.repo.get_by_id(id)
+        return result
+
+    async def by_identity(
+        self, epoch_id: int, barrier_id: str
+    ) -> ManagedBarrierModel | None:
+        result = await self.repo.by_identity(epoch_id, barrier_id)
         return result
 
     async def create(self, data: ManagedBarrierModel) -> ManagedBarrierModel:

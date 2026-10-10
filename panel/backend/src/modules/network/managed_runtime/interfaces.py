@@ -1,6 +1,10 @@
 from collections.abc import Awaitable
 from typing import Protocol
 
+from src.modules.network.managed_runtime.domain.barriers import (
+    ManagedWindowFinalOut,
+    ManagedWindowFinalSubmission,
+)
 from src.modules.network.managed_runtime.domain.contracts import (
     ManagedRuntimeReadiness,
 )
@@ -17,6 +21,20 @@ from src.modules.network.managed_runtime.domain.models import (
     ManagedInstallationModel,
     ManagedWindowModel,
 )
+from src.modules.network.managed_runtime.domain.windows import (
+    ManagedInitialWindowCreate,
+    ManagedInitialWindowOut,
+)
+
+
+class IManagedFinalityCommand(Protocol):
+    def finalize(
+        self,
+        code: str,
+        key: str,
+        window_id: str,
+        data: ManagedWindowFinalSubmission,
+    ) -> Awaitable[ManagedWindowFinalOut]: ...
 
 
 class IManagedInstallationService(Protocol):
@@ -38,6 +56,7 @@ class IManagedEpochService(Protocol):
     def create(
         self, data: ManagedEpochModel
     ) -> Awaitable[ManagedEpochModel]: ...
+    def locked(self, id: int) -> Awaitable[ManagedEpochModel | None]: ...
     def by_epoch(self, epoch: str) -> Awaitable[ManagedEpochModel | None]: ...
 
 
@@ -58,6 +77,16 @@ class IManagedInstallationCommand(Protocol):
 
 
 class IManagedWindowService(Protocol):
+    def by_identity(
+        self, window_id: str
+    ) -> Awaitable[ManagedWindowModel | None]: ...
+    def locked(self, id: int) -> Awaitable[ManagedWindowModel | None]: ...
+    def by_request(
+        self, profile_id: int, generation: int, request_key: str
+    ) -> Awaitable[ManagedWindowModel | None]: ...
+    def initial_for_profile_epoch(
+        self, profile_id: int, epoch_id: int
+    ) -> Awaitable[ManagedWindowModel | None]: ...
     def find(self, id: int) -> Awaitable[ManagedWindowModel | None]: ...
     def create(
         self, data: ManagedWindowModel
@@ -65,6 +94,9 @@ class IManagedWindowService(Protocol):
 
 
 class IManagedBarrierService(Protocol):
+    def by_identity(
+        self, epoch_id: int, barrier_id: str
+    ) -> Awaitable[ManagedBarrierModel | None]: ...
     def find(self, id: int) -> Awaitable[ManagedBarrierModel | None]: ...
     def create(
         self, data: ManagedBarrierModel
@@ -81,3 +113,9 @@ class IManagedAdmissionService(Protocol):
 class IManagedRuntimeAuthority(Protocol):
     def readiness(self) -> ManagedRuntimeReadiness: ...
     def require_paid_activation(self) -> None: ...
+
+
+class IManagedInitialWindowCommand(Protocol):
+    def issue(
+        self, code: str, key: str, id: int, data: ManagedInitialWindowCreate
+    ) -> Awaitable[ManagedInitialWindowOut]: ...

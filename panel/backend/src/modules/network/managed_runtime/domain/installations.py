@@ -20,6 +20,7 @@ from src.modules.network.managed_runtime.domain.wire import (
 
 class ManagedAdapterPolicy(ImmutableContract):
     enabled: bool = False
+    window_mode: Literal["disabled", "reserved"] = "disabled"
     adapter_revision: Literal[1] = 1
     source_commit: Literal["d2758a023cd7f4174a5a5fa4ff66e487d4342ba0"]
     executable_sha256: Sha256
