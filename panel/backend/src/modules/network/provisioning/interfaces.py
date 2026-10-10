@@ -7,6 +7,10 @@ from src.modules.network.provisioning.domain.dtos import (
     ProvisioningRetry,
     ProvisioningSearch,
 )
+from src.modules.network.provisioning.domain.managed import (
+    ManagedApplicationEvidence,
+    ManagedRevocationEvidence,
+)
 from src.modules.network.provisioning.domain.models import (
     ProvisionRequestModel,
     ProvisionTaskModel,
@@ -16,6 +20,12 @@ from src.modules.sales.catalog.domain.policies import FulfillmentPolicy
 
 
 class IProvisioningCommand(Protocol):
+    def revoke_managed(
+        self, task_id: int, data: ManagedRevocationEvidence
+    ) -> Awaitable[ProvisionTaskModel]: ...
+    def apply_managed(
+        self, task_id: int, data: ManagedApplicationEvidence
+    ) -> Awaitable[ProvisionTaskModel]: ...
     def resume(
         self, subscription_id: int, generation: int, reason: str, staff_id: int
     ) -> Awaitable[ProvisionRequestModel]: ...

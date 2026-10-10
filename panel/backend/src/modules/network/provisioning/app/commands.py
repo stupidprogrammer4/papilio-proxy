@@ -41,6 +41,10 @@ from src.modules.network.provisioning.domain.dtos import (
     ProvisionAcknowledgement,
     ProvisioningRetry,
 )
+from src.modules.network.provisioning.domain.managed import (
+    ManagedApplicationEvidence,
+    ManagedRevocationEvidence,
+)
 from src.modules.network.provisioning.domain.models import (
     ProvisionRequestModel,
     ProvisionTaskModel,
@@ -859,6 +863,143 @@ class ProvisioningCommand:
             )
         elif data.outcome == "revoked":
             await self.profiles.mark_applied(task.profile_id, None, None)
+        tasks = await self._tasks(request.id)
+        await self._advance(subscription, request, tasks, now)
+        return task
+
+    @transactional
+    async def apply_managed(
+        self, task_id: int, data: ManagedApplicationEvidence
+    ) -> ProvisionTaskModel:
+        facts = await self.facts.node_task(task_id)
+        if facts is None:
+            raise _missing("provision_task", task_id)
+        if (
+            facts.task.node_id != data.node_id
+            or facts.configuration.core_id != data.core_id
+            or facts.subscription.id != data.subscription_id
+        ):
+            raise _conflict("managed_provision_assignment_changed", task_id)
+        customer_id = facts.subscription.customer_id
+        payer_id = facts.subscription.payer_customer_id
+        await self.customers.locked_many(
+            sorted({customer_id, payer_id or customer_id})
+        )
+        await self.nodes.locked(data.node_id)
+        await self.runtime_states.lock_core(data.core_id)
+        subscription, request = await self._locked_request(facts.request.id)
+        task = await self.tasks.locked(task_id)
+        configuration = await self.configurations.locked(data.configuration_id)
+        current = await self.facts.node_task(task_id, current=True)
+        now = datetime.now(UTC).replace(tzinfo=None, microsecond=0)
+        if (
+            task is None
+            or task.request_id != facts.request.id
+            or task.node_id != data.node_id
+            or configuration is None
+            or configuration.core_id != data.core_id
+            or configuration.node_id != data.node_id
+            or current is None
+            or current.profile.subscription_id != data.subscription_id
+            or current.profile.configuration_id != data.configuration_id
+            or subscription.customer_id != customer_id
+            or subscription.payer_customer_id != payer_id
+            or subscription.id != data.subscription_id
+            or request.generation != data.generation
+            or subscription.renewal_count != data.generation
+            or task.profile_id != data.profile_id
+            or task.configuration_id != data.configuration_id
+            or task.configuration_revision != data.configuration_revision
+            or task.action != "apply"
+            or task.state != "leased"
+            or task.claim_hash != data.claim_hash
+            or task.claim_until is None
+            or task.claim_until <= now
+            or data.observed_at >= task.claim_until
+            or task.installed_revision_id != data.installed_revision_id
+            or task.membership_sha256 != data.membership_sha256
+            or request.state not in {"dispatching", "active"}
+            or request.deadline_at <= now
+            or subscription.status not in {"pending_provision", "active"}
+        ):
+            raise _conflict("managed_provision_application_conflict", task_id)
+        customer = await self.customers.locked(customer_id)
+        if not CustomerAccessPolicy.services_available(customer):
+            raise _conflict("customer_services_disabled", subscription.id)
+        task = await self.tasks.change(
+            task,
+            ProvisionTaskModel.patch(
+                state="applied",
+                last_outcome="applied",
+                acknowledged_at=now,
+                ack_sha256=data.admission_sha256,
+                error_code=None,
+            ),
+        )
+        await self.profiles.mark_applied(
+            task.profile_id, data.generation, data.configuration_revision
+        )
+        tasks = await self._tasks(request.id)
+        await self._advance(subscription, request, tasks, now)
+        return task
+
+    @transactional
+    async def revoke_managed(
+        self, task_id: int, data: ManagedRevocationEvidence
+    ) -> ProvisionTaskModel:
+        facts = await self.facts.node_task(task_id)
+        if (
+            facts is None
+            or facts.task.node_id != data.node_id
+            or facts.subscription.id != data.subscription_id
+            or facts.configuration.core_id != data.core_id
+            or facts.configuration.node_id != data.node_id
+        ):
+            raise _conflict("managed_revocation_assignment_changed", task_id)
+        customer_id = facts.subscription.customer_id
+        payer_id = facts.subscription.payer_customer_id
+        await self.customers.locked_many(
+            sorted({customer_id, payer_id or customer_id})
+        )
+        await self.nodes.locked(data.node_id)
+        await self.runtime_states.lock_core(data.core_id)
+        subscription, request = await self._locked_request(data.request_id)
+        task = await self.tasks.locked(task_id)
+        current = await self.facts.node_task(task_id, current=True)
+        if (
+            task is None
+            or task.request_id != data.request_id
+            or task.node_id != data.node_id
+            or task.profile_id != data.profile_id
+            or task.configuration_id != data.configuration_id
+            or current is None
+            or current.profile.subscription_id != data.subscription_id
+            or current.profile.configuration_id != data.configuration_id
+            or current.configuration.core_id != data.core_id
+            or current.configuration.node_id != data.node_id
+            or subscription.id != data.subscription_id
+            or subscription.customer_id != customer_id
+            or subscription.payer_customer_id != payer_id
+            or request.generation != data.generation
+            or subscription.renewal_count != data.generation
+            or request.state != "revoking"
+            or task.action != "revoke"
+        ):
+            raise _conflict("managed_revocation_request_conflict", task_id)
+        if await self.usage.has_open_profile(data.profile_id, data.generation):
+            raise _conflict("usage_final_report_required", task_id)
+        now = datetime.now(UTC).replace(tzinfo=None, microsecond=0)
+        task = await self.tasks.change(
+            task,
+            ProvisionTaskModel.patch(
+                state="revoked",
+                last_outcome="revoked",
+                acknowledged_at=now,
+                ack_sha256=data.revocation_sha256,
+                error_code=None,
+            ),
+        )
+        await self.profiles.mark_applied(data.profile_id, None, None)
         tasks = await self._tasks(request.id)
         await self._advance(subscription, request, tasks, now)
         return task

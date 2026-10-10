@@ -1,4 +1,4 @@
-"""Native initial reserved windows; no paid provisioning activation."""
+"""Initial quota reservations and optional immutable paid task leases."""
 
 import asyncio
 import secrets
@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from papilio.infra.db.tools.conflicts import handle_conflicts
 from papilio.infra.db.tools.decorators import transactional
+from papilio.security.crypto import encrypt, hash_sha256
 
 from src.config.settings import PapilioSettings
 from src.modules.accounts.customers.app.policies import CustomerAccessPolicy
@@ -32,6 +33,7 @@ from src.modules.network.managed_runtime.domain.models import (
 from src.modules.network.managed_runtime.domain.windows import (
     ManagedInitialWindowCreate,
     ManagedInitialWindowOut,
+    ManagedProvisionClaim,
 )
 from src.modules.network.managed_runtime.domain.wire import ManagedWindowWire
 from src.modules.network.managed_runtime.infra.scopes import (
@@ -43,10 +45,18 @@ from src.modules.network.managed_runtime.interfaces import (
     IManagedWindowService,
 )
 from src.modules.network.nodes.interfaces import INodeService
+from src.modules.network.provisioning.domain.models import ProvisionTaskModel
+from src.modules.network.provisioning.infra.mysql import (
+    ProvisionRequestRepository,
+    ProvisionTaskRepository,
+)
 from src.modules.network.usage.domain.models import UsageGrantModel
 from src.modules.network.usage.infra.mysql import UsageGrantRepository
 from src.modules.network.usage.infra.readers import UsageFactsReader
-from src.modules.sales.catalog.domain.policies import QuotaPolicy
+from src.modules.sales.catalog.domain.policies import (
+    FulfillmentPolicy,
+    QuotaPolicy,
+)
 from src.modules.sales.subscriptions.infra.mysql import SubscriptionRepository
 
 
@@ -66,6 +76,8 @@ class ManagedInitialWindowCommand:
         grants: UsageGrantRepository,
         subscriptions: SubscriptionRepository,
         facts: UsageFactsReader,
+        tasks: ProvisionTaskRepository,
+        requests: ProvisionRequestRepository,
         settings: PapilioSettings,
     ) -> None:
         self.installations, self.epochs, self.windows = (
@@ -80,6 +92,7 @@ class ManagedInitialWindowCommand:
             commands,
         )
         self.snapshots, self.grants = snapshots, grants
+        self.tasks, self.requests = tasks, requests
         self.subscriptions, self.facts, self.settings = (
             subscriptions,
             facts,
@@ -110,7 +123,16 @@ class ManagedInitialWindowCommand:
         )
         if len(scope.profiles) > runtime.max_profiles:
             raise conflict("managed_runtime_snapshot_capacity")
-        customer_ids = sorted({owner.customer_id for owner in scope.owners})
+        customer_ids = sorted(
+            {
+                customer_id
+                for owner in scope.owners
+                for customer_id in (
+                    owner.customer_id,
+                    owner.payer_customer_id or owner.customer_id,
+                )
+            }
+        )
         customers = await self.customers.locked_many(customer_ids)
         await self.nodes.locked(node.id)
         node = await self.nodes.authenticate(code, key)
@@ -194,11 +216,54 @@ class ManagedInitialWindowCommand:
         if previous is not None:
             raise conflict("managed_window_successor_unavailable")
         now = datetime.now(UTC).replace(tzinfo=None)
+        task = None
+        request = None
+        provision_claim = None
+        encrypted_claim = None
+        fulfillment = None
+        if data.provision_task_id is not None:
+            if policy.paid_mode != "strict_admission":
+                raise conflict("managed_paid_admission_disabled")
+            request = await self.requests.by_generation(
+                subscription.id, data.generation
+            )
+            task = await self.tasks.locked(data.provision_task_id)
+            if (
+                request is None
+                or task is None
+                or task.request_id != request.id
+                or task.node_id != node.id
+                or task.profile_id != data.profile_id
+                or task.configuration_id != assignment.configuration.id
+                or task.configuration_revision
+                != assignment.configuration.revision
+                or task.action != "apply"
+                or request.state not in {"dispatching", "active"}
+                or request.deadline_at <= now
+                or task.state not in {"queued", "failed", "leased"}
+                or task.available_at > now
+                or task.state == "leased"
+                and task.claim_until is not None
+                and task.claim_until > now
+                or not subscription.provisioning_managed
+            ):
+                raise conflict("managed_provision_not_claimable")
+            fulfillment = FulfillmentPolicy.model_validate_json(
+                request.policy_json
+            )
+            if task.attempts >= fulfillment.max_attempts:
+                raise conflict("provision_attempts_exhausted")
         if (
             not node.is_enabled
             or not CustomerAccessPolicy.services_available(customer)
-            or subscription.status != "active"
-            or subscription.provisioning_managed
+            or subscription.status
+            not in (
+                {"pending_provision", "active"}
+                if task is not None
+                else {"active"}
+            )
+            or task is None
+            and subscription.provisioning_managed
             or subscription.renewal_count != data.generation
             or subscription.expires_at is not None
             and subscription.expires_at <= now
@@ -287,6 +352,51 @@ class ManagedInitialWindowCommand:
             subscription.expires_at
             or now + timedelta(seconds=quota.grant_seconds),
         )
+        if (
+            task is not None
+            and request is not None
+            and fulfillment is not None
+        ):
+            until = min(until, request.deadline_at)
+            if (
+                subscription.expires_at is None
+                and subscription.duration_days is not None
+            ):
+                until = min(
+                    until, now + timedelta(days=subscription.duration_days)
+                )
+            provision_claim = ManagedProvisionClaim(
+                task_id=task.id,
+                request_id=request.id,
+                claim_token=secrets.token_urlsafe(32),
+                claim_until=min(
+                    until, now + timedelta(seconds=fulfillment.claim_seconds)
+                ).replace(tzinfo=UTC),
+            )
+            encrypted_claim = await asyncio.to_thread(
+                encrypt,
+                provision_claim.model_dump_json(),
+                self.settings.configuration_encryption_key,
+            )
+            claim_hash = await asyncio.to_thread(
+                hash_sha256, provision_claim.claim_token
+            )
+            await self.tasks.change(
+                task,
+                ProvisionTaskModel.patch(
+                    state="leased",
+                    attempts=task.attempts + 1,
+                    claim_hash=claim_hash,
+                    claim_until=provision_claim.claim_until.replace(
+                        tzinfo=None
+                    ),
+                    installed_revision_id=installation.runtime_revision_id,
+                    membership_sha256=member.membership_sha256,
+                    ack_sha256=None,
+                    last_outcome=None,
+                    acknowledged_at=None,
+                ),
+            )
         grant = await self.grants.create(
             UsageGrantModel(
                 subscription_id=subscription.id,
@@ -328,6 +438,8 @@ class ManagedInitialWindowCommand:
             raise conflict("managed_window_capacity")
         stored = await self.windows.create(
             ManagedWindowModel(
+                provision_task_id=data.provision_task_id,
+                encrypted_provision_claim=encrypted_claim,
                 epoch_id=epoch.id,
                 grant_id=grant.id,
                 profile_id=data.profile_id,

@@ -1,5 +1,8 @@
 from dishka import Provider, Scope, provide
 
+from src.modules.network.managed_runtime.app.admissions import (
+    ManagedAdmissionCommand,
+)
 from src.modules.network.managed_runtime.app.authority import (
     ManagedRuntimeAuthority,
 )
@@ -9,11 +12,15 @@ from src.modules.network.managed_runtime.app.barriers import (
 from src.modules.network.managed_runtime.app.installations import (
     ManagedInstallationCommand,
 )
+from src.modules.network.managed_runtime.app.revocations import (
+    ManagedRevocationCommand,
+)
 from src.modules.network.managed_runtime.app.services import (
     ManagedAdmissionService,
     ManagedBarrierService,
     ManagedEpochService,
     ManagedInstallationService,
+    ManagedRevocationService,
     ManagedWindowService,
 )
 from src.modules.network.managed_runtime.app.windows import (
@@ -24,12 +31,14 @@ from src.modules.network.managed_runtime.infra.mysql import (
     ManagedBarrierRepository,
     ManagedEpochRepository,
     ManagedInstallationRepository,
+    ManagedRevocationRepository,
     ManagedWindowRepository,
 )
 from src.modules.network.managed_runtime.infra.scopes import (
     ManagedInstallationScopeReader,
 )
 from src.modules.network.managed_runtime.interfaces import (
+    IManagedAdmissionCommand,
     IManagedAdmissionService,
     IManagedBarrierService,
     IManagedEpochService,
@@ -37,6 +46,8 @@ from src.modules.network.managed_runtime.interfaces import (
     IManagedInitialWindowCommand,
     IManagedInstallationCommand,
     IManagedInstallationService,
+    IManagedRevocationCommand,
+    IManagedRevocationService,
     IManagedRuntimeAuthority,
     IManagedWindowService,
 )
@@ -44,6 +55,16 @@ from src.modules.network.managed_runtime.interfaces import (
 
 class ManagedRuntimeProvider(Provider):
     scope = Scope.REQUEST
+    revocation_command = provide(
+        ManagedRevocationCommand, provides=IManagedRevocationCommand
+    )
+    revocation_repo = provide(ManagedRevocationRepository)
+    revocation_service = provide(
+        ManagedRevocationService, provides=IManagedRevocationService
+    )
+    admission_command = provide(
+        ManagedAdmissionCommand, provides=IManagedAdmissionCommand
+    )
     finality = provide(
         ManagedFinalityCommand, provides=IManagedFinalityCommand
     )
