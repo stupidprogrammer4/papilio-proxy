@@ -22,10 +22,11 @@ type WindowPolicy struct {
 	MaxValidityMS        int   `json:"max_validity_ms"`
 	TransactionTimeoutMS int   `json:"transaction_timeout_ms"`
 	MaxAdmissionReceipts int   `json:"max_admission_receipts,omitempty"`
+	MaxRevocations       int   `json:"max_revocations,omitempty"`
 }
 
 func (p WindowPolicy) Validate() error {
-	if p.MaxWindows <= 0 || p.MaxRecords > (int(^uint(0)>>1)-snapshotJournalReservedEntries-1)/2 || p.MaxRecords < p.MaxWindows || p.MaxAdmissionReceipts < 0 || p.MaxAdmissionReceipts > p.MaxWindows || p.MaxAdmissionReceipts > p.MaxRecords-p.MaxWindows || p.MaxRecordBytes <= 0 || p.MaxRecordBytes >= math.MaxInt64 || p.MaxValidityMS <= 0 || p.MaxValidityMS > int(math.MaxInt64/int64(time.Millisecond)) || p.TransactionTimeoutMS <= 0 || p.TransactionTimeoutMS > int(math.MaxInt64/int64(time.Millisecond)) {
+	if p.MaxWindows <= 0 || p.MaxRecords > (int(^uint(0)>>1)-snapshotJournalReservedEntries-1)/2 || p.MaxRecords < p.MaxWindows || p.MaxAdmissionReceipts < 0 || p.MaxAdmissionReceipts > p.MaxWindows || p.MaxAdmissionReceipts > p.MaxRecords-p.MaxWindows || p.MaxRevocations < 0 || p.MaxRevocations > p.MaxWindows || p.MaxRevocations > (p.MaxRecords-p.MaxWindows-p.MaxAdmissionReceipts)/2 || p.MaxRecordBytes <= 0 || p.MaxRecordBytes >= math.MaxInt64 || p.MaxValidityMS <= 0 || p.MaxValidityMS > int(math.MaxInt64/int64(time.Millisecond)) || p.TransactionTimeoutMS <= 0 || p.TransactionTimeoutMS > int(math.MaxInt64/int64(time.Millisecond)) {
 		return errors.New("managed_window_policy_invalid")
 	}
 	return nil
@@ -66,6 +67,7 @@ type windowProfile struct {
 	permit     chan struct{}
 	expected   WindowBinding
 	acceptance *LocalPredecessorAcceptance
+	revoked    *WindowRevokeRequest
 }
 type WindowManager struct {
 	gate      *Gate
@@ -157,6 +159,9 @@ func (m *WindowManager) Admit(grant WindowGrant) error {
 }
 
 func (m *WindowManager) admitOwned(grant WindowGrant, owner *windowProfile, bounded context.Context) error {
+	if m.profileRevoked(grant.Binding.ProfileID) {
+		return errors.New("managed_window_revoked")
+	}
 	m.gate.mu.Lock()
 	p := m.gate.profiles[grant.Binding.ProfileID]
 	if p.window != nil && p.window.WindowID == grant.WindowID {
@@ -255,6 +260,9 @@ func (m *WindowManager) admitOwned(grant WindowGrant, owner *windowProfile, boun
 
 func (m *WindowManager) AcceptPredecessor(input LocalPredecessorAcceptance) error {
 	owner := m.profiles[input.ProfileID]
+	if m.profileRevoked(input.ProfileID) {
+		return errors.New("managed_window_revoked")
+	}
 	if owner == nil || input.Epoch != m.gate.epoch || !identityPattern.MatchString(input.AcceptanceID) || !identityPattern.MatchString(input.BarrierID) || !hashPattern.MatchString(input.SnapshotSHA256) {
 		return errors.New("managed_window_acceptance_invalid")
 	}
@@ -271,6 +279,9 @@ func (m *WindowManager) AcceptPredecessor(input LocalPredecessorAcceptance) erro
 		return err
 	}
 	defer owner.release()
+	if m.profileRevoked(input.ProfileID) {
+		return errors.New("managed_window_revoked")
+	}
 	m.gate.mu.Lock()
 	p := m.gate.profiles[input.ProfileID]
 	entry := m.gate.barriers[input.BarrierID]

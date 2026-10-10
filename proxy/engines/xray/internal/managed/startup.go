@@ -66,6 +66,9 @@ func windowPolicyHash(policy WindowPolicy) string {
 	if policy.MaxAdmissionReceipts > 0 {
 		document["max_admission_receipts"] = policy.MaxAdmissionReceipts
 	}
+	if policy.MaxRevocations > 0 {
+		document["max_revocations"] = policy.MaxRevocations
+	}
 	payload, _ := json.Marshal(document)
 	sum := sha256.Sum256(payload)
 	return hex.EncodeToString(sum[:])

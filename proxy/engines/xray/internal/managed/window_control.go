@@ -18,6 +18,10 @@ func (c *Control) handleWindow(writer http.ResponseWriter, path string, payload 
 		writeOriginalAdmission(writer, original)
 		return
 	}
+	if path == "/v1/windows/revoke-original" {
+		c.handleRevokeOriginal(writer, payload)
+		return
+	}
 	decoder := json.NewDecoder(bytes.NewReader(payload))
 	decoder.DisallowUnknownFields()
 	if path == "/v1/windows/freeze" {

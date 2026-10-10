@@ -11,12 +11,15 @@ import (
 )
 
 func (s *WindowStore) recordCapacity(target *SnapshotStore, name string) error {
-	if s.admissions == nil {
+	if s.admissions == nil && s.revocations == nil {
 		return nil
 	}
 	exists := false
 	total := 0
-	for _, journal := range []*SnapshotStore{s.journal, s.admissions} {
+	for _, journal := range []*SnapshotStore{s.journal, s.admissions, s.revocations} {
+		if journal == nil {
+			continue
+		}
 		directory, err := os.Open(journal.root)
 		if err != nil {
 			return errors.New("managed_admission_journal_unavailable")

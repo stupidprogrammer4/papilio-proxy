@@ -119,6 +119,10 @@ func (c *Control) handle(writer http.ResponseWriter, request *http.Request) {
 	c.mu.Unlock()
 	defer c.active.Done()
 	writer.Header().Set("Content-Type", "application/json")
+	if strings.HasPrefix(request.URL.Path, "/v1/windows/revocations/") {
+		c.handleOriginalRevocation(writer, request)
+		return
+	}
 	if strings.HasPrefix(request.URL.Path, "/v1/windows/admissions/") {
 		c.handleOriginalAdmission(writer, request)
 		return
@@ -149,7 +153,7 @@ func (c *Control) handle(writer http.ResponseWriter, request *http.Request) {
 		_, _ = writer.Write(payload)
 		return
 	}
-	if request.Method != http.MethodPost || (request.URL.Path != "/v1/freeze" && (c.windows == nil || request.URL.Path != "/v1/windows/admit" && request.URL.Path != "/v1/windows/admit-original" && request.URL.Path != "/v1/windows/accept-predecessor" && request.URL.Path != "/v1/windows/freeze")) || request.URL.RawQuery != "" || request.Header.Get("Content-Type") != "application/json" {
+	if request.Method != http.MethodPost || (request.URL.Path != "/v1/freeze" && (c.windows == nil || request.URL.Path != "/v1/windows/admit" && request.URL.Path != "/v1/windows/admit-original" && request.URL.Path != "/v1/windows/revoke-original" && request.URL.Path != "/v1/windows/accept-predecessor" && request.URL.Path != "/v1/windows/freeze")) || request.URL.RawQuery != "" || request.Header.Get("Content-Type") != "application/json" {
 		controlError(writer, http.StatusBadRequest, "managed_control_request_invalid")
 		return
 	}

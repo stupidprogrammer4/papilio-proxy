@@ -11,10 +11,11 @@ import (
 // WindowStore reuses private immutable/fsync primitives in its separate owning
 // directory; window records are not interpreted as final counter snapshots.
 type WindowStore struct {
-	journal    *SnapshotStore
-	policy     WindowPolicy
-	admissions *SnapshotStore
-	mu         sync.Mutex
+	journal     *SnapshotStore
+	policy      WindowPolicy
+	admissions  *SnapshotStore
+	revocations *SnapshotStore
+	mu          sync.Mutex
 }
 
 func OpenWindowStore(root string, base Policy, policy WindowPolicy) (*WindowStore, error) {
@@ -39,6 +40,15 @@ func OpenWindowStore(root string, base Policy, policy WindowPolicy) (*WindowStor
 			return nil, err
 		}
 	}
+	if policy.MaxRevocations > 0 {
+		revokePolicy := local
+		revokePolicy.MaxBarriers = policy.MaxRevocations
+		store.revocations, err = OpenSnapshotStore(root+".revocations", revokePolicy)
+		if err != nil {
+			_ = store.Close()
+			return nil, err
+		}
+	}
 	return store, nil
 }
 func (s *WindowStore) Close() error {
@@ -46,6 +56,11 @@ func (s *WindowStore) Close() error {
 	if s.admissions != nil {
 		if receiptErr := s.admissions.Close(); err == nil {
 			err = receiptErr
+		}
+	}
+	if s.revocations != nil {
+		if closeErr := s.revocations.Close(); err == nil {
+			err = closeErr
 		}
 	}
 	return err
@@ -65,7 +80,10 @@ func (s *WindowStore) requireFresh() error {
 			return errors.New("managed_window_recovery_unresolved")
 		}
 	}
-	return s.admissionNamespaceFresh()
+	if err := s.admissionNamespaceFresh(); err != nil {
+		return err
+	}
+	return s.revocationNamespaceFresh()
 }
 func (s *WindowStore) save(name string, value any) error {
 	payload, err := json.Marshal(value)
