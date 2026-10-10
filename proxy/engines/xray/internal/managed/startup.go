@@ -56,13 +56,17 @@ func (startup ClosedStartup) MarshalJSON() ([]byte, error) {
 	}{plain(startup), startup.ObservedAt.UTC().Format("2006-01-02T15:04:05.000000Z")})
 }
 func windowPolicyHash(policy WindowPolicy) string {
-	payload, _ := json.Marshal(map[string]any{
+	document := map[string]any{
 		"max_windows":            policy.MaxWindows,
 		"max_records":            policy.MaxRecords,
 		"max_record_bytes":       policy.MaxRecordBytes,
 		"max_validity_ms":        policy.MaxValidityMS,
 		"transaction_timeout_ms": policy.TransactionTimeoutMS,
-	})
+	}
+	if policy.MaxAdmissionReceipts > 0 {
+		document["max_admission_receipts"] = policy.MaxAdmissionReceipts
+	}
+	payload, _ := json.Marshal(document)
 	sum := sha256.Sum256(payload)
 	return hex.EncodeToString(sum[:])
 }

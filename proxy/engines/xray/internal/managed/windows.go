@@ -21,10 +21,11 @@ type WindowPolicy struct {
 	MaxRecordBytes       int64 `json:"max_record_bytes"`
 	MaxValidityMS        int   `json:"max_validity_ms"`
 	TransactionTimeoutMS int   `json:"transaction_timeout_ms"`
+	MaxAdmissionReceipts int   `json:"max_admission_receipts,omitempty"`
 }
 
 func (p WindowPolicy) Validate() error {
-	if p.MaxWindows <= 0 || p.MaxRecords > (int(^uint(0)>>1)-snapshotJournalReservedEntries-1)/2 || p.MaxRecords < p.MaxWindows || p.MaxRecordBytes <= 0 || p.MaxRecordBytes >= math.MaxInt64 || p.MaxValidityMS <= 0 || p.MaxValidityMS > int(math.MaxInt64/int64(time.Millisecond)) || p.TransactionTimeoutMS <= 0 || p.TransactionTimeoutMS > int(math.MaxInt64/int64(time.Millisecond)) {
+	if p.MaxWindows <= 0 || p.MaxRecords > (int(^uint(0)>>1)-snapshotJournalReservedEntries-1)/2 || p.MaxRecords < p.MaxWindows || p.MaxAdmissionReceipts < 0 || p.MaxAdmissionReceipts > p.MaxWindows || p.MaxAdmissionReceipts > p.MaxRecords-p.MaxWindows || p.MaxRecordBytes <= 0 || p.MaxRecordBytes >= math.MaxInt64 || p.MaxValidityMS <= 0 || p.MaxValidityMS > int(math.MaxInt64/int64(time.Millisecond)) || p.TransactionTimeoutMS <= 0 || p.TransactionTimeoutMS > int(math.MaxInt64/int64(time.Millisecond)) {
 		return errors.New("managed_window_policy_invalid")
 	}
 	return nil
@@ -152,6 +153,10 @@ func (m *WindowManager) Admit(grant WindowGrant) error {
 		return err
 	}
 	defer owner.release()
+	return m.admitOwned(grant, owner, bounded)
+}
+
+func (m *WindowManager) admitOwned(grant WindowGrant, owner *windowProfile, bounded context.Context) error {
 	m.gate.mu.Lock()
 	p := m.gate.profiles[grant.Binding.ProfileID]
 	if p.window != nil && p.window.WindowID == grant.WindowID {

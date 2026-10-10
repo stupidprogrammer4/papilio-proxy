@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"sync"
 )
 
 // WindowStore reuses private immutable/fsync primitives in its separate owning
 // directory; window records are not interpreted as final counter snapshots.
 type WindowStore struct {
-	journal *SnapshotStore
-	policy  WindowPolicy
+	journal    *SnapshotStore
+	policy     WindowPolicy
+	admissions *SnapshotStore
+	mu         sync.Mutex
 }
 
 func OpenWindowStore(root string, base Policy, policy WindowPolicy) (*WindowStore, error) {
@@ -26,9 +29,27 @@ func OpenWindowStore(root string, base Policy, policy WindowPolicy) (*WindowStor
 	if err != nil {
 		return nil, err
 	}
-	return &WindowStore{journal, policy}, nil
+	store := &WindowStore{journal: journal, policy: policy}
+	if policy.MaxAdmissionReceipts > 0 {
+		receiptPolicy := local
+		receiptPolicy.MaxBarriers = policy.MaxAdmissionReceipts
+		store.admissions, err = OpenSnapshotStore(root+".admissions", receiptPolicy)
+		if err != nil {
+			_ = journal.Close()
+			return nil, err
+		}
+	}
+	return store, nil
 }
-func (s *WindowStore) Close() error { return s.journal.Close() }
+func (s *WindowStore) Close() error {
+	err := s.journal.Close()
+	if s.admissions != nil {
+		if receiptErr := s.admissions.Close(); err == nil {
+			err = receiptErr
+		}
+	}
+	return err
+}
 func (s *WindowStore) requireFresh() error {
 	directory, err := os.Open(s.journal.root)
 	if err != nil {
@@ -44,12 +65,17 @@ func (s *WindowStore) requireFresh() error {
 			return errors.New("managed_window_recovery_unresolved")
 		}
 	}
-	return nil
+	return s.admissionNamespaceFresh()
 }
 func (s *WindowStore) save(name string, value any) error {
 	payload, err := json.Marshal(value)
 	if err != nil || int64(len(payload)) > s.policy.MaxRecordBytes || CheckJSON(payload, s.policy.MaxRecordBytes, s.journal.policy.MaxJSONDepth) != nil {
 		return errors.New("managed_window_record_capacity")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.recordCapacity(s.journal, name); err != nil {
+		return err
 	}
 	s.journal.mu.Lock()
 	defer s.journal.mu.Unlock()
