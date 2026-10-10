@@ -493,8 +493,15 @@ Purchases remain `pending_provision` until their node work is independently ackn
 A separate managed installation operation now derives an immutable native manifest,
 leases it to an authenticated node, and stores the original CLOSED startup receipt
 with exact replay. An isolated actual Go agent/Xray TLS gate passed this path.
-`installed_closed` records a historical observation; current connectivity, paid
-admission and final accounting still require separate gates. Strict configuration
+`installed_closed` records a historical observation; current connectivity and paid
+admission require separate evidence. An experimental native single-window flow
+now reserves shared quota and settles the original strict final snapshot in one
+transaction, with exact replay and old-generation isolation. Actual temporary
+Go/Xray TLS traffic and final accounting passed a native integration gate using
+an explicitly supplied ACTIVE entitlement. It does not prove paid activation.
+The private component also provides immutable historical strict admission
+receipts. See [managed window operations and recovery](docs/managed-runtime.md).
+Strict configuration
 must be selected through native editing before capture: the tested artifact uses
 `loglevel: none`; default stock warning-log artifacts fail closed. The adapter is
 disabled in ordinary local execution.

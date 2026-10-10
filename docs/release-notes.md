@@ -90,8 +90,38 @@ Claim evidence prevents a destructive downgrade.
 
 Strict native settings were selected through the JSON editor before immutable
 capture. Default stock warning-log artifacts fail closed. CLOSED receipts are
-historical; paid activation and final accounting remain unavailable. These gates
+historical; they do not grant paid activation or final-accounting authority. These gates
 did not enable ordinary cores or modify ordinary business data.
+
+## Experimental native reserved windows — 2026-10-10
+
+Native initial window issuance now supports explicitly active, unmanaged
+subscriptions. It validates current core membership and captured policies, reserves
+quota shared across nodes, and returns the original window bytes. The finality API
+validates the original strict frozen snapshot and atomically records one event,
+closes the grant and accounts current-generation consumption. Concurrent exact
+replay and old-generation finality passed isolated native MySQL/API gates.
+
+Ordinary reporting of a managed grant was reproduced before correction and the
+unchanged tests passed afterward. Four native customer/node/core/subscription
+deadlocks were reproduced across prepare, claim, ACK and lifecycle operations;
+their unchanged regressions passed after ordered locking and identity revalidation.
+Ordinary applied/failed ACKs of managed-bound tasks also incorrectly succeeded;
+the unchanged regressions now reject both, including with disabled adapters.
+An additional native concurrency regression reproduced a stale binding read
+after waiting for a customer lock; the same test passes with a current locking
+read, preserving the task lease and reserved quota.
+Existing ordinary delivery, refunds, hold recovery and expiry/renewal gates passed.
+
+Private strict admission receipts bind the exact window bytes, installed budget
+and deadline, pinned build and original CLOSED receipt. Component gates cover
+actual budget/deadline closure, immutable historical replay, capacity failure and
+restart refusal. Optional node integration persists required original admission
+evidence before continuing. Controlled Unix-socket tests exercise validation and
+journal ordering. An actual native Go/Xray TLS gate verifies original strict
+admission evidence, traffic and final accounting with an explicitly supplied
+ACTIVE entitlement; paid activation is
+outside that gate. See [managed runtime boundaries](managed-runtime.md).
 
 ## Ordinary local rollout
 
@@ -119,8 +149,9 @@ failure; live TLS/Telegram and macOS/Windows acceptance are also pending.
 
 ## Remaining gates
 
-Native managed authority remains `storage_only`; paid bootstrap and final receipt
-are unavailable. Remaining lifecycle lock ordering, key-rotation concurrency,
+Native managed paid authority remains disabled. The experimental active-only
+window/finality path does not implement paid task bootstrap, admission activation
+or authoritative managed revocation. Remaining lifecycle lock ordering, key-rotation concurrency,
 safe IP replacement without overlap, continuous global quota/expiry authority,
 other-engine enforcement and the two transient core failures require further work.
 

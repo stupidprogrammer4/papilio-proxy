@@ -30,6 +30,7 @@ docs/*
 !docs/development.md
 !docs/deployment.md
 !docs/release-notes.md
+!docs/managed-runtime.md
 AGENTS.md
 START-HERE.fa.md
 PROJECT-BRIEF.md
