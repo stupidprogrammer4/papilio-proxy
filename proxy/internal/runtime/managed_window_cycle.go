@@ -28,10 +28,11 @@ type ManagedWindowCyclePolicy struct {
 	RetryIntervalMS         int    `json:"retry_interval_ms"`
 	MaxAttempts             int    `json:"max_attempts"`
 	RequireAdmissionReceipt bool   `json:"require_admission_receipt,omitempty"`
+	ProvisionTaskID         int64  `json:"provision_task_id,omitempty"`
 }
 
 func (p ManagedWindowCyclePolicy) validate() error {
-	if p.ProfileID <= 0 || p.Generation < 0 || len(p.RequestKey) < 8 || len(p.RequestKey) > 128 || p.RequestedBytes <= 0 || p.FreezeAfterMS <= 0 || p.OperationTimeoutMS <= 0 || p.RetryIntervalMS <= 0 || p.MaxAttempts <= 0 {
+	if p.ProfileID <= 0 || p.Generation < 0 || len(p.RequestKey) < 8 || len(p.RequestKey) > 128 || p.RequestedBytes <= 0 || p.FreezeAfterMS <= 0 || p.OperationTimeoutMS <= 0 || p.RetryIntervalMS <= 0 || p.MaxAttempts <= 0 || p.ProvisionTaskID < 0 || p.ProvisionTaskID > 0 && !p.RequireAdmissionReceipt {
 		return errors.New("managed_window_cycle_policy_invalid")
 	}
 	for _, milliseconds := range []int{p.FreezeAfterMS, p.OperationTimeoutMS, p.RetryIntervalMS} {
@@ -53,6 +54,7 @@ type managedWindowCycleJournal struct {
 	Submission      *ManagedWindowFinalSubmission `json:"submission"`
 	Finality        *ManagedWindowFinality        `json:"finality"`
 	Admission       *ManagedOriginalAdmission     `json:"admission,omitempty"`
+	PaidAcceptance  *ManagedPaidAcceptance        `json:"paid_acceptance,omitempty"`
 }
 
 func saveManagedWindowCycle(journal *Journal, state managedWindowCycleJournal) error {
@@ -131,7 +133,7 @@ func replayManagedWindowCycle(ctx context.Context, client *Client, p ManagedInst
 	if json.Unmarshal(payload, &state) != nil || state.APIURL != client.config.APIURL || state.NodeCode != client.config.NodeCode || state.InstallationID != p.InstallationID || installation.Acceptance == nil || state.Request.ProcessEpoch != installation.Acceptance.ProcessEpoch || state.Policy.validate() != nil || !epochPattern.MatchString(state.ManualBarrierID) {
 		return errors.New("managed_window_cycle_recovery_binding_invalid")
 	}
-	if state.Request.ProfileID != state.Policy.ProfileID || state.Request.Generation != state.Policy.Generation || state.Request.RequestKey != state.Policy.RequestKey || state.Request.RequestedBytes != state.Policy.RequestedBytes {
+	if state.Request.ProfileID != state.Policy.ProfileID || state.Request.Generation != state.Policy.Generation || state.Request.RequestKey != state.Policy.RequestKey || state.Request.RequestedBytes != state.Policy.RequestedBytes || state.Request.ProvisionTaskID != state.Policy.ProvisionTaskID {
 		return errors.New("managed_window_cycle_recovery_binding_invalid")
 	}
 	if state.Issued == nil || state.Submission == nil {
@@ -152,6 +154,16 @@ func replayManagedWindowCycle(ctx context.Context, client *Client, p ManagedInst
 	}
 	if _, _, err = validateManagedFinalSubmission(*state.Submission, issued.Window, p.MaxReceiptBytes); err != nil {
 		return err
+	}
+	if err := validateManagedProvisionClaim(*issued, state.Request.ProvisionTaskID, false); err != nil {
+		return err
+	}
+	if state.Request.ProvisionTaskID > 0 || p.WindowCycle != nil && p.WindowCycle.ProvisionTaskID > 0 {
+		if state.Request.ProvisionTaskID <= 0 || p.WindowCycle != nil && p.WindowCycle.ProvisionTaskID > 0 && p.WindowCycle.ProvisionTaskID != state.Request.ProvisionTaskID || state.Admission == nil || state.PaidAcceptance == nil || validateManagedPaidAcceptance(*state.PaidAcceptance, *issued, *state.Admission) != nil {
+			return errors.New("managed_window_cycle_paid_recovery_unresolved")
+		}
+	} else if state.PaidAcceptance != nil {
+		return errors.New("managed_window_cycle_paid_recovery_unresolved")
 	}
 	if state.Finality != nil {
 		f := state.Finality
@@ -192,7 +204,7 @@ func runManagedWindowCycle(ctx context.Context, client *Client, p ManagedInstall
 	if _, err := rand.Read(random); err != nil {
 		return errors.New("managed_window_cycle_identity_unavailable")
 	}
-	state := managedWindowCycleJournal{APIURL: client.config.APIURL, NodeCode: client.config.NodeCode, InstallationID: p.InstallationID, Policy: policy, Request: ManagedWindowRequest{policy.ProfileID, policy.Generation, installation.Acceptance.ProcessEpoch, policy.RequestKey, policy.RequestedBytes}, ManualBarrierID: hex.EncodeToString(random)}
+	state := managedWindowCycleJournal{APIURL: client.config.APIURL, NodeCode: client.config.NodeCode, InstallationID: p.InstallationID, Policy: policy, Request: ManagedWindowRequest{policy.ProfileID, policy.Generation, installation.Acceptance.ProcessEpoch, policy.RequestKey, policy.RequestedBytes, policy.ProvisionTaskID}, ManualBarrierID: hex.EncodeToString(random)}
 	if err := saveManagedWindowCycle(journal, state); err != nil {
 		return err
 	}
@@ -236,6 +248,22 @@ func runManagedWindowCycle(ctx context.Context, client *Client, p ManagedInstall
 	})
 	if err != nil {
 		return errors.New("managed_window_cycle_admission_unresolved")
+	}
+	if policy.ProvisionTaskID > 0 {
+		if state.Admission == nil {
+			return errors.New("managed_window_cycle_paid_admission_unresolved")
+		}
+		err = managedCycleRetry(ctx, policy, func(operation context.Context) error {
+			accepted, callErr := client.AcknowledgeManagedPaidAdmission(operation, issued, *state.Admission)
+			if callErr != nil {
+				return callErr
+			}
+			state.PaidAcceptance = &accepted
+			return saveManagedWindowCycle(journal, state)
+		})
+		if err != nil {
+			return errors.New("managed_window_cycle_paid_ack_unresolved")
+		}
 	}
 	timer := time.NewTimer(time.Duration(policy.FreezeAfterMS) * time.Millisecond)
 	select {

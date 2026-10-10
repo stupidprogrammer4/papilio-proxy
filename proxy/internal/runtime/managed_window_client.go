@@ -16,11 +16,12 @@ import (
 )
 
 type ManagedWindowRequest struct {
-	ProfileID      int64  `json:"profile_id"`
-	Generation     int64  `json:"generation"`
-	ProcessEpoch   string `json:"process_epoch"`
-	RequestKey     string `json:"request_key"`
-	RequestedBytes int64  `json:"requested_bytes"`
+	ProfileID       int64  `json:"profile_id"`
+	Generation      int64  `json:"generation"`
+	ProcessEpoch    string `json:"process_epoch"`
+	RequestKey      string `json:"request_key"`
+	RequestedBytes  int64  `json:"requested_bytes"`
+	ProvisionTaskID int64  `json:"provision_task_id,omitempty"`
 }
 type ManagedWindowBinding struct {
 	ProfileID             int64  `json:"profile_id"`
@@ -55,10 +56,11 @@ type ManagedWindowWire struct {
 	Predecessor           *ManagedPredecessorAcceptance `json:"predecessor"`
 }
 type ManagedIssuedWindow struct {
-	ID             int64             `json:"id"`
-	OriginalWindow string            `json:"original_window"`
-	WindowSHA256   string            `json:"window_sha256"`
-	Window         ManagedWindowWire `json:"window"`
+	ID             int64                  `json:"id"`
+	OriginalWindow string                 `json:"original_window"`
+	WindowSHA256   string                 `json:"window_sha256"`
+	Window         ManagedWindowWire      `json:"window"`
+	ProvisionClaim *ManagedProvisionClaim `json:"provision_claim,omitempty"`
 }
 type ManagedSnapshotReceipt struct {
 	Epoch          string `json:"epoch"`
@@ -79,7 +81,7 @@ type ManagedWindowFinality struct {
 }
 
 func (c *Client) IssueManagedWindow(ctx context.Context, installationID int64, input ManagedWindowRequest, expected ManagedExpectation) (ManagedIssuedWindow, error) {
-	if installationID <= 0 || input.ProfileID <= 0 || input.Generation < 0 || !epochPattern.MatchString(input.ProcessEpoch) || len(input.RequestKey) < 8 || len(input.RequestKey) > 128 || input.RequestedBytes <= 0 {
+	if installationID <= 0 || input.ProfileID <= 0 || input.Generation < 0 || !epochPattern.MatchString(input.ProcessEpoch) || len(input.RequestKey) < 8 || len(input.RequestKey) > 128 || input.RequestedBytes <= 0 || input.ProvisionTaskID < 0 {
 		return ManagedIssuedWindow{}, errors.New("managed_window_request_invalid")
 	}
 	var response struct {
@@ -120,6 +122,9 @@ func (c *Client) IssueManagedWindow(ctx context.Context, installationID int64, i
 	}
 	if wire.Predecessor != nil && (wire.Predecessor.Epoch != wire.Epoch || wire.Predecessor.ProfileID != wire.Binding.ProfileID || !epochPattern.MatchString(wire.Predecessor.AcceptanceID) || !epochPattern.MatchString(wire.Predecessor.BarrierID) || !digestPattern.MatchString(wire.Predecessor.SnapshotSHA256)) {
 		return ManagedIssuedWindow{}, errors.New("managed_window_predecessor_invalid")
+	}
+	if err := validateManagedProvisionClaim(result, input.ProvisionTaskID, true); err != nil {
+		return ManagedIssuedWindow{}, err
 	}
 	return result, nil
 }

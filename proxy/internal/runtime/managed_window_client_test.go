@@ -22,8 +22,8 @@ func managedWindowClientFixture(t *testing.T) (ManagedIssuedWindow, ManagedExpec
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	wire := ManagedWindowWire{EnforcementMode: "strict_decoded", EnforcementSHA256: expectation.EnforcementSHA256, GrantID: 7, WindowID: strings.Repeat("1", 32), Epoch: strings.Repeat("2", 32), Installation: installation, Binding: binding, MembershipSHA256: expectation.MembershipSHA256, ProfileSHA256: expectation.Profiles[0].ProfileSHA256, AllocatedBytes: 100, IssuedAt: now, ValidUntil: now.Add(time.Minute)}
 	payload, _ := json.Marshal(wire)
-	issued := ManagedIssuedWindow{9, string(payload), checksum(payload), wire}
-	input := ManagedWindowRequest{1, 0, wire.Epoch, "request-1", 100}
+	issued := ManagedIssuedWindow{9, string(payload), checksum(payload), wire, nil}
+	input := ManagedWindowRequest{1, 0, wire.Epoch, "request-1", 100, 0}
 	barrier := strings.Repeat("3", 32)
 	original, _ := json.Marshal(map[string]any{"epoch": wire.Epoch, "barrier_id": barrier, "installation": installation, "windows": []ManagedWindowWire{wire}, "profiles": []map[string]any{{"binding": binding, "upload_bytes": int64(12), "download_bytes": int64(18)}}, "enforcement": []map[string]any{{"profile_id": int64(1), "window_id": wire.WindowID, "allocated_bytes": int64(100), "admitted_bytes": int64(30)}}})
 	final := ManagedWindowFinalSubmission{ManagedSnapshotReceipt{wire.Epoch, barrier, checksum(original), int64(len(original))}, string(original)}

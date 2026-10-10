@@ -15,7 +15,7 @@ import (
 )
 
 func cycleTestPolicy() ManagedWindowCyclePolicy {
-	return ManagedWindowCyclePolicy{true, 1, 0, "request-1", 100, 10, 1000, 1, 2, false}
+	return ManagedWindowCyclePolicy{true, 1, 0, "request-1", 100, 10, 1000, 1, 2, false, 0}
 }
 func cycleTestInstallation(expected ManagedExpectation, epoch string) managedInstallationJournal {
 	return managedInstallationJournal{Claim: ManagedClaim{Expectation: expected}, Acceptance: &ManagedClosedAcceptance{ProcessEpoch: epoch}}
@@ -38,7 +38,16 @@ func TestManagedWindowCyclePersistsBeforeExternalMutationsAndFinality(t *testing
 func TestManagedWindowCyclePersistsRequiredAdmissionBeforeFreezeAndFinality(t *testing.T) {
 	testManagedWindowCyclePersists(t, true)
 }
+func TestManagedPaidCyclePersistsAcceptanceBeforeFreeze(t *testing.T) {
+	testManagedPaidCycle(t, true, true, false)
+}
+func TestManagedPaidCycleFailedACKRemainsUnresolved(t *testing.T) {
+	testManagedPaidCycle(t, true, true, true)
+}
 func testManagedWindowCyclePersists(t *testing.T, requireProof bool) {
+	testManagedPaidCycle(t, requireProof, false, false)
+}
+func testManagedPaidCycle(t *testing.T, requireProof, paid, failACK bool) {
 	t.Helper()
 	issued, expected, _, final := managedWindowClientFixture(t)
 	installation := cycleTestInstallation(expected, issued.Window.Epoch)
@@ -52,6 +61,9 @@ func testManagedWindowCyclePersists(t *testing.T, requireProof bool) {
 		proof.OriginalReceipt = string(payload)
 		proof.Receipt.ReceiptSHA256 = checksum(payload)
 		proof.Receipt.Bytes = int64(len(payload))
+	}
+	if paid {
+		issued.ProvisionClaim = &ManagedProvisionClaim{11, 12, strings.Repeat("k", 32), issued.Window.ValidUntil}
 	}
 	root := t.TempDir()
 	_ = os.Chmod(root, 0700)
@@ -76,6 +88,9 @@ func testManagedWindowCyclePersists(t *testing.T, requireProof bool) {
 		}
 		if requireProof && r.URL.Path != "/v1/windows/admit-original" && (state.Admission == nil || state.Admission.OriginalReceipt != proof.OriginalReceipt) {
 			t.Error("next mutation preceded durable original admission")
+		}
+		if paid && r.URL.Path != "/v1/windows/admit-original" && state.PaidAcceptance == nil {
+			t.Error("local finality mutation preceded durable paid acceptance")
 		}
 		switch {
 		case r.URL.Path == "/v1/windows/admit-original" && requireProof:
@@ -127,8 +142,31 @@ func testManagedWindowCyclePersists(t *testing.T, requireProof bool) {
 			if state.Request.ProfileID != 1 || state.ManualBarrierID == "" || state.Issued != nil {
 				t.Error("API issuance preceded durable intent")
 			}
+			var input ManagedWindowRequest
+			if json.NewDecoder(r.Body).Decode(&input) != nil || input.ProvisionTaskID != state.Policy.ProvisionTaskID {
+				t.Error("paid issuance task binding changed")
+			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "data": issued})
 			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/admission") {
+			if !paid || state.Admission == nil || state.Admission.OriginalReceipt != proof.OriginalReceipt || state.PaidAcceptance != nil {
+				t.Error("paid ACK preceded durable original proof")
+			}
+			var input ManagedPaidAdmissionSubmission
+			if json.NewDecoder(r.Body).Decode(&input) != nil || input.ClaimToken != issued.ProvisionClaim.ClaimToken || input.OriginalReceipt != proof.OriginalReceipt || input.Receipt != proof.Receipt {
+				t.Error("paid ACK exact proof/lease changed")
+			}
+			if failACK {
+				w.WriteHeader(http.StatusConflict)
+				return
+			}
+			result := ManagedPaidAcceptance{issued.Window.WindowID, 11, proof.Receipt.ReceiptSHA256, "applied", proof.Admission.ObservedAt}
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "data": result})
+			return
+		}
+		if paid && state.PaidAcceptance == nil {
+			t.Error("API finality preceded durable paid acceptance")
 		}
 		if state.Submission == nil || *state.Submission != final {
 			t.Error("finality preceded durable original receipt")
@@ -144,8 +182,19 @@ func testManagedWindowCyclePersists(t *testing.T, requireProof bool) {
 	defer client.Close()
 	policy := cycleTestPolicy()
 	policy.RequireAdmissionReceipt = requireProof
+	if paid {
+		policy.ProvisionTaskID = 11
+	}
 	p := ManagedInstallationPolicy{InstallationID: 5, ControlRoot: control, MaxReceiptBytes: 65536, PollIntervalMS: 1000, WindowCycle: &policy}
-	if err = runManagedWindowCycle(context.Background(), client, p, journal, installation); err != nil {
+	err = runManagedWindowCycle(context.Background(), client, p, journal, installation)
+	if failACK {
+		state := readCycleTestJournal(t, journal)
+		if err == nil || err.Error() != "managed_window_cycle_paid_ack_unresolved" || state.Admission == nil || state.PaidAcceptance != nil || state.Submission != nil || state.Finality != nil || frozen {
+			t.Fatal("failed paid ACK advanced or lost durable proof", err)
+		}
+		return
+	}
+	if err != nil {
 		t.Fatal("controlled cycle failed", err)
 	}
 	state := readCycleTestJournal(t, journal)
