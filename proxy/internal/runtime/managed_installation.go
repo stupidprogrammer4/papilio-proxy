@@ -23,24 +23,25 @@ import (
 // ManagedInstallationPolicy selects a separate CLOSED installation operation.
 // Every local path belongs to this fixed owner registry, never an API payload.
 type ManagedInstallationPolicy struct {
-	Enabled            bool              `json:"enabled"`
-	InstallationID     int64             `json:"installation_id"`
-	Binary             string            `json:"binary"`
-	InputRoot          string            `json:"input_root"`
-	ControlRoot        string            `json:"control_root"`
-	StateDirectory     string            `json:"state_directory"`
-	Certificates       []ManagedMaterial `json:"certificates"`
-	ComponentPolicy    json.RawMessage   `json:"component_policy"`
-	EnforcementPolicy  json.RawMessage   `json:"enforcement_policy"`
-	WindowPolicy       json.RawMessage   `json:"window_policy"`
-	MaxSettingsBytes   int64             `json:"max_settings_bytes"`
-	MaxSettingsDepth   int               `json:"max_settings_depth"`
-	MaxExecutableBytes int64             `json:"max_executable_bytes"`
-	MaxReceiptBytes    int64             `json:"max_receipt_bytes"`
-	MaxJournalBytes    int64             `json:"max_journal_bytes"`
-	StartupTimeoutMS   int               `json:"startup_timeout_ms"`
-	PollIntervalMS     int               `json:"poll_interval_ms"`
-	StopTimeoutMS      int               `json:"stop_timeout_ms"`
+	Enabled            bool                      `json:"enabled"`
+	InstallationID     int64                     `json:"installation_id"`
+	Binary             string                    `json:"binary"`
+	InputRoot          string                    `json:"input_root"`
+	ControlRoot        string                    `json:"control_root"`
+	StateDirectory     string                    `json:"state_directory"`
+	Certificates       []ManagedMaterial         `json:"certificates"`
+	ComponentPolicy    json.RawMessage           `json:"component_policy"`
+	EnforcementPolicy  json.RawMessage           `json:"enforcement_policy"`
+	WindowPolicy       json.RawMessage           `json:"window_policy"`
+	MaxSettingsBytes   int64                     `json:"max_settings_bytes"`
+	MaxSettingsDepth   int                       `json:"max_settings_depth"`
+	MaxExecutableBytes int64                     `json:"max_executable_bytes"`
+	MaxReceiptBytes    int64                     `json:"max_receipt_bytes"`
+	MaxJournalBytes    int64                     `json:"max_journal_bytes"`
+	StartupTimeoutMS   int                       `json:"startup_timeout_ms"`
+	PollIntervalMS     int                       `json:"poll_interval_ms"`
+	StopTimeoutMS      int                       `json:"stop_timeout_ms"`
+	WindowCycle        *ManagedWindowCyclePolicy `json:"window_cycle,omitempty"`
 }
 type ManagedMaterial struct {
 	Path   string `json:"path"`
@@ -259,6 +260,9 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 	if !p.Enabled {
 		return nil
 	}
+	if p.WindowCycle != nil && p.WindowCycle.Enabled && p.WindowCycle.validate() != nil {
+		return errors.New("managed_window_cycle_policy_invalid")
+	}
 	if client == nil || p.InstallationID <= 0 || !filepath.IsAbs(p.Binary) || !filepath.IsAbs(p.InputRoot) || !filepath.IsAbs(p.ControlRoot) || !filepath.IsAbs(p.StateDirectory) || p.MaxSettingsBytes <= 0 || p.MaxSettingsBytes >= math.MaxInt64 || p.MaxSettingsDepth <= 0 || p.MaxExecutableBytes <= 0 || p.MaxExecutableBytes >= math.MaxInt64 || p.MaxReceiptBytes <= 0 || p.MaxReceiptBytes >= math.MaxInt64 || p.MaxJournalBytes <= 0 || p.MaxJournalBytes >= math.MaxInt64 || p.StartupTimeoutMS <= 0 || p.PollIntervalMS <= 0 || p.StopTimeoutMS <= 0 {
 		return errors.New("managed_registry_invalid")
 	}
@@ -282,7 +286,7 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 			return errors.New("managed_recovery_binding_invalid")
 		}
 		if state.Acceptance != nil {
-			return nil
+			return replayManagedWindowCycle(ctx, client, p, journal, state)
 		}
 		if state.Acknowledgement == nil {
 			return errors.New("managed_installation_recovery_unresolved")
@@ -292,7 +296,10 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 			return ackErr
 		}
 		state.Acceptance = &acceptance
-		return managedSave(journal, state)
+		if err = managedSave(journal, state); err != nil {
+			return err
+		}
+		return replayManagedWindowCycle(ctx, client, p, journal, state)
 	}
 	if !os.IsNotExist(err) {
 		return errors.New("managed_journal_unavailable")
@@ -397,6 +404,9 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 	}
 	state.Acceptance = &acceptance
 	if err = managedSave(journal, state); err != nil {
+		return err
+	}
+	if err = runManagedWindowCycle(ctx, client, p, journal, state); err != nil {
 		return err
 	}
 	if once {
