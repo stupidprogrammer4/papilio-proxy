@@ -38,6 +38,20 @@ class CustomerHoldCommand:
     @handle_conflicts
     @transactional
     async def check(self, subscription_id: int) -> SubscriptionModel:
+        initial = await self.subscriptions.get_by_id(subscription_id)
+        if initial is None:
+            raise NotFoundException(
+                message="اشتراک پیدا نشد.",
+                message_code="subscription_not_found",
+                entity="subscription",
+                identifier="id",
+                identifier_value=subscription_id,
+            )
+        customer_id = initial.customer_id
+        payer_id = initial.payer_customer_id
+        customers = await self.customers.locked_many(
+            sorted({customer_id, payer_id or customer_id})
+        )
         subscription = await self.subscriptions.locked(subscription_id)
         if subscription is None:
             raise NotFoundException(
@@ -47,7 +61,16 @@ class CustomerHoldCommand:
                 identifier="id",
                 identifier_value=subscription_id,
             )
-        customer = await self.customers.locked(subscription.customer_id)
+        if (
+            subscription.customer_id != customer_id
+            or subscription.payer_customer_id != payer_id
+        ):
+            raise ConflictException(
+                message="مالک اشتراک تغییر کرده است؛ دوباره تلاش کنید.",
+                message_code="subscription_owner_changed",
+                unique_dict={"id": subscription_id},
+            )
+        customer = next(row for row in customers if row.id == customer_id)
         if (
             customer.services_enabled
             and not customer.service_hold_pending

@@ -10,6 +10,7 @@ from src.modules.network.configurations.infra.tables import (
     ConfigurationTable,
     ProfileTable,
 )
+from src.modules.network.managed_runtime.infra.tables import ManagedWindowTable
 from src.modules.network.nodes.infra.tables import NodeTable
 from src.modules.network.provisioning.domain.models import ProvisionTaskModel
 from src.modules.network.provisioning.domain.results import (
@@ -31,6 +32,17 @@ from src.modules.sales.subscriptions.infra.tables import SubscriptionTable
 class ProvisioningFactsReader:
     def __init__(self, uow: MySQLUnitOfWork) -> None:
         self.uow = uow
+
+    async def managed_task_window_exists(
+        self, task_id: int, current: bool = False
+    ) -> bool:
+        query = select(col(ManagedWindowTable.id)).where(
+            col(ManagedWindowTable.provision_task_id) == task_id
+        )
+        if current:
+            query = query.with_for_update(read=True)
+        result = await self.uow.execute(select(query.exists()))
+        return bool(result.scalar_one())
 
     async def targets(
         self,
@@ -152,8 +164,10 @@ class ProvisioningFactsReader:
         result = await fetch_page(self.uow, query, offset=offset, limit=limit)
         return result
 
-    async def node_task(self, task_id: int) -> NodeProvisionFacts | None:
-        result = await self.uow.execute(
+    async def node_task(
+        self, task_id: int, current: bool = False
+    ) -> NodeProvisionFacts | None:
+        query = (
             select(
                 ProvisionTaskTable,
                 ProvisionRequestTable,
@@ -182,6 +196,11 @@ class ProvisioningFactsReader:
             )
             .where(col(ProvisionTaskTable.id) == task_id)
         )
+        if current:
+            query = query.with_for_update(read=True).execution_options(
+                populate_existing=True
+            )
+        result = await self.uow.execute(query)
         row = result.one_or_none()
         return (
             None

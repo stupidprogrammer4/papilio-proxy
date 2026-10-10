@@ -33,6 +33,9 @@ class RuntimeStateService:
     ) -> None:
         self.repo, self.settings = repo, settings
 
+    async def lock_nodes_for_cores(self, core_ids: list[int]) -> None:
+        await self.repo.lock_nodes_for_cores(core_ids)
+
     async def lock_core(self, core_id: int) -> None:
         policy = self.settings.core_usage
         if policy is not None and policy.mode != "disabled":

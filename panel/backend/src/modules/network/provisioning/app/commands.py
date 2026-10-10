@@ -25,7 +25,10 @@ from src.modules.network.configurations.interfaces import IProfileCommand
 from src.modules.network.core_runtime.app.memberships import (
     InstalledProfileEncoding,
 )
-from src.modules.network.core_runtime.interfaces import IInstalledProfileQuery
+from src.modules.network.core_runtime.interfaces import (
+    IInstalledProfileQuery,
+    IRuntimeStateService,
+)
 from src.modules.network.cores.interfaces import ICoreService
 from src.modules.network.nodes.interfaces import INodeService
 from src.modules.network.provisioning.app.payloads import (
@@ -88,6 +91,7 @@ class ProvisioningCommand:
         notifications: INotificationCreateCommand,
         volumes: IPurchaseVolumeCommand,
         installed: IInstalledProfileQuery,
+        runtime_states: IRuntimeStateService,
     ) -> None:
         self.requests = requests
         self.tasks = tasks
@@ -105,6 +109,7 @@ class ProvisioningCommand:
         self.notifications = notifications
         self.volumes = volumes
         self.installed = installed
+        self.runtime_states = runtime_states
         self.payload_encoding = ProvisionPayloadEncoding()
 
     @handle_conflicts
@@ -128,19 +133,26 @@ class ProvisioningCommand:
     async def prepare(
         self, id: int, manual: bool = False
     ) -> ProvisionRequestModel:
+        initial_request = await self.requests.get_by_id(id)
+        if initial_request is None:
+            raise _missing("provision_request", id)
+        initial_subscription_id = initial_request.subscription_id
+        initial_subscription = await self.subscriptions.get_by_id(
+            initial_subscription_id
+        )
+        if initial_subscription is None:
+            raise _missing("subscription", initial_subscription_id)
+        initial_customer_id = initial_subscription.customer_id
+        initial_payer_id = initial_subscription.payer_customer_id
+        initial_group_id = initial_subscription.group_id
+        await self.customers.locked_many(
+            sorted(
+                {initial_customer_id, initial_payer_id or initial_customer_id}
+            )
+        )
         bridge = self.settings.core_provisioning
         locked_core_ids = None
-        initial_group_id = None
         if bridge is not None and bridge.mode != "disabled":
-            initial_request = await self.requests.get_by_id(id)
-            if initial_request is None:
-                raise _missing("provision_request", id)
-            initial_subscription = await self.subscriptions.get_by_id(
-                initial_request.subscription_id
-            )
-            if initial_subscription is None:
-                raise _missing("subscription", initial_request.subscription_id)
-            initial_group_id = initial_subscription.group_id
             target_scope = await self.facts.targets(
                 initial_subscription.id,
                 initial_group_id,
@@ -155,8 +167,16 @@ class ProvisioningCommand:
             )
             if len(locked_core_ids) > self.settings.fulfillment.max_targets:
                 raise _conflict("fulfillment_capacity", id)
+            await self.runtime_states.lock_nodes_for_cores(locked_core_ids)
             await self.installed.lock_cores(locked_core_ids)
         subscription, request = await self._locked_request(id)
+        if (
+            request.subscription_id != initial_subscription_id
+            or subscription.id != initial_subscription_id
+            or subscription.customer_id != initial_customer_id
+            or subscription.payer_customer_id != initial_payer_id
+        ):
+            raise _conflict("provision_subscription_owner_changed", id)
         if (
             locked_core_ids is not None
             and subscription.group_id != initial_group_id
@@ -510,22 +530,54 @@ class ProvisioningCommand:
         facts = await self.facts.node_task(task_id)
         if facts is None or facts.task.node_id != node.id:
             raise _missing("provision_task", task_id)
+        initial_request_id = facts.request.id
+        initial_subscription_id = facts.subscription.id
+        initial_customer_id = facts.subscription.customer_id
+        initial_configuration_id = facts.configuration.id
+        initial_core_id = facts.configuration.core_id
+        initial_profile_id = facts.profile.id
+        customer = await self.customers.locked(initial_customer_id)
+        await self.nodes.locked(node.id)
+        node = await self.nodes.authenticate(code, key)
         bridge = self.settings.core_provisioning
         bridge_enabled = bridge is not None and bridge.mode != "disabled"
         if bridge_enabled:
-            await self.installed.lock_core(facts.configuration.core_id)
-        subscription, request = await self._locked_request(facts.request.id)
+            await self.installed.lock_core(initial_core_id)
+        subscription, request = await self._locked_request(initial_request_id)
+        if (
+            subscription.id != initial_subscription_id
+            or request.subscription_id != initial_subscription_id
+            or subscription.customer_id != initial_customer_id
+        ):
+            raise _conflict("provision_subscription_owner_changed", task_id)
         task = await self.tasks.locked(task_id)
         assert task is not None
-        configuration = await self.configurations.locked(task.configuration_id)
+        if (
+            task.request_id != initial_request_id
+            or task.node_id != node.id
+            or task.configuration_id != initial_configuration_id
+            or task.profile_id != initial_profile_id
+        ):
+            raise _conflict("provision_assignment_changed", task_id)
+        configuration = await self.configurations.locked(
+            initial_configuration_id
+        )
         if configuration is None:
-            raise _missing("configuration", task.configuration_id)
+            raise _missing("configuration", initial_configuration_id)
+        current = await self.facts.node_task(task_id, current=True)
+        if (
+            current is None
+            or current.profile.subscription_id != initial_subscription_id
+            or current.profile.configuration_id != initial_configuration_id
+            or configuration.core_id != initial_core_id
+            or configuration.node_id != node.id
+        ):
+            raise _conflict("provision_assignment_changed", task_id)
         if (
             task.action == "apply"
             and task.configuration_revision != configuration.revision
         ):
             raise _conflict("provision_configuration_changed", task_id)
-        customer = await self.customers.locked(subscription.customer_id)
         if (
             task.action == "apply"
             and not CustomerAccessPolicy.services_available(customer)
@@ -653,16 +705,57 @@ class ProvisioningCommand:
         facts = await self.facts.node_task(task_id)
         if facts is None or facts.task.node_id != node.id:
             raise _missing("provision_task", task_id)
+        initial_request_id = facts.request.id
+        initial_subscription_id = facts.subscription.id
+        initial_customer_id = facts.subscription.customer_id
+        initial_payer_id = facts.subscription.payer_customer_id
+        initial_configuration_id = facts.configuration.id
+        initial_core_id = facts.configuration.core_id
+        initial_profile_id = facts.profile.id
+        await self.customers.locked_many(
+            sorted(
+                {initial_customer_id, initial_payer_id or initial_customer_id}
+            )
+        )
+        await self.nodes.locked(node.id)
+        node = await self.nodes.authenticate(code, key)
         bridge = self.settings.core_provisioning
         bridge_enabled = bridge is not None and bridge.mode != "disabled"
         if bridge_enabled:
-            await self.installed.lock_core(facts.configuration.core_id)
-        subscription, request = await self._locked_request(facts.request.id)
+            await self.installed.lock_core(initial_core_id)
+        subscription, request = await self._locked_request(initial_request_id)
+        if (
+            subscription.id != initial_subscription_id
+            or request.subscription_id != initial_subscription_id
+            or subscription.customer_id != initial_customer_id
+            or subscription.payer_customer_id != initial_payer_id
+        ):
+            raise _conflict("provision_subscription_owner_changed", task_id)
         task = await self.tasks.locked(task_id)
         assert task is not None
-        configuration = await self.configurations.locked(task.configuration_id)
+        if (
+            task.request_id != initial_request_id
+            or task.node_id != node.id
+            or task.configuration_id != initial_configuration_id
+            or task.profile_id != initial_profile_id
+        ):
+            raise _conflict("provision_assignment_changed", task_id)
+        configuration = await self.configurations.locked(
+            initial_configuration_id
+        )
         if configuration is None:
-            raise _missing("configuration", task.configuration_id)
+            raise _missing("configuration", initial_configuration_id)
+        current = await self.facts.node_task(task_id, current=True)
+        if (
+            current is None
+            or current.profile.subscription_id != initial_subscription_id
+            or current.profile.configuration_id != initial_configuration_id
+            or configuration.core_id != initial_core_id
+            or configuration.node_id != node.id
+        ):
+            raise _conflict("provision_assignment_changed", task_id)
+        if await self.facts.managed_task_window_exists(task_id, current=True):
+            raise _conflict("managed_provision_finality_required", task_id)
         if (
             task.action == "apply"
             and task.configuration_revision != configuration.revision

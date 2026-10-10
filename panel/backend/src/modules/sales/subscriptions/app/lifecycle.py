@@ -1,6 +1,5 @@
 from datetime import UTC, datetime
 
-from papilio.errors.exceptions import NotFoundException
 from papilio.infra.db.tools.decorators import transactional
 
 from src.config.settings import PapilioSettings
@@ -25,15 +24,6 @@ class SubscriptionLifecycleCommand:
 
     @transactional
     async def check(self, id: int) -> SubscriptionModel:
-        subscription = await self.repo.locked(id)
-        if subscription is None:
-            raise NotFoundException(
-                message="اشتراک پیدا نشد.",
-                message_code="subscription_not_found",
-                entity="subscription",
-                identifier="id",
-                identifier_value=id,
-            )
         subscription = await self.holds.check(id)
         now = datetime.now(UTC).replace(tzinfo=None, microsecond=0)
         if subscription.status != "active":
