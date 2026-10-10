@@ -23,6 +23,9 @@ from src.modules.network.managed_runtime.app.services import (
     ManagedRevocationService,
     ManagedWindowService,
 )
+from src.modules.network.managed_runtime.app.successors import (
+    ManagedSuccessorWindowCommand,
+)
 from src.modules.network.managed_runtime.app.windows import (
     ManagedInitialWindowCommand,
 )
@@ -37,6 +40,9 @@ from src.modules.network.managed_runtime.infra.mysql import (
 from src.modules.network.managed_runtime.infra.scopes import (
     ManagedInstallationScopeReader,
 )
+from src.modules.network.managed_runtime.infra.successor_reads import (
+    ManagedSuccessorReader,
+)
 from src.modules.network.managed_runtime.interfaces import (
     IManagedAdmissionCommand,
     IManagedAdmissionService,
@@ -49,12 +55,17 @@ from src.modules.network.managed_runtime.interfaces import (
     IManagedRevocationCommand,
     IManagedRevocationService,
     IManagedRuntimeAuthority,
+    IManagedSuccessorWindowCommand,
     IManagedWindowService,
 )
 
 
 class ManagedRuntimeProvider(Provider):
     scope = Scope.REQUEST
+    successor_reader = provide(ManagedSuccessorReader)
+    successor_command = provide(
+        ManagedSuccessorWindowCommand, provides=IManagedSuccessorWindowCommand
+    )
     revocation_command = provide(
         ManagedRevocationCommand, provides=IManagedRevocationCommand
     )

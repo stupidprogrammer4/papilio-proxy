@@ -122,6 +122,7 @@ class ManagedWindowRepository(MySQLPersistenceRepository[ManagedWindowModel]):
             .where(
                 col(self.table.profile_id) == profile_id,
                 col(self.table.epoch_id) == epoch_id,
+                col(self.table.predecessor_id).is_(None),
             )
             .with_for_update()
             .execution_options(populate_existing=True)

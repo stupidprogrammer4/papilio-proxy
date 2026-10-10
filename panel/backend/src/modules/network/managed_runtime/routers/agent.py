@@ -19,6 +19,10 @@ from src.modules.network.managed_runtime.domain.revocations import (
     ManagedRevocationOut,
     ManagedRevocationSubmission,
 )
+from src.modules.network.managed_runtime.domain.successors import (
+    ManagedSuccessorWindowCreate,
+    ManagedSuccessorWindowOut,
+)
 from src.modules.network.managed_runtime.domain.windows import (
     ManagedInitialWindowCreate,
     ManagedInitialWindowOut,
@@ -29,11 +33,27 @@ from src.modules.network.managed_runtime.interfaces import (
     IManagedInitialWindowCommand,
     IManagedInstallationCommand,
     IManagedRevocationCommand,
+    IManagedSuccessorWindowCommand,
 )
 
 router = APIRouter(
     prefix="/v1/nodes", tags=["Managed installation"], route_class=DishkaRoute
 )
+
+
+@router.post("/{code}/managed-windows/{window_id}/successor")
+async def successor(
+    code: str,
+    data: ManagedSuccessorWindowCreate,
+    response: Response,
+    command: FromDishka[IManagedSuccessorWindowCommand],
+    window_id: str = Path(pattern=r"^[a-f0-9]{32}$"),
+    x_papilio_node_key: str = Header(default=""),
+) -> APIResponse[ManagedSuccessorWindowOut, None]:
+    """Continue from accepted original finality without a new payment."""
+    response.headers["Cache-Control"] = "no-store"
+    result = await command.issue(code, x_papilio_node_key, window_id, data)
+    return APIResponse.from_data(result)
 
 
 @router.post("/{code}/managed-windows/{window_id}/revocation")

@@ -30,10 +30,24 @@ from src.modules.network.managed_runtime.domain.revocations import (
     ManagedRevocationOut,
     ManagedRevocationSubmission,
 )
+from src.modules.network.managed_runtime.domain.successors import (
+    ManagedSuccessorWindowCreate,
+    ManagedSuccessorWindowOut,
+)
 from src.modules.network.managed_runtime.domain.windows import (
     ManagedInitialWindowCreate,
     ManagedInitialWindowOut,
 )
+
+
+class IManagedSuccessorWindowCommand(Protocol):
+    def issue(
+        self,
+        code: str,
+        key: str,
+        predecessor_window_id: str,
+        data: ManagedSuccessorWindowCreate,
+    ) -> Awaitable[ManagedSuccessorWindowOut]: ...
 
 
 class IManagedFinalityCommand(Protocol):

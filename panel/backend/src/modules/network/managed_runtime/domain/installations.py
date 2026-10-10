@@ -11,6 +11,9 @@ from src.modules.network.managed_runtime.domain.contracts import (
     ManagedRuntimeCapacity,
     Sha256,
 )
+from src.modules.network.managed_runtime.domain.successors import (
+    ManagedSuccessorPolicy,
+)
 from src.modules.network.managed_runtime.domain.wire import (
     ManagedClosedProfileWire,
     ManagedClosedStartupReceiptWire,
@@ -22,6 +25,9 @@ class ManagedAdapterPolicy(ImmutableContract):
     enabled: bool = False
     window_mode: Literal["disabled", "reserved"] = "disabled"
     paid_mode: Literal["disabled", "strict_admission"] = "disabled"
+    successor_policy: ManagedSuccessorPolicy = Field(
+        default_factory=ManagedSuccessorPolicy
+    )
     adapter_revision: Literal[1] = 1
     source_commit: Literal["d2758a023cd7f4174a5a5fa4ff66e487d4342ba0"]
     executable_sha256: Sha256
