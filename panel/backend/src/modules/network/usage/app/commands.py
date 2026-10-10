@@ -223,6 +223,9 @@ class UsageCommand:
             raise _missing("subscription", initial.subscription_id)
         grant = await self.grants.locked(grant_id)
         assert grant is not None
+        managed_window_id = await self.facts.managed_window_id(grant.id)
+        if managed_window_id is not None:
+            raise _conflict("managed_usage_finality_required", grant.id)
         if data.process_epoch != grant.process_epoch:
             raise _conflict("usage_process_epoch_mismatch", grant.id)
         digest = await asyncio.to_thread(

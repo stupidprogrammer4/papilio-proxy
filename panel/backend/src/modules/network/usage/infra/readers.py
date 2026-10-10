@@ -10,6 +10,7 @@ from src.modules.network.configurations.infra.tables import (
     ConfigurationTable,
     ProfileTable,
 )
+from src.modules.network.managed_runtime.infra.tables import ManagedWindowTable
 from src.modules.network.usage.domain.models import UsageEventModel
 from src.modules.network.usage.domain.results import (
     ProfileUsageAssignment,
@@ -53,6 +54,14 @@ class UsageFactsReader:
                 row.ProfileTable, row.ConfigurationTable
             )
         )
+
+    async def managed_window_id(self, grant_id: int) -> int | None:
+        result = await self.uow.execute(
+            select(col(ManagedWindowTable.id)).where(
+                col(ManagedWindowTable.grant_id) == grant_id
+            )
+        )
+        return result.scalar_one_or_none()
 
     async def reserved_bytes(
         self, subscription_id: int, generation: int, modes: list[str]
