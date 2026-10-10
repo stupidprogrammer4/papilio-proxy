@@ -33,6 +33,7 @@ class NativeWindowResult:
     admission_sha256: str
     replay_unchanged: bool
     child_stopped: bool
+    paid_task_id: int | None = None
 
 
 def wait_native_window(root, process, profile_id, timeout):
@@ -51,7 +52,14 @@ def wait_native_window(root, process, profile_id, timeout):
             )
         if cycle_path.exists():
             cycle = json.loads(cycle_path.read_bytes())
-            if cycle.get("issued") and cycle.get("admission"):
+            if (
+                cycle.get("issued")
+                and cycle.get("admission")
+                and (
+                    not cycle["policy"].get("provision_task_id")
+                    or cycle.get("paid_acceptance")
+                )
+            ):
                 connection = UnixHTTP(root / "control" / "control.sock")
                 try:
                     connection.request("GET", "/v1/observe")
@@ -84,6 +92,7 @@ def run_native_window_cycle(
     *,
     freeze_after_ms: int,
     payload: bytes,
+    provision_task_id: int | None = None,
 ) -> NativeWindowResult:
     assert freeze_after_ms > 0 and payload, "native_window_fixture_capacity"
     registry = {
@@ -102,6 +111,8 @@ def run_native_window_cycle(
             "require_admission_receipt": True,
         },
     }
+    if provision_task_id is not None:
+        registry["window_cycle"]["provision_task_id"] = provision_task_id
     config = {
         "enabled": True,
         "api_url": api_url,
@@ -224,4 +235,7 @@ def run_native_window_cycle(
             admission["receipt"]["receipt_sha256"],
             unchanged,
             child_stopped,
+            completed["paid_acceptance"]["provision_task_id"]
+            if completed.get("paid_acceptance")
+            else None,
         )

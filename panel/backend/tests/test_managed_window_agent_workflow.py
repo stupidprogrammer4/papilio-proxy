@@ -1,7 +1,6 @@
-"""Actual native managed traffic/finality; activation is an explicit fixture.
+"""Actual strict traffic and finality for active-fixture and paid workflows.
 
-The paid wallet purchase is native. ACTIVE/unmanaged entitlement is supplied by
-ManagedInstallationWorkflowFixture; paid provisioning ACK is not proved.
+Paid mode uses native purchase, prepare and activation.
 """
 
 import asyncio
@@ -88,6 +87,9 @@ class ManagedWindowAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                     update={
                         **registry["trusted_api_policy"],
                         "window_mode": "reserved",
+                        "paid_mode": "strict_admission"
+                        if getattr(self, "paid_managed_fixture", False)
+                        else "disabled",
                     }
                 )
                 issued = await self.issue()
@@ -114,6 +116,18 @@ class ManagedWindowAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                         {"id": subscription["id"]},
                     )
                     self.assertEqual(before.scalar_one(), 0)
+                    paid_task_id = None
+                    if getattr(self, "paid_managed_fixture", False):
+                        tasks = await fresh.execute(
+                            text(
+                                "SELECT t.id FROM tbl_provision_tasks t "
+                                "JOIN tbl_provision_requests r ON "
+                                "r.id=t.request_id "
+                                "WHERE r.subscription_id=:id"
+                            ),
+                            {"id": subscription["id"]},
+                        )
+                        paid_task_id = tasks.scalar_one()
                 result = await asyncio.to_thread(
                     run_native_window_cycle,
                     root,
@@ -126,6 +140,7 @@ class ManagedWindowAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                     Path(binaries),
                     freeze_after_ms=10000,
                     payload=payload,
+                    provision_task_id=paid_task_id,
                 )
                 self.assertEqual(result.upload_bytes, len(payload))
                 self.assertEqual(result.download_bytes, len(payload))
@@ -199,7 +214,42 @@ class ManagedWindowAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                     admissions = await fresh.execute(
                         text("SELECT COUNT(*) FROM tbl_managed_admissions")
                     )
-                    self.assertEqual(admissions.scalar_one(), 0)
+                    self.assertEqual(
+                        admissions.scalar_one(), 1 if paid_task_id else 0
+                    )
+                    if paid_task_id:
+                        self.assertEqual(result.paid_task_id, paid_task_id)
+                        activation = await fresh.execute(
+                            text(
+                                "SELECT "
+                                "s.status,s.activated_at,t.state,"
+                                "p.applied_generation "
+                                "FROM tbl_subscriptions s JOIN "
+                                "tbl_provision_requests r "
+                                "ON r.subscription_id=s.id JOIN "
+                                "tbl_provision_tasks t "
+                                "ON t.request_id=r.id JOIN tbl_profiles p ON "
+                                "p.id=t.profile_id "
+                                "WHERE t.id=:id"
+                            ),
+                            {"id": paid_task_id},
+                        )
+                        status, activated_at, task_state, generation = tuple(
+                            activation.one()
+                        )
+                        self.assertEqual(
+                            (status, task_state, generation),
+                            ("active", "applied", 0),
+                        )
+                        self.assertIsNotNone(activated_at)
+                        balance = await fresh.execute(
+                            text(
+                                "SELECT balance_rial FROM tbl_wallets WHERE "
+                                "customer_id=:id"
+                            ),
+                            {"id": subscription["customer_id"]},
+                        )
+                        self.assertEqual(balance.scalar_one(), 200000)
             finally:
                 server.should_exit = True
                 try:
@@ -207,3 +257,9 @@ class ManagedWindowAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                 finally:
                     listener.close()
                     await asyncio.to_thread(runtime.__exit__, None, None, None)
+
+
+class ManagedPaidWindowAgentWorkflowTest(ManagedWindowAgentWorkflowTest):
+    """Actual paid entitlement, strict receipt, activation and TLS traffic."""
+
+    paid_managed_fixture = True
