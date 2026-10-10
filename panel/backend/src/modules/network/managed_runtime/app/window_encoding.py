@@ -14,6 +14,7 @@ from src.modules.network.managed_runtime.domain.models import (
 from src.modules.network.managed_runtime.domain.windows import (
     ManagedInitialWindowCreate,
     ManagedInitialWindowOut,
+    ManagedProvisionClaim,
 )
 from src.modules.network.managed_runtime.domain.wire import ManagedWindowWire
 
@@ -25,7 +26,7 @@ class ManagedWindowEncoding:
             ManagedInstallationEncoding.compact(
                 {
                     "installation_id": id,
-                    "request": data.model_dump(mode="json"),
+                    "request": data.model_dump(mode="json", exclude_none=True),
                 },
                 canonical=True,
             )
@@ -53,4 +54,9 @@ class ManagedWindowEncoding:
             window_sha256=row.window_sha256,
             original_window=original,
             window=ManagedWindowWire.model_validate_json(original),
+            provision_claim=ManagedProvisionClaim.model_validate_json(
+                decrypt(row.encrypted_provision_claim, key)
+            )
+            if row.encrypted_provision_claim
+            else None,
         )

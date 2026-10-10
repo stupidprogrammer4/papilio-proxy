@@ -12,6 +12,7 @@ class ManagedProfileScope:
 class ManagedSubscriptionOwner:
     subscription_id: int
     customer_id: int
+    payer_customer_id: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

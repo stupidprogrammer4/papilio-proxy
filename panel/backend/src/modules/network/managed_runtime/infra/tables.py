@@ -10,6 +10,7 @@ from src.modules.network.managed_runtime.domain.models import (
     ManagedBarrierModel,
     ManagedEpochModel,
     ManagedInstallationModel,
+    ManagedRevocationModel,
     ManagedWindowModel,
 )
 
@@ -84,3 +85,10 @@ class ManagedWindowTable(ManagedWindowModel, BaseTable, table=True):
 
 class ManagedAdmissionTable(ManagedAdmissionModel, BaseTable, table=True):
     encrypted_receipt: str = Field(sa_type=LONGTEXT)
+
+
+class ManagedRevocationTable(ManagedRevocationModel, BaseTable, table=True):
+    encrypted_receipt: str = Field(sa_type=LONGTEXT)
+    observed_at: datetime = Field(
+        sa_column=Column(DATETIME(fsp=6), nullable=False)
+    )

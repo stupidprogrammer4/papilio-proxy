@@ -5,6 +5,7 @@ from src.modules.network.managed_runtime.domain.models import (
     ManagedBarrierModel,
     ManagedEpochModel,
     ManagedInstallationModel,
+    ManagedRevocationModel,
     ManagedWindowModel,
 )
 from src.modules.network.managed_runtime.infra.mysql import (
@@ -12,6 +13,7 @@ from src.modules.network.managed_runtime.infra.mysql import (
     ManagedBarrierRepository,
     ManagedEpochRepository,
     ManagedInstallationRepository,
+    ManagedRevocationRepository,
     ManagedWindowRepository,
 )
 
@@ -136,6 +138,10 @@ class ManagedAdmissionService:
     def __init__(self, repo: ManagedAdmissionRepository) -> None:
         self.repo = repo
 
+    async def by_window(self, window_id: int) -> ManagedAdmissionModel | None:
+        result = await self.repo.by_window(window_id)
+        return result
+
     async def find(self, id: int) -> ManagedAdmissionModel | None:
         result = await self.repo.get_by_id(id)
         return result
@@ -143,5 +149,20 @@ class ManagedAdmissionService:
     async def create(
         self, data: ManagedAdmissionModel
     ) -> ManagedAdmissionModel:
+        result = await self.repo.create(data)
+        return result
+
+
+class ManagedRevocationService:
+    def __init__(self, repo: ManagedRevocationRepository) -> None:
+        self.repo = repo
+
+    async def by_window(self, window_id: int) -> ManagedRevocationModel | None:
+        result = await self.repo.by_window(window_id)
+        return result
+
+    async def create(
+        self, data: ManagedRevocationModel
+    ) -> ManagedRevocationModel:
         result = await self.repo.create(data)
         return result

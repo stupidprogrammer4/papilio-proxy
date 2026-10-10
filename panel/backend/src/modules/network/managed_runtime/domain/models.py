@@ -45,6 +45,7 @@ class ManagedBarrierModel(PersistenceEntity):
 
 
 class ManagedWindowModel(PersistenceEntity):
+    encrypted_provision_claim: str | None = TextField(default=None)
     epoch_id: int = ForeignKeyField("tbl_managed_epoches.id")
     grant_id: int = ForeignKeyField("tbl_usage_grants.id", unique=True)
     profile_id: int = ForeignKeyField("tbl_profiles.id")
@@ -73,5 +74,13 @@ class ManagedAdmissionModel(PersistenceEntity):
     provision_task_id: int = ForeignKeyField("tbl_provision_tasks.id")
     receipt_sha256: str = CharField(64)
     outcome: str = CharField(16)
+    observed_at: datetime = TimestampField()
+    encrypted_receipt: str = TextField()
+
+
+class ManagedRevocationModel(PersistenceEntity):
+    window_id: int = ForeignKeyField("tbl_managed_windows.id", unique=True)
+    provision_task_id: int = ForeignKeyField("tbl_provision_tasks.id")
+    receipt_sha256: str = CharField(64)
     observed_at: datetime = TimestampField()
     encrypted_receipt: str = TextField()

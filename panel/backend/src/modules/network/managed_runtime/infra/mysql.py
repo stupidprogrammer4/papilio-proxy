@@ -11,6 +11,7 @@ from src.modules.network.managed_runtime.domain.models import (
     ManagedBarrierModel,
     ManagedEpochModel,
     ManagedInstallationModel,
+    ManagedRevocationModel,
     ManagedWindowModel,
 )
 from src.modules.network.managed_runtime.infra.tables import (
@@ -18,6 +19,7 @@ from src.modules.network.managed_runtime.infra.tables import (
     ManagedBarrierTable,
     ManagedEpochTable,
     ManagedInstallationTable,
+    ManagedRevocationTable,
     ManagedWindowTable,
 )
 
@@ -151,3 +153,27 @@ class ManagedAdmissionRepository(
     MySQLPersistenceRepository[ManagedAdmissionModel]
 ):
     table = ManagedAdmissionTable
+
+    async def by_window(self, window_id: int) -> ManagedAdmissionModel | None:
+        result = await self.uow.execute(
+            select(self.table)
+            .where(col(self.table.window_id) == window_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
+
+
+class ManagedRevocationRepository(
+    MySQLPersistenceRepository[ManagedRevocationModel]
+):
+    table = ManagedRevocationTable
+
+    async def by_window(self, window_id: int) -> ManagedRevocationModel | None:
+        result = await self.uow.execute(
+            select(self.table)
+            .where(col(self.table.window_id) == window_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()

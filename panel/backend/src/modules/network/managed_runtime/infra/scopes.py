@@ -27,6 +27,7 @@ class ManagedInstallationScopeReader:
                 col(ProfileTable.configuration_id),
                 col(ProfileTable.subscription_id),
                 col(SubscriptionTable.customer_id),
+                col(SubscriptionTable.payer_customer_id),
             )
             .join(
                 ConfigurationTable,
@@ -42,7 +43,12 @@ class ManagedInstallationScopeReader:
             .limit(profile_limit)
         )
         rows = result.all()
-        owners = {row.subscription_id: row.customer_id for row in rows}
+        owners = {
+            row.subscription_id: ManagedSubscriptionOwner(
+                row.subscription_id, row.customer_id, row.payer_customer_id
+            )
+            for row in rows
+        }
         return ManagedInstallationScope(
             profiles=tuple(
                 ManagedProfileScope(
@@ -50,10 +56,7 @@ class ManagedInstallationScopeReader:
                 )
                 for row in rows
             ),
-            owners=tuple(
-                ManagedSubscriptionOwner(id, owners[id])
-                for id in sorted(owners)
-            ),
+            owners=tuple(owners[id] for id in sorted(owners)),
         )
 
     async def lock_subscriptions(
@@ -61,14 +64,18 @@ class ManagedInstallationScopeReader:
     ) -> tuple[ManagedSubscriptionOwner, ...]:
         result = await self.uow.execute(
             select(
-                col(SubscriptionTable.id), col(SubscriptionTable.customer_id)
+                col(SubscriptionTable.id),
+                col(SubscriptionTable.customer_id),
+                col(SubscriptionTable.payer_customer_id),
             )
             .where(col(SubscriptionTable.id).in_(ids))
             .order_by(col(SubscriptionTable.id))
             .with_for_update()
         )
         return tuple(
-            ManagedSubscriptionOwner(row.id, row.customer_id)
+            ManagedSubscriptionOwner(
+                row.id, row.customer_id, row.payer_customer_id
+            )
             for row in result.all()
         )
 

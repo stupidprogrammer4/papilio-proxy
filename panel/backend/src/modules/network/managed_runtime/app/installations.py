@@ -92,7 +92,16 @@ class ManagedInstallationCommand:
         if len(scope.profiles) > runtime.max_profiles:
             raise conflict("managed_runtime_snapshot_capacity")
         await self.customers.locked_many(
-            sorted({owner.customer_id for owner in scope.owners})
+            sorted(
+                {
+                    customer_id
+                    for owner in scope.owners
+                    for customer_id in (
+                        owner.customer_id,
+                        owner.payer_customer_id or owner.customer_id,
+                    )
+                }
+            )
         )
         return scope
 

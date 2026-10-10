@@ -1,6 +1,10 @@
 from collections.abc import Awaitable
 from typing import Protocol
 
+from src.modules.network.managed_runtime.domain.admissions import (
+    ManagedAdmissionOut,
+    ManagedAdmissionSubmission,
+)
 from src.modules.network.managed_runtime.domain.barriers import (
     ManagedWindowFinalOut,
     ManagedWindowFinalSubmission,
@@ -19,7 +23,12 @@ from src.modules.network.managed_runtime.domain.models import (
     ManagedBarrierModel,
     ManagedEpochModel,
     ManagedInstallationModel,
+    ManagedRevocationModel,
     ManagedWindowModel,
+)
+from src.modules.network.managed_runtime.domain.revocations import (
+    ManagedRevocationOut,
+    ManagedRevocationSubmission,
 )
 from src.modules.network.managed_runtime.domain.windows import (
     ManagedInitialWindowCreate,
@@ -104,10 +113,42 @@ class IManagedBarrierService(Protocol):
 
 
 class IManagedAdmissionService(Protocol):
+    def by_window(
+        self, window_id: int
+    ) -> Awaitable[ManagedAdmissionModel | None]: ...
     def find(self, id: int) -> Awaitable[ManagedAdmissionModel | None]: ...
     def create(
         self, data: ManagedAdmissionModel
     ) -> Awaitable[ManagedAdmissionModel]: ...
+
+
+class IManagedAdmissionCommand(Protocol):
+    def acknowledge(
+        self,
+        code: str,
+        key: str,
+        window_id: str,
+        data: ManagedAdmissionSubmission,
+    ) -> Awaitable[ManagedAdmissionOut]: ...
+
+
+class IManagedRevocationService(Protocol):
+    def by_window(
+        self, window_id: int
+    ) -> Awaitable[ManagedRevocationModel | None]: ...
+    def create(
+        self, data: ManagedRevocationModel
+    ) -> Awaitable[ManagedRevocationModel]: ...
+
+
+class IManagedRevocationCommand(Protocol):
+    def acknowledge(
+        self,
+        code: str,
+        key: str,
+        window_id: str,
+        data: ManagedRevocationSubmission,
+    ) -> Awaitable[ManagedRevocationOut]: ...
 
 
 class IManagedRuntimeAuthority(Protocol):
