@@ -12,7 +12,8 @@ from tests.test_managed_windows_workflow import ManagedWindowWorkflowFixture
 
 
 class ManagedFinalityWorkflowTest(ManagedWindowWorkflowFixture):
-    def frozen_submission(self, window, expectation, **changes):
+    @staticmethod
+    def frozen_submission(window, expectation, **changes):
         wire = window["window"]
         snapshot = {
             "installation": wire["installation"],

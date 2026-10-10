@@ -135,15 +135,27 @@ class ManagedInstallationWorkflowFixture(StaffAdministrationWorkflowFixture):
             f"/v1/admin/network/configurations/{configuration['id']}/profiles",
             {"subscription_id": subscription["id"]},
         )
-        async with self.connection.uow() as unit:
-            async with transaction(unit):
-                await unit.execute(
+        if getattr(self, "paid_managed_fixture", False):
+            async with self.connection.uow() as fresh:
+                requests = await fresh.execute(
                     text(
-                        "UPDATE tbl_subscriptions SET status='active',"
-                        "provisioning_managed=0 WHERE id=:id"
+                        "SELECT id FROM tbl_provision_requests WHERE "
+                        "subscription_id=:id"
                     ),
                     {"id": subscription["id"]},
                 )
+                request_id = requests.scalar_one()
+            await self.post(f"/v1/admin/provisioning/{request_id}/prepare")
+        else:
+            async with self.connection.uow() as unit:
+                async with transaction(unit):
+                    await unit.execute(
+                        text(
+                            "UPDATE tbl_subscriptions SET status='active',"
+                            "provisioning_managed=0 WHERE id=:id"
+                        ),
+                        {"id": subscription["id"]},
+                    )
         runtime = f"/v1/admin/network/cores/{configuration['core_id']}/runtime"
         state = (await self.get(runtime))["data"]
         revision = await self.post(
