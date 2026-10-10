@@ -125,7 +125,8 @@ outside that gate. See [managed runtime boundaries](managed-runtime.md).
 
 ## Ordinary local rollout
 
-Schema58 is applied with business counts preserved and eleven automation schedules.
+Schema59 is applied locally after an encrypted, verified schema58 backup, with
+business counts preserved and eleven automation schedules.
 Owner login/logout and eight admin reads passed. The compiled Vue preview passed
 six desktop/mobile screens, the plan creation modal and real API reads with no
 JavaScript or unexpected HTTP errors and no business writes. The preview uses the
@@ -149,9 +150,14 @@ failure; live TLS/Telegram and macOS/Windows acceptance are also pending.
 
 ## Remaining gates
 
-Native managed paid authority remains disabled. The experimental active-only
-window/finality path does not implement paid task bootstrap, admission activation
-or authoritative managed revocation. Remaining lifecycle lock ordering, key-rotation concurrency,
+Ordinary managed readiness remains disabled. An experimental opt-in paid path
+now leases native tasks, accepts original strict admission before activation,
+and completes revocation only after original finality. Actual local Xray/TLS gates
+cover native paid activation/accounting and pending-purchase cancellation with
+exactly one wallet refund. Schema59 preserves existing windows and refuses
+lossy downgrade of paid claims or revocation evidence. These gates do not establish
+continuous service: successors, epoch rollover, never-admitted recovery and
+crash/fsync checkpoints remain open. Remaining lifecycle lock ordering, key-rotation concurrency,
 safe IP replacement without overlap, continuous global quota/expiry authority,
 other-engine enforcement and the two transient core failures require further work.
 

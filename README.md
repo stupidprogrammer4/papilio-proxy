@@ -498,9 +498,14 @@ admission require separate evidence. An experimental native single-window flow
 now reserves shared quota and settles the original strict final snapshot in one
 transaction, with exact replay and old-generation isolation. Actual temporary
 Go/Xray TLS traffic and final accounting passed a native integration gate using
-an explicitly supplied ACTIVE entitlement. It does not prove paid activation.
-The private component also provides immutable historical strict admission
-receipts. See [managed window operations and recovery](docs/managed-runtime.md).
+an explicitly supplied ACTIVE entitlement. A separate opt-in paid path leases
+an actual native provisioning task and accepts original strict admission evidence
+before native activation. Actual local gates cover paid TLS traffic and finality,
+and cancellation of an unacknowledged purchase through original revocation and
+exactly one wallet refund. The component durably blocks new admission on revoke.
+Continuous successors, safe epoch rollover and crash recovery still need work;
+ordinary readiness and cores remain disabled. See
+[managed window operations and recovery](docs/managed-runtime.md).
 Strict configuration
 must be selected through native editing before capture: the tested artifact uses
 `loglevel: none`; default stock warning-log artifacts fail closed. The adapter is
