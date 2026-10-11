@@ -219,6 +219,98 @@ class SmsPaymentIdentifiersWorkflowTest(SmsOriginsWorkflowFixture):
         self.assertEqual(review["topup_id"], second["id"])
         self.assertEqual(review["evidence_kind"], "trusted_sms_origin")
 
+    async def test_melli_positive_suffix_credit_and_debit_replay(self):
+        await self.configure_identifiers("rial_suffix4")
+        source = await self.receiving_source()
+        changed = await self.client.put(
+            f"/v1/admin/payments/sms-origins/parser-profiles/{source['profile']['id']}",
+            headers=self.headers,
+            json={
+                "expected_revision": source["profile"]["revision"],
+                "title": "Generated Melli credit format",
+                "is_active": True,
+                "definition": {
+                    "mode": "labelled_credit",
+                    "credit_markers": ["انتقال:"],
+                    "debit_markers": ["برداشت"],
+                    "clause_separators": [" ", "\n"],
+                    "deposit_relations": [
+                        {
+                            "marker": "انتقال:",
+                            "relation": "label_before_amount",
+                            "implicit_unit": "rial",
+                            "required_amount_suffix": "+",
+                        }
+                    ],
+                    "balance_relations": [
+                        {
+                            "marker": "مانده:",
+                            "relation": "label_before_amount",
+                            "implicit_unit": "rial",
+                        }
+                    ],
+                    "reference_labels": ["پیگیری:"],
+                    "rial_labels": ["ریال"],
+                    "toman_labels": ["تومان"],
+                    "grouping_separators": [","],
+                    "case_sensitive": True,
+                },
+            },
+        )
+        self.assertEqual(changed.status_code, 200, changed.text)
+        first_customer = await self.payer("Melli pending")
+        customer = await self.payer("Melli matched")
+        first = await self.post(
+            "/v1/admin/payments/topups",
+            self.invoice_body(source, first_customer, 130000, "melli_first"),
+        )
+        topup = await self.post(
+            "/v1/admin/payments/topups",
+            self.invoice_body(source, customer, 130000, "melli_second"),
+        )
+        self.assertNotEqual(first["amount_rial"], topup["amount_rial"])
+        original_ms = self.original_timestamp(source)
+        debit = (
+            f"بانك ملي ايران انتقال:{topup['amount_rial']:,}- "
+            "حساب:00001 مانده:774,587 0527-18:26"
+        )
+        await self.upload_origin(
+            source["enrolled"],
+            original_ms,
+            "melli_debit_" + self.suffix,
+            message=debit,
+        )
+        pending = await self.financial_state(customer["id"], topup["id"])
+        self.assertEqual(
+            (pending["status"], pending["balance"], pending["entries"]),
+            ("pending", 0, 0),
+        )
+        event = "melli_credit_" + self.suffix
+        credit = (
+            f"بانك ملي ايران انتقال:{topup['amount_rial']:,}+ "
+            "حساب:00001 مانده:774,587 0527-18:26"
+        )
+        await self.upload_origin(
+            source["enrolled"], original_ms, event, message=credit
+        )
+        settled = await self.financial_state(customer["id"], topup["id"])
+        self.assertEqual(settled["status"], "approved")
+        self.assertEqual(settled["balance"], topup["amount_rial"])
+        self.assertEqual((settled["entries"], settled["settlements"]), (1, 1))
+        await self.upload_origin(
+            source["enrolled"], original_ms, event, message=credit
+        )
+        self.assertEqual(
+            settled, await self.financial_state(customer["id"], topup["id"])
+        )
+        untouched = await self.financial_state(
+            first_customer["id"], first["id"]
+        )
+        self.assertEqual(
+            (untouched["status"], untouched["balance"], untouched["entries"]),
+            ("pending", 0, 0),
+        )
+
     async def test_normal_amounts_after_identifier_mode_off(
         self,
     ):
