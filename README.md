@@ -44,7 +44,9 @@ Shadowsocks 2022, Hysteria 2, WireGuard and OpenVPN**. Export, installation,
 connectivity and ongoing enforcement are separate capabilities; see
 [core acceptance](proxy/CORE-ACCEPTANCE.md) and [current limits](#current-limits).
 The aiogram adapter presents Persian bot workflows; live Telegram and physical
-SMS forwarding remain unverified. The native Android prototype is canceled.
+SMS forwarding remain unverified. Development of our native
+[Android SMS Bridge](android/sms-bridge/README.md) has resumed; physical payment
+approval is a separate acceptance gate.
 
 ## Screenshots
 
@@ -486,7 +488,22 @@ The four-digit suffix alone never proves settlement. Native payment-review
 scheduler/worker recovery can retry previously received observations when their
 invoice becomes available; actual physical forwarding still needs enrollment.
 
-### External SMS forwarder contract
+### Android SMS Bridge
+
+Our [native Android application](android/sms-bridge/README.md) receives new
+matching bank SMS, preserves their provider timestamp and sender, signs the exact
+request body and retries through an encrypted SQLite outbox and JobScheduler.
+Enrollment secrets use Android Keystore; sender filters and delivery capacities
+are editable. Cleartext origins and redirects are rejected.
+
+On **2026-10-11**, the SDK fallback build and v2/v3 signature verification passed.
+The APK installed on an authorized Samsung A54 running Android API 36, and cold
+activity launches succeeded. Initial UI inspection found an empty queue and
+missing SMS permission. Real bank reception, trusted HTTPS enrollment, background
+battery behavior and physical payment approval remain unverified. The Gradle
+build was not executed.
+
+### SMS forwarder contract
 
 Post UTF-8 JSON to `/v1/webhooks/sms-devices/{device_id}` over HTTPS using the
 enrolled device's secret as the HMAC key. `X-Papilio-Timestamp` is the current
