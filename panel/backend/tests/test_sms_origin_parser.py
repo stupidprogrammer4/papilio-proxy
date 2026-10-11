@@ -1,4 +1,5 @@
 import hashlib
+import json
 import unittest
 from uuid import UUID
 
@@ -9,6 +10,7 @@ from src.modules.billing.sms_origins.app.parsing import (
     normalize_origin_sender,
     origin_digest,
     parse,
+    validate_definition,
 )
 from src.modules.billing.sms_origins.domain.contracts import (
     BankSmsParserDefinition,
@@ -16,10 +18,180 @@ from src.modules.billing.sms_origins.domain.contracts import (
     LiteralAmountRelation,
     OriginFingerprintInput,
     ParsedBankObservation,
+    SmsOriginCapacity,
 )
 
 
 class SmsOriginParserTest(unittest.TestCase):
+    def melli_definition(self) -> BankSmsParserDefinition:
+        return self.definition().model_copy(
+            update={
+                "credit_markers": ["انتقال:"],
+                "debit_markers": ["برداشت"],
+                "clause_separators": [" ", "\n"],
+                "deposit_relations": [
+                    LiteralAmountRelation.model_validate(
+                        {
+                            "marker": "انتقال:",
+                            "relation": "label_before_amount",
+                            "implicit_unit": "rial",
+                            "required_amount_suffix": "+",
+                        }
+                    )
+                ],
+                "balance_relations": [
+                    LiteralAmountRelation(
+                        marker="مانده:",
+                        relation="label_before_amount",
+                        implicit_unit="rial",
+                    )
+                ],
+            }
+        )
+
+    def test_melli_exact_credit_suffix_and_separate_balance(self) -> None:
+        observed = self.observation(
+            "بانك ملي ايران انتقال:500,000+ حساب:00000 "
+            "مانده:774,587 0527-18:26",
+            self.melli_definition(),
+        )
+        self.assertEqual(
+            (observed.direction, observed.deposit_rial, observed.balance_rial),
+            ("credit", 500000, 774587),
+        )
+
+    def test_melli_missing_negative_wrong_and_unrelated_suffix_are_manual(
+        self,
+    ) -> None:
+        definition = self.melli_definition()
+        for message in (
+            "انتقال:500,000 مانده:774,587",
+            "انتقال:500,000- مانده:774,587",
+            "انتقال:500,000− مانده:774,587",
+            "انتقال:500,000x مانده:774,587",
+            "انتقال:500,000 مانده:774,587+",
+            "انتقال:-500,000+ مانده:774,587",
+        ):
+            with self.subTest(message=message):
+                self.assertIsNone(
+                    self.observation(message, definition).deposit_rial
+                )
+
+    def test_required_suffix_generated_sample_binds_before_currency(
+        self,
+    ) -> None:
+        definition = self.melli_definition()
+        message = generated_sample(
+            definition,
+            GeneratedParserSample(
+                deposit_relation_index=0,
+                deposit_rial=500000,
+                balance_relation_index=0,
+                balance_rial=774587,
+                unit="rial",
+            ),
+        )
+        self.assertIn("500000+", message)
+        observed = self.observation(message, definition)
+        self.assertEqual(
+            (observed.deposit_rial, observed.balance_rial), (500000, 774587)
+        )
+
+    def test_original_blu_credit_and_withdrawal_preserve_distinct_amounts(
+        self,
+    ) -> None:
+        definition = self.definition().model_copy(
+            update={
+                "credit_markers": ["واریز پول"],
+                "deposit_relations": [
+                    LiteralAmountRelation(
+                        marker="به حساب شما نشست.",
+                        relation="amount_before_label",
+                    )
+                ],
+                "balance_relations": [
+                    LiteralAmountRelation(
+                        marker="موجودی:",
+                        relation="label_before_amount",
+                    )
+                ],
+            }
+        )
+        credit = self.observation(
+            "واریز پول\nکاربر نمونه، 1,050,000ریال به حساب شما نشست.\n"
+            "موجودی: 38,678,537 ریال\n۱۹:۵۶",
+            definition,
+        )
+        self.assertEqual(
+            (credit.direction, credit.deposit_rial, credit.balance_rial),
+            ("credit", 1050000, 38678537),
+        )
+        debit = self.observation(
+            "حساب0000000000\nبرداشت1,450,000\nمانده11,739,441\n"
+            "05/07/15-12:54\nبلو",
+            definition,
+        )
+        self.assertEqual(debit.direction, "debit")
+        self.assertIsNone(debit.deposit_rial)
+
+    def test_absent_or_null_suffix_preserves_legacy_relation_serialization(
+        self,
+    ) -> None:
+        legacy = {
+            "marker": "واریز",
+            "relation": "amount_before_label",
+            "implicit_unit": None,
+        }
+        self.assertEqual(
+            LiteralAmountRelation.model_validate(legacy).model_dump(), legacy
+        )
+        explicit = LiteralAmountRelation.model_validate(
+            {**legacy, "required_amount_suffix": None}
+        )
+        self.assertEqual(explicit.model_dump(), legacy)
+        self.assertEqual(json.loads(explicit.model_dump_json()), legacy)
+
+    def test_required_suffix_obeys_owning_marker_capacity(self) -> None:
+        capacity = SmsOriginCapacity(
+            page_size=1,
+            max_page_size=1,
+            max_profiles=1,
+            max_profile_bytes=4096,
+            max_rules_per_field=16,
+            max_marker_chars=16,
+            max_clauses=16,
+            max_message_bytes=4096,
+            max_realms=1,
+            max_aliases_per_realm=1,
+            max_match_candidates=1,
+            original_timestamp_future_seconds=0,
+            original_timestamp_max_age_seconds=60,
+        )
+        definition = self.melli_definition()
+        canonical = validate_definition(definition, capacity)
+        self.assertEqual(
+            json.loads(canonical)["deposit_relations"][0][
+                "required_amount_suffix"
+            ],
+            "+",
+        )
+        oversized = definition.model_copy(
+            update={
+                "deposit_relations": [
+                    LiteralAmountRelation.model_validate(
+                        {
+                            "marker": "انتقال:",
+                            "relation": "label_before_amount",
+                            "implicit_unit": "rial",
+                            "required_amount_suffix": "+" * 17,
+                        }
+                    )
+                ]
+            }
+        )
+        with self.assertRaisesRegex(ValueError, "sms_parser_marker_invalid"):
+            validate_definition(oversized, capacity)
+
     def definition(self) -> BankSmsParserDefinition:
         return BankSmsParserDefinition(
             mode="labelled_credit",

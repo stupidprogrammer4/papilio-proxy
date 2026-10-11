@@ -36,14 +36,16 @@ async function malformed(value){
  if(value.credit_markers[0]&&typeof value.credit_markers[0]==='object'){
   await editor.fill(JSON.stringify(valid,null,2));
   await dialog.getByText('Clause separators',{exact:true}).waitFor();
+  await dialog.getByLabel('Required amount suffix (optional)').fill('+');
   await dialog.getByRole('button',{name:'Create profile',exact:true}).click();
   await dialog.waitFor({state:'hidden'});
-  assert.equal(writes.length,1);assert.deepEqual(writes[0].body.definition.clause_separators,['\n']);
+  assert.equal(writes.length,1);assert.deepEqual(writes[0].body.definition.clause_separators,['\n']);assert.equal(writes[0].body.definition.deposit_relations[0].required_amount_suffix,'+');
  }
  await page.close();
 }
 try{
  await malformed({...valid,deposit_relations:[null]});
+ await malformed({...valid,deposit_relations:[{...valid.deposit_relations[0],required_amount_suffix:{}}]});
  await malformed({...valid,credit_markers:[{}]});
- console.log(JSON.stringify({boundary:'controlled HTTP, actual Vue',cases:3,pageErrors:errors.length,writes:writes.length}));
+ console.log(JSON.stringify({boundary:'controlled HTTP, actual Vue',cases:4,pageErrors:errors.length,writes:writes.length}));
 } catch(error){console.error(JSON.stringify({pageErrors:errors,writes:writes.length}));throw error;} finally {await browser.close();}

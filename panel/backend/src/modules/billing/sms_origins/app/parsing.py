@@ -66,6 +66,17 @@ def validate_definition(
             for value in values
         ):
             raise ValueError("sms_parser_marker_invalid")
+    for relation in (
+        *definition.deposit_relations,
+        *definition.balance_relations,
+    ):
+        suffix = relation.required_amount_suffix
+        if suffix is not None and (
+            not suffix
+            or len(suffix) > capacity.max_marker_chars
+            or "\x00" in suffix
+        ):
+            raise ValueError("sms_parser_marker_invalid")
     if definition.mode == "legacy_strict_reference" and (
         any(fields) or not definition.case_sensitive
     ):
@@ -217,7 +228,18 @@ def _amount(
         min(location, token.start) : max(location + len(marker), token.end)
     ]
     # Currency belongs to this exact amount token, never another field.
-    suffix = clause[token.end :].lstrip()
+    suffix = clause[token.end :]
+    required = relation.required_amount_suffix
+    if required is not None:
+        required = (
+            required if definition.case_sensitive else required.casefold()
+        )
+        if not suffix.startswith(required):
+            raise ValueError("sms_amount_suffix_invalid")
+        suffix = suffix[len(required) :]
+        if suffix.startswith(("+", "-", "−")):
+            raise ValueError("sms_amount_suffix_invalid")
+    suffix = suffix.lstrip()
     matched_rial = [
         label
         for label in definition.rial_labels
@@ -253,6 +275,8 @@ def _amount(
     remainder = segment.replace(marker, "").replace(
         clause[token.start : token.end], ""
     )
+    if required is not None and token.end <= location:
+        remainder = remainder.replace(required, "", 1)
     for label in (*definition.rial_labels, *definition.toman_labels):
         remainder = remainder.replace(label, "")
     if any(character.isalpha() for character in remainder):
@@ -397,11 +421,15 @@ def generated_sample(
 
     def amount_part(relation: LiteralAmountRelation, amount: int) -> str:
         number = str(amount // 10 if request.unit == "toman" else amount)
-        value = f"{number} {labels[0]}"
+        number += relation.required_amount_suffix or ""
+        # A configured space separator must not split a generated amount from
+        # its own relation or unit. No bank-specific sample template is used.
+        spacing = "" if " " in definition.clause_separators else " "
+        value = f"{number}{spacing}{labels[0]}"
         return (
-            f"{relation.marker} {value}"
+            f"{relation.marker}{spacing}{value}"
             if relation.relation == "label_before_amount"
-            else f"{value} {relation.marker}"
+            else f"{value}{spacing}{relation.marker}"
         )
 
     try:

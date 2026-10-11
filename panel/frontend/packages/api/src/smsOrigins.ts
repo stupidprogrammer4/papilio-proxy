@@ -2,7 +2,7 @@ export type SmsParserMode = "legacy_strict_reference" | "labelled_credit";
 export type SmsIdentityMode = "bank_reference_required" | "trusted_origin_fingerprint";
 export type SmsAmountRelation = "label_before_amount" | "amount_before_label";
 export type SmsAmountUnit = "rial" | "toman";
-export interface SmsLiteralAmountRelation { marker:string; relation:SmsAmountRelation; implicit_unit:SmsAmountUnit|null }
+export interface SmsLiteralAmountRelation { marker:string; relation:SmsAmountRelation; implicit_unit:SmsAmountUnit|null; required_amount_suffix?:string|null }
 export interface SmsParserDefinition { mode:SmsParserMode; credit_markers:string[]; debit_markers:string[]; clause_separators:string[]; deposit_relations:SmsLiteralAmountRelation[]; balance_relations:SmsLiteralAmountRelation[]; reference_labels:string[]; rial_labels:string[]; toman_labels:string[]; grouping_separators:string[]; case_sensitive:boolean }
 export interface SmsOriginCapacity { enabled:boolean; page_size:number; max_page_size:number; max_profiles:number; max_profile_bytes:number; max_rules_per_field:number; max_marker_chars:number; max_clauses:number; max_message_bytes:number; max_realms:number; max_aliases_per_realm:number; max_match_candidates:number; original_timestamp_future_seconds:number; original_timestamp_max_age_seconds:number }
 export interface SmsOriginCapabilities { supported:boolean; configured:boolean; read_available:boolean; enabled:boolean; capacity:SmsOriginCapacity|null; parser_modes:SmsParserMode[]; identity_modes:SmsIdentityMode[]; amount_relations:SmsAmountRelation[]; units:SmsAmountUnit[]; required_origin_fields:string[]; canonicalization_revision:1; source_assurance:"enrolled_sender_declared_metadata"; bank_settlement_verified:false }

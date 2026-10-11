@@ -17,6 +17,11 @@ class LiteralAmountRelation(BaseModel):
     relation: Literal["label_before_amount", "amount_before_label"]
     # None requires an explicit currency token in the selected clause.
     implicit_unit: Literal["rial", "toman"] | None = None
+    # Exclude null in every native dump: older immutable parser definitions
+    # keep exactly their original absent-field serialization and byte capacity.
+    required_amount_suffix: str | None = Field(
+        default=None, min_length=1, exclude_if=lambda value: value is None
+    )
 
 
 class BankSmsParserDefinition(BaseModel):
