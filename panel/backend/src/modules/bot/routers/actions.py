@@ -10,6 +10,9 @@ from pydantic import BaseModel, Field
 
 from src.config.settings import PapilioSettings
 from src.modules.accounts.customer_auth.domain.results import CustomerLoginLink
+from src.modules.billing.wallet.domain.results import (
+    TopupPaymentInstructionRead,
+)
 from src.modules.bot.domain.dtos import (
     BotAutoRenew,
     BotIdentity,
@@ -129,6 +132,15 @@ async def subscriptions(
             )
         ),
     )
+
+
+@router.post("/topups/{id:int}/payment-instruction")
+async def topup_instruction(
+    id: int, data: BotIdentity, command: FromDishka[IBotCommand]
+) -> APIResponse[TopupPaymentInstructionRead | None, None]:
+    """Read the customer's captured top-up instructions."""
+    result = await command.topup_instruction(data, id)
+    return APIResponse.from_data(result)
 
 
 @router.post("/topups")

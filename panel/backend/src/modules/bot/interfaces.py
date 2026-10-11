@@ -5,6 +5,9 @@ from papilio.schemas.results import PagedType
 
 from src.modules.accounts.customer_auth.domain.results import CustomerLoginLink
 from src.modules.billing.wallet.domain.models import TopupModel
+from src.modules.billing.wallet.domain.results import (
+    TopupPaymentInstructionRead,
+)
 from src.modules.bot.domain.dtos import (
     BotAutoRenew,
     BotIdentity,
@@ -63,6 +66,9 @@ class IBotCommand(Protocol):
         self, data: BotIdentity, page: int
     ) -> Awaitable[PagedType[SubscriptionModel]]: ...
     def request_topup(self, data: BotTopup) -> Awaitable[TopupModel]: ...
+    def topup_instruction(
+        self, data: BotIdentity, id: int
+    ) -> Awaitable[TopupPaymentInstructionRead | None]: ...
     def purchase(self, data: BotPurchase) -> Awaitable[SubscriptionModel]: ...
     def set_auto_renew(
         self, id: int, data: BotAutoRenew

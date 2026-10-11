@@ -16,7 +16,13 @@ from src.modules.accounts.customers.app.policies import CustomerAccessPolicy
 from src.modules.accounts.customers.interfaces import ICustomerService
 from src.modules.billing.wallet.domain.dtos import TopupCreate
 from src.modules.billing.wallet.domain.models import TopupModel
-from src.modules.billing.wallet.interfaces import IWalletCommand
+from src.modules.billing.wallet.domain.results import (
+    TopupPaymentInstructionRead,
+)
+from src.modules.billing.wallet.interfaces import (
+    ITopupInstructionQuery,
+    IWalletCommand,
+)
 from src.modules.bot.domain.dtos import (
     BotAutoRenew,
     BotIdentity,
@@ -68,6 +74,7 @@ class BotCommand:
         customer_catalog: ICustomerCatalogQuery,
         loyalty: ICustomerLoyaltyQuery,
         renewal_eligibility: ICustomerRenewalEligibilityQuery,
+        topup_instructions: ITopupInstructionQuery,
     ) -> None:
         self.customers = customers
         self.customer_auth = customer_auth
@@ -80,6 +87,7 @@ class BotCommand:
         self.customer_catalog = customer_catalog
         self.loyalty = loyalty
         self.renewal_eligibility = renewal_eligibility
+        self.topup_instructions = topup_instructions
 
     async def renewal_status(
         self, data: BotIdentity, subscription_id: int
@@ -235,6 +243,15 @@ class BotCommand:
                 else f"bot:{customer.id}:{data.request_key}",
             )
         )
+        return result
+
+    async def topup_instruction(
+        self, data: BotIdentity, id: int
+    ) -> TopupPaymentInstructionRead | None:
+        customer = await self.customers.ensure_telegram(
+            data.telegram_id, data.display_name
+        )
+        result = await self.topup_instructions.get(id, customer.id)
         return result
 
     async def purchase(self, data: BotPurchase) -> SubscriptionModel:

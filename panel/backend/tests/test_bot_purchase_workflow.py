@@ -16,7 +16,6 @@ from sqlalchemy.engine import make_url
 
 from src.config.providers import infrastructure_providers
 from src.config.settings import PapilioSettings
-from src.modules.accounts.customers.infra.mysql import CustomerRepository
 from src.modules.accounts.staff.app.passwords import Passwords
 from src.modules.accounts.staff.app.services import StaffAuth
 from src.modules.accounts.staff.infra.mysql import StaffRepository
@@ -24,26 +23,17 @@ from src.modules.accounts.staff.infra.readers import StaffSessionReader
 from src.modules.billing.destinations.app.services import (
     PaymentDestinationService,
 )
+from src.modules.billing.destinations.domain.dtos import DestinationWrite
 from src.modules.billing.destinations.infra.mysql import (
     PaymentDestinationRepository,
 )
-from src.modules.billing.wallet.app.commands import WalletCommand
 from src.modules.billing.wallet.domain.dtos import TopupApproval
 from src.modules.billing.wallet.infra.mysql import (
-    TopupRepository,
     WalletRepository,
 )
+from src.modules.billing.wallet.interfaces import IWalletCommand
 from src.modules.network.routing.app.services import HostGroupService
 from src.modules.network.routing.infra.mysql import HostGroupRepository
-from src.modules.operations.notifications.app.commands import (
-    NotificationCreateCommand,
-)
-from src.modules.operations.notifications.app.queries import (
-    NotificationPolicyQuery,
-)
-from src.modules.operations.notifications.infra.mysql import (
-    NotificationRepository,
-)
 from src.modules.operations.preferences.app.services import PreferencesService
 from src.modules.operations.preferences.infra.mysql import (
     PreferencesRepository,
@@ -133,6 +123,22 @@ class BotPurchaseWorkflowTest(IsolatedAsyncioTestCase):
                 )
             )
             await plans.set_active(plan.id, PlanSetActive(is_active=True))
+        async with connection.uow() as unit:
+            destinations = PaymentDestinationService(
+                PaymentDestinationRepository(unit),
+                settings,
+                PreferencesService(PreferencesRepository(unit), settings),
+            )
+            destination = await destinations.create(
+                DestinationWrite(
+                    title="Controlled bank",
+                    kind="card",
+                    account="1111222233334444",
+                    recipient="Test",
+                    bank_name="Test bank",
+                    is_active=True,
+                )
+            )
         app = create_app(
             settings,
             providers=infrastructure_providers(settings),
@@ -160,38 +166,43 @@ class BotPurchaseWorkflowTest(IsolatedAsyncioTestCase):
                 customer_id = home.json()["data"]["customer_id"]
                 request_topup = await client.post(
                     "/v1/bot/topups",
-                    json={**identity, "amount_rial": 200_000},
+                    json={
+                        **identity,
+                        "amount_rial": 200_000,
+                        "destination_id": destination.destination_id,
+                    },
                     headers=headers,
                 )
                 self.assertEqual(request_topup.status_code, 200)
                 topup_id = request_topup.json()["data"]["id"]
-                async with connection.uow() as unit:
-                    billing = WalletCommand(
-                        CustomerRepository(unit),
-                        WalletRepository(unit),
-                        TopupRepository(unit),
-                        settings,
-                        PreferencesService(
-                            PreferencesRepository(unit), settings
-                        ),
-                        PaymentDestinationService(
-                            PaymentDestinationRepository(unit),
-                            settings,
-                            PreferencesService(
-                                PreferencesRepository(unit), settings
-                            ),
-                        ),
-                        NotificationCreateCommand(
-                            NotificationRepository(unit),
-                            CustomerRepository(unit),
-                            NotificationPolicyQuery(
-                                PreferencesService(
-                                    PreferencesRepository(unit), settings
-                                ),
-                                settings,
-                            ),
-                        ),
-                    )
+                instruction_path = (
+                    f"/v1/bot/topups/{topup_id}/payment-instruction"
+                )
+                unauthenticated = await client.post(
+                    instruction_path, json=identity
+                )
+                self.assertEqual(unauthenticated.status_code, 401)
+                captured = await client.post(
+                    instruction_path, json=identity, headers=headers
+                )
+                self.assertEqual(captured.status_code, 200)
+                self.assertEqual(
+                    captured.json()["data"]["account"], "1111222233334444"
+                )
+                self.assertEqual(
+                    captured.json()["data"]["payable_amount_rial"], 200_000
+                )
+                other_instruction = await client.post(
+                    instruction_path,
+                    json={
+                        "telegram_id": other_telegram_id,
+                        "display_name": "Other",
+                    },
+                    headers=headers,
+                )
+                self.assertEqual(other_instruction.status_code, 404)
+                async with app.state.dishka_container() as scope:
+                    billing = await scope.get(IWalletCommand)
                     await billing.approve(
                         topup_id,
                         TopupApproval(bank_reference="bank_" + uuid4().hex),
