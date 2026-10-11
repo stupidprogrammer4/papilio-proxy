@@ -292,50 +292,50 @@ notifications:
     templates:
       manual:
         enabled: true
-        title: پیام پشتیبانی
+        title: 💬 پیام پشتیبانی
         body: پیام جدیدی برای شما ثبت شده است.
       support_reply:
         enabled: true
-        title: پاسخ پشتیبانی
+        title: 💬 پاسخ پشتیبانی
         body: پاسخ تازه‌ای در تیکت {id} ثبت شده است. از بخش پشتیبانی حساب کاربری گفتگو
           را ببینید.
       tier_changed:
         enabled: true
-        title: گروه مشتری شما تغییر کرد
+        title: 🏅 گروه شما تغییر کرد
         body: گروه شما به {status} تغییر کرد. تخفیف جاری را در حساب کاربری ببینید.
       discount_applied:
         enabled: true
-        title: تخفیف خرید
+        title: 🎁 تخفیف خرید
         body: در خرید اشتراک {id} مبلغ {amount_toman} تومان تخفیف دریافت کردید.
       volume_low:
         enabled: true
-        title: حجم اشتراک رو به پایان است
+        title: 📊 حجم اشتراک رو به پایان است
         body: حجم باقیمانده اشتراک {id} کم شده است. برای تمدید وارد حساب کاربری شوید.
       renewal_available:
         enabled: true
-        title: امکان تمدید اشتراک
+        title: 🔄 امکان تمدید اشتراک
         body: اشتراک {id} قابل تمدید است. قیمت و موجودی را در حساب کاربری بررسی کنید.
       payment_approved:
         enabled: true
-        title: تأیید پرداخت
+        title: ✅ تأیید پرداخت
         body: پرداخت {id} به مبلغ {amount_toman} تومان تأیید و کیف پول شارژ شد.
       expiry_soon:
         enabled: true
-        title: پایان نزدیک اشتراک
+        title: ⏳ پایان اعتبار نزدیک است
         body: اشتراک {id} به پایان اعتبار نزدیک است. اعتبار و تمدید را در حساب کاربری
           بررسی کنید.
       renewal_unfunded:
         enabled: true
-        title: موجودی ناکافی تمدید
+        title: 💳 شارژ کیف پول برای تمدید
         body: موجودی کیف پول برای تمدید خودکار اشتراک {id} کافی نیست.
       provisioning_failed:
         enabled: true
-        title: نیاز به پیگیری اشتراک
+        title: 🛠 در حال پیگیری اشتراک
         body: آماده‌سازی اشتراک {id} نیاز به پیگیری دارد. مبلغ پرداخت‌شده در روند
           بازیابی محفوظ است.
       subscription_active:
         enabled: true
-        title: اشتراک آماده است
+        title: 🚀 اشتراک آماده است
         body: اشتراک {id} آمادهٔ استفاده است. کانفیگ را از حساب کاربری دریافت کنید.
   outbound_enabled: false
   endpoint: null

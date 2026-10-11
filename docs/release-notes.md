@@ -182,3 +182,36 @@ Go/Xray gate exercised three distinct TLS windows, exact per-window and cumulati
 consumption, one original charge and completed replay without child restart.
 Scoped Ruff and Pyright passed. This finite chain does not prove epoch rollover,
 crash recovery or ongoing paid-service readiness; ordinary cores remain disabled.
+
+## Customer Telegram invoices — 2026-10-11
+
+Invoices now show grouped Persian bank/recipient/payment details, exact copyable
+ASCII rial amounts, destination copy buttons, the toman equivalent and
+mode-specific four-digit instructions. Display fields are HTML-escaped; ordinary
+payment modes do not show an identifier. Wallet top-ups read their captured
+instructions through an authenticated, customer-owned Papilio API endpoint,
+rather than reusing general payment settings. Missing/malformed captured
+instructions block the payable invoice. Notification defaults use relevant emoji
+and retain editable templates. No migration or payment policy change is required.
+
+The original bot consumer failed the new invoice regression. Seven bot tests
+passed, including actual aiogram dispatch against controlled API/Telegram HTTP
+servers and isolated formatting/escaping checks. A native disposable-MySQL
+workflow passed invoice ownership,
+unauthenticated rejection, manual approval, wallet purchase and purchase replay
+with a fresh independent balance read. It verifies pending provisioning, not live
+service delivery. Its stale direct wallet construction was replaced with native
+provider resolution. Scoped Ruff/format and Pyright passed.
+
+The ordinary local API was restarted: API/panel health and the captured owner
+invoice read passed; an unauthenticated invoice request returned 401. Actual
+Telegram accepted the existing owner-only pending invoice with both copy buttons;
+no second payment request was created. Unmodified default notification titles
+were updated through revisioned preferences while custom templates were retained.
+
+**Paid launch remains blocked.** Physical SMS forwarding/settlement and the live
+sales webhook have not passed end-to-end acceptance; the phone still requires USB
+authorization. Continuous proxy lifecycle, target-network reachability and other
+previously recorded launch gates remain open. Permanent cores stay stopped. The
+owner invoice explicitly says not to transfer yet. No real purchase or bank credit
+is claimed by these tests.

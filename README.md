@@ -43,7 +43,8 @@ Configuration drafts cover **VLESS/REALITY, VLESS/TLS, VMess/TLS, Trojan/TLS,
 Shadowsocks 2022, Hysteria 2, WireGuard and OpenVPN**. Export, installation,
 connectivity and ongoing enforcement are separate capabilities; see
 [core acceptance](proxy/CORE-ACCEPTANCE.md) and [current limits](#current-limits).
-The aiogram adapter presents Persian bot workflows; live Telegram and physical
+The aiogram adapter presents Persian bot workflows. An owner-only invoice has
+been sent through actual Telegram; continuous webhook processing and physical
 SMS forwarding remain unverified. Development of our native
 [Android SMS Bridge](android/sms-bridge/README.md) has resumed; physical payment
 approval is a separate acceptance gate.
@@ -240,6 +241,27 @@ response budget. API responses must use identity encoding; redirects are rejecte
 Webhook capacity/deadline failures return503 for upstream retry; oversized requests
 return413. Business writes must retain their API idempotency keys across retries.
 Notification delivery retains its separate request and lease budgets.
+
+## Customer payment messages
+
+Persian invoices group the bank, recipient, destination and payable amount.
+Card numbers, IBANs and account numbers appear in copyable code blocks; dedicated
+copy buttons copy the original destination and exact ASCII **rial** amount.
+The toman equivalent is for display. Invoice values come from the API's captured
+payment instructions, including wallet top-ups; later destination edits do not
+change an existing invoice.
+
+Only `rial_suffix4` invoices show the four-digit identifier and SMS matching
+guidance: enter the exact rial amount without rounding or changing its last
+digits. Ordinary payments have no identifier. Automatic matching still depends
+on the enabled, enrolled-phone policy; ambiguous evidence goes to review.
+Missing or malformed instructions do not produce a payable invoice in the bot.
+After approval, the full transfer credits the wallet. A wallet top-up alone does
+not create or deliver a subscription.
+
+Notification titles and bodies remain editable under **Settings**. Default
+payment, discount, tier, support, usage and renewal notices use customer-facing
+Persian text and relevant emoji. Existing customized templates are preserved.
 
 ## Loyalty and purchase prices
 
@@ -585,6 +607,6 @@ WireGuard profiles download as `.conf`; the URI feed excludes file-only WireGuar
 
 Native automation schedules include payment review, node status, checkout recovery, subscription attention and renewal. Payment approval credits the wallet once. Unique SMS mode trusts an enrolled phone under the owner-approved policy and sends ambiguous matches to review; it does not independently verify bank settlement. An approved top-up can fund a durable selected-plan checkout under the configured policy. Revisioned parsing and declared original-message identity support no-reference formats under an explicit trusted-origin policy; physical forwarding remains unverified.
 
-Subscription attention, customer notices and an authenticated aiogram delivery bridge support configurable quota/expiry alerts and renewal readiness. Live Telegram delivery remains disabled and unverified.
+Subscription attention, customer notices and an authenticated aiogram delivery bridge support configurable quota/expiry alerts and renewal readiness. Automated Telegram delivery remains disabled and unverified; an owner-only invoice with copy buttons has been accepted by Telegram. This does not establish live purchase delivery or SMS settlement.
 
 Encrypted backups and empty-target restoration are available through the recovery CLI. Off-node backup operations, target-network measurements, the remaining PasarGuard/MirzaBot feature inventory, and paid-launch checks remain open. See [development and migration guidance](docs/development.md) and [release notes and verification limits](docs/release-notes.md). Private task evidence remains in the local work ledger. These local results do not establish production readiness.
