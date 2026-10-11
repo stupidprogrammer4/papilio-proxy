@@ -16,6 +16,7 @@ final class BridgeSettings {
         origin = source.getString("origin"); deviceId = source.getLong("device_id"); apiKey = source.getString("api_key");
         URI uri = URI.create(origin);
         if (!"https".equals(uri.getScheme()) || uri.getHost() == null || uri.getUserInfo() != null || uri.getQuery() != null || uri.getFragment() != null || !(uri.getPath().isEmpty() || "/".equals(uri.getPath()))) throw new IllegalArgumentException("Enter an HTTPS API origin without a path");
+        if (uri.getHost().equalsIgnoreCase("example") || uri.getHost().toLowerCase(java.util.Locale.ROOT).endsWith(".example")) throw new IllegalArgumentException("Replace the sample API address with your deployed HTTPS address");
         if (deviceId <= 0 || apiKey.length() < 32) throw new IllegalArgumentException("Device ID and enrollment API key are required");
         senders = strings(source.getJSONArray("senders")); creditKeywords = strings(source.getJSONArray("credit_keywords"));
         connectTimeout = source.getInt("connect_timeout_ms"); readTimeout = source.getInt("read_timeout_ms"); retrySeconds = source.getInt("retry_seconds"); batchSize = source.getInt("batch_size"); queueCapacity = source.getInt("queue_capacity"); responseLimit = source.getInt("response_limit_bytes"); responseChunk = source.getInt("response_chunk_bytes");
@@ -27,9 +28,13 @@ final class BridgeSettings {
         return result;
     }
     static SharedPreferences preferences(Context context) { return context.getSharedPreferences("bridge", Context.MODE_PRIVATE); }
+    static JSONObject defaults(Context context) throws Exception {
+        try (java.io.InputStream stream = context.getAssets().open("defaults.json")) {
+            return new JSONObject(new String(read(stream), StandardCharsets.UTF_8));
+        }
+    }
     static JSONObject editable(Context context) throws Exception {
-        JSONObject defaults;
-        try (java.io.InputStream stream = context.getAssets().open("defaults.json")) { defaults = new JSONObject(new String(read(stream), StandardCharsets.UTF_8)); }
+        JSONObject defaults = defaults(context);
         String encrypted = preferences(context).getString("settings", null);
         if (encrypted == null) return defaults;
         JSONObject saved = new JSONObject(SecretVault.decrypt(encrypted));
