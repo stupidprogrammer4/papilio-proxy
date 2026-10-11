@@ -22,6 +22,8 @@ class CommerceConsumerTest(IsolatedAsyncioTestCase):
         zero_quote = False
         malformed_quote = False
         purchase_fail = True
+        malformed_invoice = False
+        missing_invoice = False
         tier = {
             "id": 7,
             "code": "silver",
@@ -45,7 +47,30 @@ class CommerceConsumerTest(IsolatedAsyncioTestCase):
             )
             self.assertEqual(body["telegram_id"], 61)
             calls.append((request.path, body))
-            if request.path == "/v1/bot/loyalty":
+            if request.path == "/v1/bot/topups":
+                data = {"id": 5, "amount_rial": 1051234, "status": "pending"}
+            elif request.path == "/v1/bot/topups/5/payment-instruction":
+                data = {
+                    "destination_id": 3,
+                    "title": "Invoice bank",
+                    "kind": "card",
+                    "account": "1111222233334444",
+                    "recipient": "Customer",
+                    "bank_name": "Bank",
+                    "instructions": None,
+                    "topup_id": 5,
+                    "requested_amount_rial": 1050000,
+                    "payable_amount_rial": 1051234,
+                    "payment_identifier_mode": "rial_suffix4",
+                    "payment_identifier_code4": "1234",
+                }
+                if malformed_invoice:
+                    data["payable_amount_rial"] = 1051235
+                if missing_invoice:
+                    data = None
+            elif request.path == "/v1/bot/home":
+                data = {"payment_instructions": "DO NOT SHOW STALE ACCOUNT"}
+            elif request.path == "/v1/bot/loyalty":
                 data = {
                     "customer_id": 31,
                     "purchased_bytes": 250 * quota,
@@ -154,6 +179,25 @@ class CommerceConsumerTest(IsolatedAsyncioTestCase):
             await dispatcher.feed_update(bot, update)
 
         try:
+            await feed(100, "topup:1050000")
+            invoice = telegram_calls[-2][1]
+            self.assertEqual(invoice["parse_mode"], "HTML")
+            self.assertIn("<code>1051234</code>", invoice["text"])
+            self.assertNotIn("DO NOT SHOW STALE ACCOUNT", invoice["text"])
+            copies = json.loads(invoice["reply_markup"])["inline_keyboard"]
+            self.assertEqual(
+                copies[0][0]["copy_text"]["text"], "1111222233334444"
+            )
+            self.assertEqual(copies[1][0]["copy_text"]["text"], "1051234")
+            malformed_invoice = True
+            await feed(101, "topup:1050000")
+            self.assertNotIn("<code>", telegram_calls[-2][1]["text"])
+            malformed_invoice = False
+            missing_invoice = True
+            await feed(102, "topup:1050000")
+            self.assertIn("قبل از واریز", telegram_calls[-2][1]["text"])
+            self.assertNotIn("1051234", telegram_calls[-2][1]["text"])
+            missing_invoice = False
             await feed(1, "loyalty")
             loyalty = telegram_calls[-2][1]["text"]
             self.assertIn("Silver", loyalty)

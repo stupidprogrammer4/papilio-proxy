@@ -293,6 +293,12 @@ class CheckoutConsumerTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn("۲۰۰ ریال", telegram[-2][1]["text"])
             self.assertIn("۰۲۰۰", telegram[-2][1]["text"])
             self.assertIn("تمام مبلغ", telegram[-2][1]["text"])
+            self.assertEqual(telegram[-2][1]["parse_mode"], "HTML")
+            self.assertIn("<code>200</code>", telegram[-2][1]["text"])
+            self.assertEqual(
+                buttons()[0][0]["copy_text"]["text"], "1111222233334444"
+            )
+            self.assertEqual(buttons()[1][0]["copy_text"]["text"], "200")
             await feed(5, "cb:0000000000000000:w:0")
             self.assertIn("هنوز مشخص نیست", telegram[-2][1]["text"])
             self.assertEqual(len(purchases), 1)

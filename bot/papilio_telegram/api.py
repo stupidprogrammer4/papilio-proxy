@@ -25,6 +25,7 @@ from papilio_telegram.commerce import (
     TrialSubscription,
 )
 from papilio_telegram.config import BotApiLimits
+from papilio_telegram.topups import TopupPaymentInstruction
 
 
 class BotApiError(Exception):
@@ -169,6 +170,27 @@ class BotApi:
             },
         )
         return result["data"]
+
+    async def topup_instruction(
+        self, id: int, telegram_id: int, display_name: str
+    ) -> TopupPaymentInstruction | None:
+        response = await self.call(
+            f"/v1/bot/topups/{id}/payment-instruction",
+            "POST",
+            {"telegram_id": telegram_id, "display_name": display_name},
+        )
+        try:
+            data = response["data"]
+            result = (
+                None
+                if data is None
+                else await asyncio.to_thread(
+                    TopupPaymentInstruction.model_validate, data
+                )
+            )
+        except (KeyError, ValueError) as exc:
+            raise BotApiError("request_failed") from exc
+        return result
 
     async def purchase(
         self,

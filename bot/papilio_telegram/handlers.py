@@ -19,6 +19,8 @@ from papilio_telegram.presentation import (
     gibibytes,
     loyalty_text,
     menu,
+    payment_instruction_menu,
+    payment_instruction_text,
     plan_menu,
     price_text,
     purchase_menu,
@@ -61,7 +63,8 @@ def identity(user: User) -> tuple[int, str]:
 
 
 def register(
-    api: BotApi, checkout_limits: CheckoutDraftLimits | None = None,
+    api: BotApi,
+    checkout_limits: CheckoutDraftLimits | None = None,
     topup_limits: TopupFlowLimits | None = None,
 ) -> Router:
     router = Router()
@@ -73,10 +76,15 @@ def register(
         router.include_router(register_checkout(api, drafts))
 
     async def say(
-        callback: CallbackQuery, text: str, keyboard: Any = None
+        callback: CallbackQuery,
+        text: str,
+        keyboard: Any = None,
+        parse_mode: str | None = None,
     ) -> None:
         if isinstance(callback.message, Message):
-            await callback.message.answer(text, reply_markup=keyboard)
+            await callback.message.answer(
+                text, reply_markup=keyboard, parse_mode=parse_mode
+            )
         await callback.answer()
 
     @router.message(CommandStart())
@@ -89,7 +97,7 @@ def register(
             greeting = (
                 f"سلام {home['display_name']} 🌿\n"
                 f"به {home['brand_title']} خوش آمدید.\n"
-                f"موجودی کیف پول: {toman(int(home['balance_rial']))}"
+                f"💰 موجودی کیف پول: {toman(int(home['balance_rial']))}"
             )
             await message.answer(
                 greeting,
@@ -106,8 +114,8 @@ def register(
         try:
             result = await api.home(telegram_id, name)
             text = (
-                f"{result['brand_title']}\n"
-                f"موجودی کیف پول: {toman(int(result['balance_rial']))}"
+                f"🦋 {result['brand_title']}\n\n"
+                f"💰 موجودی کیف پول: {toman(int(result['balance_rial']))}"
             )
             await say(
                 callback,
@@ -248,7 +256,7 @@ def register(
                         ],
                         [
                             InlineKeyboardButton(
-                                text="بازگشت", callback_data="home"
+                                text="↩️ بازگشت", callback_data="home"
                             )
                         ],
                     ]
@@ -321,7 +329,7 @@ def register(
             await say(
                 callback,
                 (
-                    "لینک خصوصی حساب شما فقط یک بار استفاده می‌شود. "
+                    "🔐 لینک خصوصی حساب شما فقط یک بار استفاده می‌شود. "
                     "آن را برای دیگران نفرستید. "
                     "خرید، شارژ و ارسال رسید از حساب قابل انجام است."
                 ),
@@ -334,7 +342,7 @@ def register(
                         ],
                         [
                             InlineKeyboardButton(
-                                text="بازگشت", callback_data="home"
+                                text="↩️ بازگشت", callback_data="home"
                             )
                         ],
                     ]
@@ -350,9 +358,9 @@ def register(
             result = await api.home(telegram_id, name)
             await say(
                 callback,
-                "کیف پول شما\n"
+                "💳 کیف پول شما\n\n"
                 f"موجودی: {toman(int(result['balance_rial']))}\n"
-                "درخواست شارژ پس از تأیید واریز در پنل اعمال می‌شود.",
+                "✅ پس از تأیید واریز، مبلغ به کیف پول شما اضافه می‌شود.",
                 wallet_menu(result["topup_options_rial"]),
             )
         except BotApiError as exc:
@@ -374,19 +382,24 @@ def register(
                 amount,
                 f"tg:{telegram_id}:{message_id}:{amount}",
             )
-            home = await api.home(telegram_id, name)
-            instructions = (
-                home.get("payment_instructions")
-                or "برای دریافت اطلاعات پرداخت با پشتیبانی تماس بگیرید."
+            instruction = await api.topup_instruction(
+                result["id"], telegram_id, name
             )
-            await say(
-                callback,
-                f"درخواست شارژ شمارهٔ {fa(result['id'])} "
-                f"به مبلغ {toman(amount)} ثبت شد.\n"
-                f"{instructions}\n"
-                "پس از واریز، تأیید در بخش پرداخت‌ها انجام می‌شود.",
-                menu(),
-            )
+            if instruction is None:
+                await say(
+                    callback,
+                    f"🧾 درخواست شارژ شمارهٔ {fa(result['id'])} ثبت شد.\n\n"
+                    "اطلاعات واریز اختصاصی در دسترس نیست؛ قبل از واریز، "
+                    "مبلغ و مقصد را از حساب کاربری بررسی کنید.",
+                    menu(),
+                )
+            else:
+                await say(
+                    callback,
+                    payment_instruction_text(instruction),
+                    payment_instruction_menu(instruction, menu()),
+                    parse_mode="HTML",
+                )
         except BotApiError as exc:
             await say(
                 callback,
@@ -407,10 +420,10 @@ def register(
                 .get("total_pages", page)
             )
             text = (
-                "سرویس‌های شما؛ برای دریافت کانفیگ و مدیریت تمدید "
+                "📱 سرویس‌های شما\n\nبرای دریافت کانفیگ و مدیریت تمدید "
                 "روی هر مورد بزنید."
                 if rows
-                else "هنوز سرویسی ندارید."
+                else "📱 هنوز سرویسی ندارید؛ از بخش خرید سرویس شروع کنید."
             )
             await say(callback, text, subscription_menu(rows, page, pages))
         except BotApiError as exc:
@@ -437,7 +450,7 @@ def register(
                 "cancelled": "لغوشده",
             }
             status = labels.get(result["status"], "نیازمند بررسی")
-            text = f"اشتراک {fa(result['subscription_id'])} · {status}"
+            text = f"📱 اشتراک {fa(result['subscription_id'])} · {status}"
             if action == "rotate":
                 text += (
                     "\nلینک خصوصی عوض شد. لینک قبلی دیگر قابل استفاده نیست."
@@ -481,7 +494,7 @@ def register(
             state = "روشن" if result["auto_renew"] else "خاموش"
             await say(
                 callback,
-                f"تمدید خودکار اشتراک {fa(result['id'])} {state} شد.",
+                f"🔄 تمدید خودکار اشتراک {fa(result['id'])} {state} شد.",
                 menu(),
             )
         except BotApiError as exc:
@@ -509,7 +522,7 @@ def register(
                             ],
                             [
                                 InlineKeyboardButton(
-                                    text="بازگشت", callback_data="home"
+                                    text="↩️ بازگشت", callback_data="home"
                                 )
                             ],
                         ]

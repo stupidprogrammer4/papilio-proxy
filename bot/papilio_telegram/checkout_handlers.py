@@ -18,16 +18,17 @@ from papilio_telegram.checkout import (
 from papilio_telegram.presentation import (
     fa,
     gibibytes,
+    payment_instruction_menu,
     payment_instruction_text,
     toman,
 )
 
 _STATE = {
-    "awaiting_funding": "در انتظار تأیید واریز و شارژ کیف پول",
+    "awaiting_funding": "⏳ در انتظار تأیید واریز و شارژ کیف پول",
     "ready": "در صف پردازش خرید",
     "action_required": "تغییر شرایط خرید؛ نیازمند تأیید شما",
-    "purchased": "خرید ثبت شده",
-    "cancelled": "لغو شده",
+    "purchased": "✅ خرید ثبت شده",
+    "cancelled": "🚫 لغو شده",
     "expired": "مهلت خرید تمام شده",
 }
 
@@ -53,15 +54,15 @@ def offer_text(offer: CheckoutOffer) -> str:
         else "تحویل دستی توسط مدیر؛ ثبت خرید به معنی آماده بودن کانفیگ نیست"
     )
     return (
-        f"{offer.plan_title}\nقیمت نهایی: {toman(offer.price_rial)}\n"
-        f"حجم: {quota}\nمدت: {duration}\n{delivery}\n"
+        f"🛍 {offer.plan_title}\n\n💰 قیمت نهایی: {toman(offer.price_rial)}\n"
+        f"📦 حجم: {quota}\n⏳ مدت: {duration}\n\n🚚 {delivery}\n"
         "تمدید خودکار تنها با موجودی کافی کیف پول انجام می‌شود."
     )
 
 
 def intent_text(intent: CheckoutRead) -> str:
     text = (
-        f"خرید شمارهٔ {fa(intent.id)}\n{_STATE[intent.state]}\n"
+        f"🧾 خرید شمارهٔ {fa(intent.id)}\n\n{_STATE[intent.state]}\n"
         f"قیمت: {toman(intent.price_rial)}"
     )
     if intent.topup_id is not None:
@@ -82,12 +83,13 @@ def intent_text(intent: CheckoutRead) -> str:
 
 
 def intent_menu(intent: CheckoutRead) -> InlineKeyboardMarkup:
-    rows = [[Button(text="بررسی وضعیت", callback_data=f"ci:{intent.id}")]]
+    rows = [[Button(text="🔄 بررسی وضعیت", callback_data=f"ci:{intent.id}")]]
     if intent.topup_id is not None:
         rows.append(
             [
                 Button(
-                    text="اطلاعات همین واریز", callback_data=f"cp:{intent.id}"
+                    text="💳 اطلاعات همین واریز",
+                    callback_data=f"cp:{intent.id}",
                 )
             ]
         )
@@ -99,7 +101,7 @@ def intent_menu(intent: CheckoutRead) -> InlineKeyboardMarkup:
         rows.append(
             [
                 Button(
-                    text="لغو این خرید",
+                    text="🚫 لغو این خرید",
                     callback_data=f"cc:{intent.id}:{intent.revision}",
                 )
             ]
@@ -115,8 +117,8 @@ def intent_menu(intent: CheckoutRead) -> InlineKeyboardMarkup:
         )
     rows.extend(
         [
-            [Button(text="حساب کاربری و رسیدها", callback_data="account")],
-            [Button(text="خریدهای من", callback_data="ch:1")],
+            [Button(text="🧾 حساب کاربری و رسیدها", callback_data="account")],
+            [Button(text="🧾 خریدهای من", callback_data="ch:1")],
         ]
     )
     return keyboard(rows)
@@ -126,9 +128,12 @@ async def respond(
     callback: CallbackQuery,
     text: str,
     markup: InlineKeyboardMarkup | None = None,
+    parse_mode: str | None = None,
 ) -> None:
     if isinstance(callback.message, Message):
-        await callback.message.answer(text, reply_markup=markup)
+        await callback.message.answer(
+            text, reply_markup=markup, parse_mode=parse_mode
+        )
     await callback.answer()
 
 
@@ -156,7 +161,7 @@ async def show_retirement(
         if plan_id > 0
         else []
     )
-    rows.append([Button(text="خریدهای من", callback_data="ch:1")])
+    rows.append([Button(text="🧾 خریدهای من", callback_data="ch:1")])
     text = (
         "درخواست قبلی به صورت قطعی بسته شد؛ "
         "اکنون می‌توانید پیشنهاد تازه را بررسی کنید."
@@ -204,7 +209,7 @@ async def show_offer(
                 ],
             ]
         )
-    rows.append([Button(text="خریدهای من", callback_data="ch:1")])
+    rows.append([Button(text="🧾 خریدهای من", callback_data="ch:1")])
     await respond(callback, offer_text(offer), keyboard(rows))
 
 
@@ -225,10 +230,10 @@ def register_checkout(api: BotApi, drafts: CheckoutDrafts) -> Router:
             text,
             keyboard(
                 [
-                    [Button(text="خریدهای من", callback_data="ch:1")],
+                    [Button(text="🧾 خریدهای من", callback_data="ch:1")],
                     [
                         Button(
-                            text="حساب کاربری و رسیدها",
+                            text="🧾 حساب کاربری و رسیدها",
                             callback_data="account",
                         )
                     ],
@@ -254,7 +259,9 @@ def register_checkout(api: BotApi, drafts: CheckoutDrafts) -> Router:
                 callback,
                 "پیشنهاد در حافظه نیست؛ نتیجهٔ درخواست قبلی را "
                 "از همان دکمه ثبت خرید یا خریدهای من بررسی کنید.",
-                keyboard([[Button(text="خریدهای من", callback_data="ch:1")]]),
+                keyboard(
+                    [[Button(text="🧾 خریدهای من", callback_data="ch:1")]]
+                ),
             )
             return
         if draft.attempted_create is not None:
@@ -457,25 +464,29 @@ def register_checkout(api: BotApi, drafts: CheckoutDrafts) -> Router:
                 if instruction is None
                 else payment_instruction_text(instruction)
             )
+            actions = keyboard(
+                [
+                    [
+                        Button(
+                            text="🔄 وضعیت همین خرید",
+                            callback_data=f"ci:{id_text}",
+                        )
+                    ],
+                    [
+                        Button(
+                            text="🧾 حساب کاربری و رسیدها",
+                            callback_data="account",
+                        )
+                    ],
+                ]
+            )
             await respond(
                 callback,
                 text,
-                keyboard(
-                    [
-                        [
-                            Button(
-                                text="وضعیت همین خرید",
-                                callback_data=f"ci:{id_text}",
-                            )
-                        ],
-                        [
-                            Button(
-                                text="حساب کاربری و رسیدها",
-                                callback_data="account",
-                            )
-                        ],
-                    ]
-                ),
+                payment_instruction_menu(instruction, actions)
+                if instruction is not None
+                else actions,
+                parse_mode="HTML" if instruction is not None else None,
             )
         except BotApiError as exc:
             await failure(callback, exc)
@@ -506,7 +517,7 @@ def register_checkout(api: BotApi, drafts: CheckoutDrafts) -> Router:
                             callback_data=f"ct:{nonce}:{plan_id}",
                         )
                     ],
-                    [Button(text="خریدهای من", callback_data="ch:1")],
+                    [Button(text="🧾 خریدهای من", callback_data="ch:1")],
                 ]
             ),
         )
@@ -548,7 +559,7 @@ def register_checkout(api: BotApi, drafts: CheckoutDrafts) -> Router:
                                 callback_data=f"ct:{nonce}:{plan_id}",
                             )
                         ],
-                        [Button(text="خریدهای من", callback_data="ch:1")],
+                        [Button(text="🧾 خریدهای من", callback_data="ch:1")],
                     ]
                 ),
             )
@@ -594,7 +605,7 @@ def register_checkout(api: BotApi, drafts: CheckoutDrafts) -> Router:
                                 callback_data=f"ct:{nonce}:{plan_id}",
                             )
                         ],
-                        [Button(text="خریدهای من", callback_data="ch:1")],
+                        [Button(text="🧾 خریدهای من", callback_data="ch:1")],
                     ]
                 ),
             )
@@ -628,7 +639,11 @@ def register_checkout(api: BotApi, drafts: CheckoutDrafts) -> Router:
                                     callback_data=f"cx:{nonce}:{plan_id}",
                                 )
                             ],
-                            [Button(text="خریدهای من", callback_data="ch:1")],
+                            [
+                                Button(
+                                    text="🧾 خریدهای من", callback_data="ch:1"
+                                )
+                            ],
                         ]
                     ),
                 )
@@ -719,7 +734,7 @@ def register_checkout(api: BotApi, drafts: CheckoutDrafts) -> Router:
                                 callback_data=f"cx:{nonce}:{plan_id}",
                             )
                         ],
-                        [Button(text="خریدهای من", callback_data="ch:1")],
+                        [Button(text="🧾 خریدهای من", callback_data="ch:1")],
                     ]
                 ),
             )
@@ -878,7 +893,7 @@ def register_checkout(api: BotApi, drafts: CheckoutDrafts) -> Router:
                 )
             if navigation:
                 buttons.append(navigation)
-            buttons.append([Button(text="بازگشت", callback_data="home")])
+            buttons.append([Button(text="↩️ بازگشت", callback_data="home")])
             await respond(
                 callback,
                 "خریدهای من:" if rows else "خریدی ثبت نشده است.",

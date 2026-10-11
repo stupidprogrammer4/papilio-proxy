@@ -1,8 +1,13 @@
 from datetime import UTC
 from decimal import Decimal
+from html import escape
 from typing import Any
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (
+    CopyTextButton,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
 
 from papilio_telegram.checkout import CheckoutPaymentInstruction
 from papilio_telegram.commerce import (
@@ -27,29 +32,90 @@ def toman(rial: int) -> str:
 
 
 def payment_instruction_text(value: CheckoutPaymentInstruction) -> str:
-    text = (
-        f"{value.title}\n{value.bank_name}\n{value.recipient}\n"
-        f"{value.account}\n{value.instructions or ''}"
-    )
-    if (
-        value.payable_amount_rial is None
-        or value.requested_amount_rial is None
-    ):
-        return text
-    text += (
-        f"\nمبلغ دقیق واریز: {fa(f'{value.payable_amount_rial:,}')} ریال"
-        f"\nمعادل: {toman(value.payable_amount_rial)}"
-        f"\nمبلغ درخواستی: {fa(f'{value.requested_amount_rial:,}')} ریال"
-    )
-    if value.payment_identifier_code4 is not None:
-        text += "\nشناسهٔ چهار رقم آخر مبلغ ریالی: " + fa(
-            value.payment_identifier_code4
+    labels = {
+        "card": "شماره کارت",
+        "iban": "شماره شبا",
+        "bank_account": "شماره حساب",
+    }
+    lines = [
+        "💳 <b>اطلاعات واریز</b>",
+        "",
+        escape(value.title),
+        "🏦 بانک: " + escape(value.bank_name),
+        "👤 به نام: " + escape(value.recipient),
+        "",
+        "📋 " + labels[value.kind] + ":",
+        "<code>" + escape(value.account) + "</code>",
+    ]
+    if value.payable_amount_rial is not None:
+        lines.extend(
+            [
+                "",
+                "💰 <b>مبلغ قابل‌پرداخت (ریال)</b>",
+                f"<code>{value.payable_amount_rial}</code>",
+                "مبلغ دقیق واریز: "
+                + fa(f"{value.payable_amount_rial:,}")
+                + " ریال",
+                "معادل: " + toman(value.payable_amount_rial),
+            ]
         )
-        text += "\nبرای تطبیق پرداخت، مبلغ دقیق را بدون تغییر واریز کنید."
-    text += (
-        "\nپس از تأیید، تمام مبلغ واریز به کیف پول می‌رود؛ اختلاف کارمزد نیست."
+    if value.payment_identifier_mode == "rial_suffix4":
+        lines.extend(
+            [
+                "",
+                "🔎 شناسهٔ چهار رقم آخر مبلغ ریالی: "
+                + fa(value.payment_identifier_code4 or ""),
+                "⚠️ برای تطبیق خودکار، مبلغ بالا را دقیقاً "
+                "به <b>ریال</b> وارد کنید؛ "
+                "آن را گرد نکنید و چهار رقم آخر را تغییر ندهید.",
+                "تأیید خودکار به دریافت و تطبیق پیامک واریز بستگی دارد؛ "
+                "موارد مبهم بررسی می‌شوند.",
+            ]
+        )
+    if value.instructions:
+        lines.extend(["", "📝 " + escape(value.instructions)])
+    lines.extend(
+        [
+            "",
+            "📋 برای کپی، روی شماره یا مبلغ بزنید "
+            "یا از دکمه‌های زیر استفاده کنید.",
+            "✅ پس از تأیید، تمام مبلغ واریز به کیف پول شما می‌رود؛ "
+            "اختلاف مبلغ کارمزد نیست.",
+            "🧾 رسید و وضعیت پرداخت را از حساب کاربری پیگیری کنید.",
+        ]
     )
-    return text
+    return "\n".join(lines)
+
+
+def payment_instruction_menu(
+    value: CheckoutPaymentInstruction,
+    actions: InlineKeyboardMarkup,
+) -> InlineKeyboardMarkup:
+    labels = {
+        "card": "کپی شماره کارت",
+        "iban": "کپی شماره شبا",
+        "bank_account": "کپی شماره حساب",
+    }
+    rows = [
+        [
+            InlineKeyboardButton(
+                text="📋 " + labels[value.kind],
+                copy_text=CopyTextButton(text=value.account),
+            )
+        ]
+    ]
+    if value.payable_amount_rial is not None:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="💰 کپی مبلغ ریالی",
+                    copy_text=CopyTextButton(
+                        text=str(value.payable_amount_rial)
+                    ),
+                )
+            ]
+        )
+    return InlineKeyboardMarkup(inline_keyboard=rows + actions.inline_keyboard)
 
 
 def menu() -> InlineKeyboardMarkup:
@@ -107,18 +173,20 @@ def plan_menu(
     if page > 1:
         navigation.append(
             InlineKeyboardButton(
-                text="صفحهٔ قبل", callback_data=f"plans:{page - 1}"
+                text="⬅️ صفحهٔ قبل", callback_data=f"plans:{page - 1}"
             )
         )
     if page < total_pages:
         navigation.append(
             InlineKeyboardButton(
-                text="صفحهٔ بعد", callback_data=f"plans:{page + 1}"
+                text="➡️ صفحهٔ بعد", callback_data=f"plans:{page + 1}"
             )
         )
     if navigation:
         buttons.append(navigation)
-    buttons.append([InlineKeyboardButton(text="بازگشت", callback_data="home")])
+    buttons.append(
+        [InlineKeyboardButton(text="↩️ بازگشت", callback_data="home")]
+    )
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -127,19 +195,19 @@ def purchase_menu(plan_id: int, price_rial: int) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="خرید از کیف پول",
+                    text="💳 خرید از کیف پول",
                     callback_data=f"buy:{plan_id}:0:{price_rial}",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="خرید با تمدید خودکار",
+                    text="🔄 خرید با تمدید خودکار",
                     callback_data=f"buy:{plan_id}:1:{price_rial}",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="بازگشت به پلن‌ها", callback_data="plans:1"
+                    text="🛍 بازگشت به پلن‌ها", callback_data="plans:1"
                 )
             ],
         ]
@@ -156,7 +224,9 @@ def wallet_menu(options_rial: list[int]) -> InlineKeyboardMarkup:
         ]
         for amount in options_rial
     ]
-    buttons.append([InlineKeyboardButton(text="بازگشت", callback_data="home")])
+    buttons.append(
+        [InlineKeyboardButton(text="↩️ بازگشت", callback_data="home")]
+    )
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -176,18 +246,20 @@ def subscription_menu(
     if page > 1:
         navigation.append(
             InlineKeyboardButton(
-                text="صفحهٔ قبل", callback_data=f"subs:{page - 1}"
+                text="⬅️ صفحهٔ قبل", callback_data=f"subs:{page - 1}"
             )
         )
     if page < total_pages:
         navigation.append(
             InlineKeyboardButton(
-                text="صفحهٔ بعد", callback_data=f"subs:{page + 1}"
+                text="➡️ صفحهٔ بعد", callback_data=f"subs:{page + 1}"
             )
         )
     if navigation:
         buttons.append(navigation)
-    buttons.append([InlineKeyboardButton(text="بازگشت", callback_data="home")])
+    buttons.append(
+        [InlineKeyboardButton(text="↩️ بازگشت", callback_data="home")]
+    )
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -195,7 +267,7 @@ def service_menu(view: dict[str, Any]) -> InlineKeyboardMarkup:
     buttons = [
         [
             InlineKeyboardButton(
-                text="بررسی آمادگی تمدید",
+                text="🔄 بررسی آمادگی تمدید",
                 callback_data=f"renewal-status:{view['subscription_id']}",
             )
         ]
@@ -237,7 +309,7 @@ def service_menu(view: dict[str, Any]) -> InlineKeyboardMarkup:
             ]
         )
     buttons.append(
-        [InlineKeyboardButton(text="سرویس‌های من", callback_data="subs:1")]
+        [InlineKeyboardButton(text="📱 سرویس‌های من", callback_data="subs:1")]
     )
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -277,10 +349,11 @@ def loyalty_text(value: CustomerLoyalty) -> str:
 
 def price_text(value: CustomerPriceQuote) -> str:
     lines = [
-        "قیمت پایه: " + toman(value.base_price_rial),
-        "تخفیف نهایی: " + toman(value.discount_rial),
-        "مبلغ پرداخت از کیف پول: " + toman(value.price_rial),
-        "قیمت تمدید بر اساس قوانین فعلی: " + toman(value.renewal_price_rial),
+        "🏷 قیمت پایه: " + toman(value.base_price_rial),
+        "🎁 تخفیف نهایی: " + toman(value.discount_rial),
+        "💳 مبلغ پرداخت از کیف پول: " + toman(value.price_rial),
+        "🔄 قیمت تمدید بر اساس قوانین فعلی: "
+        + toman(value.renewal_price_rial),
     ]
     if value.tier_code is not None:
         lines.append("کد گروه: " + value.tier_code)
@@ -344,7 +417,7 @@ def trial_subscription_text(value: TrialSubscription) -> str:
         "revoking": "در حال پایان سرویس",
     }
     return (
-        "اشتراک آزمایشی "
+        "🎁 اشتراک آزمایشی "
         + fa(value.id)
         + "\nوضعیت فعلی: "
         + statuses.get(value.status, "نیاز به بررسی وضعیت سرویس")
@@ -357,11 +430,11 @@ def trial_service_menu(subscription_id: int) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="مشاهدهٔ همین سرویس",
+                    text="📱 مشاهدهٔ همین سرویس",
                     callback_data=f"service:{subscription_id}",
                 )
             ],
-            [InlineKeyboardButton(text="بازگشت", callback_data="home")],
+            [InlineKeyboardButton(text="↩️ بازگشت", callback_data="home")],
         ]
     )
 
@@ -377,7 +450,7 @@ def renewal_status_text(value: CustomerRenewalEligibility) -> str:
         ),
     }
     lines = [
-        f"آمادگی تمدید سرویس {fa(value.subscription_id)}",
+        f"🔄 آمادگی تمدید سرویس {fa(value.subscription_id)}",
         "تمدید طبق قوانین فعلی مجاز است."
         if value.eligible
         else reasons.get(value.reason_code or "", "تمدید فعلاً در دسترس نیست."),
