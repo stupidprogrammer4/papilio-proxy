@@ -1,6 +1,7 @@
 """Generate private, editable native settings without starting services."""
 
 import argparse
+import base64
 import getpass
 import hashlib
 import ipaddress
@@ -42,6 +43,50 @@ def read_private(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def caddy_environment(content: str) -> str:
+    payload = content.encode("utf-8")
+    return env_text(
+        {
+            "PAPILIO_CADDYFILE_BASE64": base64.b64encode(payload).decode("ascii"),
+            "PAPILIO_CADDYFILE_SHA256": hashlib.sha256(payload).hexdigest(),
+        }
+    )
+
+
+def refresh_caddy_environment(state: Path) -> None:
+    source = state / "Caddyfile"
+    content = caddy_environment(read_private(source))
+    target = state / "web.env"
+    if os.name != "nt":
+        owner = state.stat()
+        source_owner = source.stat()
+        if (
+            state.is_symlink()
+            or owner.st_mode & 0o077
+            or (source_owner.st_uid, source_owner.st_gid)
+            != (owner.st_uid, owner.st_gid)
+        ):
+            raise ValueError("Caddy configuration ownership is unsafe")
+    if target.exists() or target.is_symlink():
+        previous = read_private(target)
+        if os.name != "nt" and (
+            target.stat().st_uid,
+            target.stat().st_gid,
+        ) != (source.stat().st_uid, source.stat().st_gid):
+            raise ValueError("Derived Caddy configuration ownership is unsafe")
+        if previous == content:
+            return
+    descriptor, temporary = tempfile.mkstemp(prefix=".web-env-", dir=state)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(content)
+        if hasattr(os, "chown") and os.geteuid() == 0:
+            os.chown(temporary, source.stat().st_uid, source.stat().st_gid)
+        os.replace(temporary, target)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
 def parse_env(content: str) -> dict[str, str]:
     return dict(
         line.split("=", 1)
@@ -81,9 +126,7 @@ def public_origin(value: str, bot: bool) -> str:
     if bot and (
         parsed.scheme != "https" or loopback or port not in {443, 8443, 80, 88}
     ):
-        raise ValueError(
-            "Bot requires public HTTPS on a Telegram webhook port"
-        )
+        raise ValueError("Bot requires public HTTPS on a Telegram webhook port")
     if parsed.scheme == "https" and (
         loopback
         or not re.fullmatch(
@@ -113,9 +156,7 @@ def validate_settings(raw: dict) -> None:
         or settings.managed_adapter is not None
         and settings.managed_adapter.enabled
     ):
-        raise ValueError(
-            "Deployment installation must keep proxy cores disabled"
-        )
+        raise ValueError("Deployment installation must keep proxy cores disabled")
 
 
 def bot_values(raw: dict, origin: str, enabled: bool) -> dict[str, str]:
@@ -128,9 +169,7 @@ def bot_values(raw: dict, origin: str, enabled: bool) -> dict[str, str]:
         PAPILIO_BOT_KEY=raw["security"]["bot_service_key"],
         BOT_LISTEN_HOST="0.0.0.0",
         BOT_LISTEN_PORT="8020",
-        TELEGRAM_WEBHOOK_PUBLIC_URL=origin + "/telegram/webhook"
-        if enabled
-        else "",
+        TELEGRAM_WEBHOOK_PUBLIC_URL=origin + "/telegram/webhook" if enabled else "",
         TELEGRAM_WEBHOOK_SECRET=secrets.token_urlsafe(32),
     )
     if enabled:
@@ -174,9 +213,7 @@ def runtime_values(args, origin: str, state: Path) -> dict[str, str]:
         raise ValueError("Bind address must be an IPv4 address") from None
     network = ipaddress.ip_network(args.network_subnet, strict=True)
     if network.version != 4 or network.num_addresses - 3 < 8:
-        raise ValueError(
-            "Compose network requires IPv4 /28 or a larger address pool"
-        )
+        raise ValueError("Compose network requires IPv4 /28 or a larger address pool")
     if (
         hasattr(os, "geteuid")
         and os.geteuid() != 0
@@ -185,11 +222,7 @@ def runtime_values(args, origin: str, state: Path) -> dict[str, str]:
         raise ValueError("Non-root configuration must use its own UID/GID")
     https_port = (
         args.https_port
-        or (
-            urlsplit(origin).port
-            if urlsplit(origin).scheme == "https"
-            else None
-        )
+        or (urlsplit(origin).port if urlsplit(origin).scheme == "https" else None)
         or 443
     )
     if urlsplit(origin).scheme == "http" and args.http_port != (
@@ -214,9 +247,7 @@ def runtime_values(args, origin: str, state: Path) -> dict[str, str]:
     }
     if (
         min(
-            value
-            for key, value in numbers.items()
-            if key not in {"RUN_UID", "RUN_GID"}
+            value for key, value in numbers.items() if key not in {"RUN_UID", "RUN_GID"}
         )
         <= 0
         or min(args.run_uid, args.run_gid) < 0
@@ -264,14 +295,11 @@ def validate_existing(state: Path, requested: dict[str, str]) -> None:
     read_private(state / "secrets/mysql-root-password")
     read_private(state / "secrets/owner-password")
     if (
-        raw["db"]["dsn"]
-        != f"mysql+aiomysql://papilio:{mysql}@mysql:3306/papilio"
+        raw["db"]["dsn"] != f"mysql+aiomysql://papilio:{mysql}@mysql:3306/papilio"
         or raw["redis"]["url"] != f"redis://:{redis}@redis:6379/0"
         or raw["tasks"]["scheduler"]["url"] != raw["redis"]["url"]
     ):
-        raise ValueError(
-            "Database/Redis settings do not match persisted secrets"
-        )
+        raise ValueError("Database/Redis settings do not match persisted secrets")
     bot = parse_env(read_private(state / "bot.env"))
     read_private(state / "Caddyfile")
     if bot["PAPILIO_BOT_KEY"] != raw["security"]["bot_service_key"]:
@@ -356,10 +384,12 @@ def configure(args) -> None:
         previous = parse_env(read_private(state / "compose.env"))
         if args.enable_bot and previous.get("BOT_ENABLED") == "false":
             enable_existing_bot(state, runtime)
+            refresh_caddy_environment(state)
             print("Bot configuration enabled; existing secrets preserved.")
             return
         validate_existing(state, runtime)
-        print("Existing private configuration validated; nothing overwritten.")
+        refresh_caddy_environment(state)
+        print("Existing private configuration validated; gateway synchronized.")
         return
     raw = yaml.safe_load(
         (
@@ -370,9 +400,7 @@ def configure(args) -> None:
     )
     mysql, redis = secrets.token_hex(32), secrets.token_hex(32)
     raw["db"]["dsn"] = f"mysql+aiomysql://papilio:{mysql}@mysql:3306/papilio"
-    raw["db"]["test_dsn"] = (
-        f"mysql+aiomysql://papilio:{mysql}@mysql:3306/papilio_test"
-    )
+    raw["db"]["test_dsn"] = f"mysql+aiomysql://papilio:{mysql}@mysql:3306/papilio_test"
     raw["redis"]["url"] = f"redis://:{redis}@redis:6379/0"
     raw["tasks"]["scheduler"]["url"] = raw["redis"]["url"]
     raw["crypto"] = {
@@ -405,13 +433,13 @@ def configure(args) -> None:
     staging = Path(tempfile.mkdtemp(prefix=".papilio-config-", dir=state))
     published: list[Path] = []
     try:
-        write_private(
-            staging / "config.yml", yaml.safe_dump(raw, allow_unicode=True)
-        )
+        write_private(staging / "config.yml", yaml.safe_dump(raw, allow_unicode=True))
         write_private(staging / "bot.env", env_text(bot))
         write_private(staging / "compose.env", env_text(runtime))
+        write_private(staging / "Caddyfile", caddyfile(origin, args.enable_bot))
         write_private(
-            staging / "Caddyfile", caddyfile(origin, args.enable_bot)
+            staging / "web.env",
+            caddy_environment(caddyfile(origin, args.enable_bot)),
         )
         write_private(staging / "installation.json", '{"version":1}\n')
         write_private(staging / "secrets/mysql-password", mysql + "\n")
@@ -430,16 +458,12 @@ def configure(args) -> None:
         # All files are complete before publication. Marker is published last;
         # a terminated publication remains explicitly incomplete, never reused.
         names = [
-            path.name
-            for path in staging.iterdir()
-            if path.name != "installation.json"
+            path.name for path in staging.iterdir() if path.name != "installation.json"
         ] + ["installation.json"]
         for name in names:
             target = state / name
             if target.exists():
-                raise ValueError(
-                    "Installation state changed during publication"
-                )
+                raise ValueError("Installation state changed during publication")
             (staging / name).rename(target)
             published.append(target)
     except BaseException:
@@ -449,9 +473,7 @@ def configure(args) -> None:
     finally:
         if staging.exists():
             shutil.rmtree(staging)
-    print(
-        "Private native configuration created; services have not been started."
-    )
+    print("Private native configuration created; services have not been started.")
 
 
 def parser() -> argparse.ArgumentParser:

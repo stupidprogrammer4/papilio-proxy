@@ -10,4 +10,5 @@ RUN pnpm install --frozen-lockfile
 ENV PAPILIO_BACKEND_URL=http://api:8000 PAPILIO_PANEL_PORT=8080
 RUN pnpm build
 FROM ${CADDY_IMAGE}
+RUN setcap -r /usr/bin/caddy
 COPY --from=build /build/apps/panel/dist /srv

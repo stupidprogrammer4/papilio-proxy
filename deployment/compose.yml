@@ -114,8 +114,10 @@ services:
         ipv4_address: ${CADDY_IPV4:?Run install.sh first}
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:${HTTP_PORT:-8080}:8080"
+    env_file: ${STATE_DIR}/web.env
+    entrypoint: [/bin/sh, /opt/deployment/caddy-entrypoint.sh]
     volumes:
-      - ${STATE_DIR}/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy-entrypoint.sh:/opt/deployment/caddy-entrypoint.sh:ro
       - caddy-data:/data
       - caddy-config:/config
     security_opt: [no-new-privileges:true]

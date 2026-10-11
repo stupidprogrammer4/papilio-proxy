@@ -1,5 +1,6 @@
 """Installer identity preservation and origin validation."""
 
+import base64
 import contextlib
 import io
 import os
@@ -34,9 +35,11 @@ class ConfigurationTest(unittest.TestCase):
         )
 
     def generate(self, options, answers):
-        with patch.object(configure.getpass, "getpass", side_effect=answers):
-            with contextlib.redirect_stdout(io.StringIO()):
-                configure.configure(options)
+        with (
+            patch.object(configure.getpass, "getpass", side_effect=answers),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            configure.configure(options)
 
     def snapshot(self):
         return {
@@ -88,8 +91,12 @@ class ConfigurationTest(unittest.TestCase):
         args.enable_bot = True
         self.generate(args, ["123456789:FixtureFakeTokenNotReal_Only"])
         after = self.snapshot()
-        for name in before.keys() - {"compose.env", "bot.env", "Caddyfile"}:
+        for name in before.keys() - {"compose.env", "bot.env", "Caddyfile", "web.env"}:
             self.assertEqual(before[name], after[name])
+        web = configure.parse_env(after["web.env"].decode())
+        self.assertEqual(
+            base64.b64decode(web["PAPILIO_CADDYFILE_BASE64"]), after["Caddyfile"]
+        )
         old = configure.parse_env(before["bot.env"].decode())
         new = configure.parse_env(after["bot.env"].decode())
         self.assertEqual(
