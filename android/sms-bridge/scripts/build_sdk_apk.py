@@ -1,12 +1,58 @@
 """Build a locally signed APK with installed Android SDK tools when Gradle is offline."""
 
 import argparse
+import json
 import os
 import re
 import shutil
+import ssl
 import subprocess
 import zipfile
 from pathlib import Path
+from urllib.parse import urlsplit
+
+
+def local_connection(args: argparse.Namespace, resources: Path, assets: Path) -> None:
+    if not args.local_api_origin and not args.local_ca_certificate:
+        return
+    if not args.local_api_origin or not args.local_ca_certificate:
+        raise ValueError(
+            "Local HTTPS needs both an origin and its public CA certificate"
+        )
+    origin = urlsplit(args.local_api_origin)
+    if (
+        origin.scheme != "https"
+        or origin.hostname != "localhost"
+        or origin.username is not None
+        or origin.password is not None
+        or origin.path not in {"", "/"}
+        or origin.query
+        or origin.fragment
+        or origin.port is None
+        or not 0 < origin.port < 65536
+    ):
+        raise ValueError(
+            "Local test origin must be https://localhost with an explicit port"
+        )
+    certificate = args.local_ca_certificate.read_text(encoding="ascii")
+    if "PRIVATE KEY" in certificate or certificate.count("BEGIN CERTIFICATE") != 1:
+        raise ValueError("Only one public CA certificate may be packaged")
+    ssl.PEM_cert_to_DER_cert(certificate)
+    (resources / "raw").mkdir(exist_ok=True)
+    (resources / "raw/local_test_ca.pem").write_text(certificate, encoding="ascii")
+    (resources / "xml/network_security_config.xml").write_text(
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        '<network-security-config><base-config cleartextTrafficPermitted="false">'
+        '<trust-anchors><certificates src="system"/></trust-anchors></base-config>'
+        '<domain-config cleartextTrafficPermitted="false">'
+        '<domain includeSubdomains="false">localhost</domain>'
+        '<trust-anchors><certificates src="@raw/local_test_ca"/>'
+        "</trust-anchors></domain-config></network-security-config>\n"
+    )
+    defaults = assets / "defaults.json"
+    values = json.loads(defaults.read_text())
+    values["origin"] = args.local_api_origin.rstrip("/")
+    defaults.write_text(json.dumps(values, ensure_ascii=False, indent=2) + "\n")
 
 
 def build(args: argparse.Namespace) -> Path:
@@ -38,6 +84,11 @@ def build(args: argparse.Namespace) -> Path:
     if work.exists():
         shutil.rmtree(work)
     work.mkdir(parents=True)
+    resources = work / "res"
+    assets = work / "assets"
+    shutil.copytree(app / "src/main/res", resources)
+    shutil.copytree(app / "src/main/assets", assets)
+    local_connection(args, resources, assets)
     environment = dict(os.environ, JAVA_HOME=str(java))
     environment["PATH"] = str(java / "bin") + os.pathsep + environment["PATH"]
 
@@ -48,7 +99,7 @@ def build(args: argparse.Namespace) -> Path:
         tools / "aapt2",
         "compile",
         "--dir",
-        app / "src/main/res",
+        resources,
         "-o",
         work / "resources.zip",
     )
@@ -78,7 +129,7 @@ def build(args: argparse.Namespace) -> Path:
         "--java",
         work / "generated",
         "-A",
-        app / "src/main/assets",
+        assets,
         work / "resources.zip",
     )
     classes = work / "classes"
@@ -167,6 +218,8 @@ def main() -> None:
     parser.add_argument("--build-tools", required=True)
     parser.add_argument("--platform", required=True)
     parser.add_argument("--debug-keystore", type=Path, required=True)
+    parser.add_argument("--local-api-origin")
+    parser.add_argument("--local-ca-certificate", type=Path)
     result = build(parser.parse_args())
     print(f"APK: {result}")
 
