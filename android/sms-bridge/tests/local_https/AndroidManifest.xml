@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="net.papilio.smsbridge.tests">
+    <application android:label="Papilio local TLS check" />
+    <instrumentation android:name="net.papilio.smsbridge.tests.LocalHttpsInstrumentation"
+        android:targetPackage="net.papilio.smsbridge" />
+</manifest>
