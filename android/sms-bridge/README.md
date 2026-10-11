@@ -24,6 +24,53 @@ address** restores the packaged origin in the form; **Save enrollment** applies
 the change after validation. Pending events still prevent a change of device or
 API origin. Restoring the address does not clear credentials or other draft values.
 
+## USB testing against the local API
+
+A local HTTPS gateway may forward to the existing HTTP API without changing the
+API, deploying remotely or starting proxy cores. Forward its loopback port with:
+
+```bash
+adb -s DEVICE_SERIAL reverse tcp:18443 tcp:18443
+```
+
+The native debug APK builder accepts these optional arguments in addition to its
+usual SDK, JDK, platform and signing arguments:
+
+```bash
+--local-api-origin https://localhost:18443 \
+--local-ca-certificate /private/local-test/ca.crt
+```
+
+Both arguments are required together. The builder changes only generated build
+resources and assets. It packages one **public** CA certificate, accepts that CA
+only for the exact `localhost` domain, and sets the local origin as that APK's
+default. Private keys stay on the computer. Other domains retain Android system
+trust. Normal builds and Gradle builds do not include a local CA. Cleartext,
+redirects and certificate verification bypasses remain disabled. Saved enrollment
+still takes precedence; use the default-address action to change its draft.
+
+On **2026-10-11**, a local gateway forwarded HTTPS to the ordinary API on port
+8018. Standard Android instrumentation on the A54 verified `localhost` health
+with the installed app's TLS policy and rejected the same CA on `127.0.0.1`.
+The small instrumentation APK was removed afterward. This proves the phone's
+local HTTPS transport; actual SMS settlement still requires a real destination,
+enrolled phone, pending top-up and incoming bank-credit SMS.
+
+The instrumentation source and manifest are in `tests/local_https`. Sign its
+test APK with the same debug keystore as the target app and invoke Android's
+standard runner:
+
+```bash
+adb -s DEVICE_SERIAL shell am instrument -w \
+  -e origin https://localhost:18443 -e timeout_ms 5000 \
+  -e response_capacity 4096 \
+  net.papilio.smsbridge.tests/net.papilio.smsbridge.tests.LocalHttpsInstrumentation
+```
+
+It makes only health requests and does not create or approve payments. USB
+forwarding requires the phone to remain connected and may need reinstalling
+after a reboot or disconnect.
+
 ## Interface
 
 Version 0.3.0 adds an original vector butterfly mark, an adaptive launcher icon,
