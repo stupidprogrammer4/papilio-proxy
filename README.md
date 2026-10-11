@@ -486,6 +486,23 @@ The four-digit suffix alone never proves settlement. Native payment-review
 scheduler/worker recovery can retry previously received observations when their
 invoice becomes available; actual physical forwarding still needs enrollment.
 
+### External SMS forwarder contract
+
+Post UTF-8 JSON to `/v1/webhooks/sms-devices/{device_id}` over HTTPS using the
+enrolled device's secret as the HMAC key. `X-Papilio-Timestamp` is the current
+Unix timestamp in seconds. `X-Papilio-Signature` is lowercase hexadecimal
+HMAC-SHA256 of `device_id.timestamp.` followed by the **exact transmitted body
+bytes**. Do not reserialize the body after signing, put the key in the URL or
+replace the SMS provider's original timestamp with the forwarding time.
+
+The body contains `event_id`, `sender`, `message` and timezone-aware `sent_at`.
+For trusted no-reference matching, also include `origin` with `kind: direct_sms`,
+`original_provider_timestamp_ms`, `original_sender` and
+`canonicalization_revision: 1`. Retries retain the original event identity and
+SMS metadata; authenticate each retry with a fresh request timestamp. The sender
+must be enrolled, and receiving-account/parser policy must be configured. A
+forwarder that only sends an API-key header does not implement this contract.
+
 ## Current limits
 
 Purchases remain `pending_provision` until their node work is independently acknowledged. The native Papilio Tasks → Go agent → actual Xray/sing-box installation and paid-purchase delivery paths have passed isolated local integration tests. Runtime ACK alone cannot activate a purchase. Usage observation, quota enforcement, expiry and source-IP admission have separate acceptance gates; `enforced` mode remains unavailable. Ordinary startup and automatic core provisioning remain disabled.
@@ -503,7 +520,11 @@ an actual native provisioning task and accepts original strict admission evidenc
 before native activation. Actual local gates cover paid TLS traffic and finality,
 and cancellation of an unacknowledged purchase through original revocation and
 exactly one wallet refund. The component durably blocks new admission on revoke.
-Continuous successors, safe epoch rollover and crash recovery still need work;
+An optional bounded successor chain now continues through accepted finality,
+cumulative counters and shared reservations without another paid lease or charge.
+An actual local paid gate covers three TLS windows, exact consumption and durable
+replay without restarting the child. Safe epoch rollover and crash recovery
+still need work;
 ordinary readiness and cores remain disabled. See
 [managed window operations and recovery](docs/managed-runtime.md).
 Strict configuration

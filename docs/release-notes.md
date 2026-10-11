@@ -127,8 +127,9 @@ outside that gate. See [managed runtime boundaries](managed-runtime.md).
 
 Schema59 is applied locally after an encrypted, verified schema58 backup, with
 business counts preserved and eleven automation schedules.
-Owner login/logout and eight admin reads passed. The compiled Vue preview passed
-six desktop/mobile screens, the plan creation modal and real API reads with no
+Owner login/logout and eight admin reads passed on schema59. Earlier, on schema58,
+the compiled Vue preview passed six desktop/mobile screens, the plan creation
+modal and real API reads with no
 JavaScript or unexpected HTTP errors and no business writes. The preview uses the
 configured loopback port and API proxy. Ordinary proxy cores and adapters remain off.
 
@@ -156,7 +157,7 @@ and completes revocation only after original finality. Actual local Xray/TLS gat
 cover native paid activation/accounting and pending-purchase cancellation with
 exactly one wallet refund. Schema59 preserves existing windows and refuses
 lossy downgrade of paid claims or revocation evidence. These gates do not establish
-continuous service: successors, epoch rollover, never-admitted recovery and
+continuous service: safe epoch rollover, never-admitted recovery and
 crash/fsync checkpoints remain open. Remaining lifecycle lock ordering, key-rotation concurrency,
 safe IP replacement without overlap, continuous global quota/expiry authority,
 other-engine enforcement and the two transient core failures require further work.
@@ -164,3 +165,20 @@ other-engine enforcement and the two transient core failures require further wor
 Complete PasarGuard/Mirza/Nobetci feature parity, every protocol, target-network
 reachability, off-node restoration and paid-launch acceptance are not established.
 This checkpoint is not a production-readiness claim.
+
+## Bounded successor continuation — 2026-10-11
+
+The native successor endpoint requires exact accepted predecessor finality and
+the current chain tip, reserves shared quota, and preserves cumulative counters.
+Profile/epoch window capacities, epoch lifetime and requested-byte limits are
+explicit owner settings; successors default to disabled. Saved original replay
+survives disabled policies. Paid attribution stays private, with no new claim,
+wallet charge or activation notice. The node saves every boundary in a separate
+bounded journal and checks component capacities before launch.
+
+Three native MySQL/API scenarios and two additional recovery/paid-attribution
+scenarios passed. Controlled Go client and journal gates passed. An actual paid
+Go/Xray gate exercised three distinct TLS windows, exact per-window and cumulative
+consumption, one original charge and completed replay without child restart.
+Scoped Ruff and Pyright passed. This finite chain does not prove epoch rollover,
+crash recovery or ongoing paid-service readiness; ordinary cores remain disabled.

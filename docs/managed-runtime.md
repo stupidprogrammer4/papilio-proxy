@@ -27,12 +27,19 @@ operations. A CLOSED startup receipt does not activate a paid purchase.
    It advances the bound native revoke task. Failed purchases refund the original
    payer once under their saved recovery policy; activated service follows its
    separate retirement rules.
+6. `POST /v1/nodes/{code}/managed-windows/{window_id}/successor` continues from
+   the exact accepted finality of the current profile window. It reserves shared
+   quota and carries cumulative counters into a new window in the same epoch.
+   A successor retains private original paid attribution, returns no new claim
+   and performs no additional payment or activation. Identical historical replay
+   returns the saved original even after new issuance is disabled.
 
 Initial issuance supports active subscriptions with `provisioning_managed=false`
 and an opt-in paid task path. Paid mode defaults to disabled. Shared reserved quota
 includes grants on other nodes. Changed membership, generation, captured policy
-or runtime revision blocks new issuance. A successor window in the same process
-epoch is not implemented.
+or runtime revision blocks new issuance. Successors default to disabled; bounded
+mode requires explicit profile/epoch window capacities, epoch lifetime and
+maximum requested bytes. A stale predecessor cannot create a second branch.
 
 Ordinary usage reports cannot settle a managed grant. Ordinary provisioning ACKs
 cannot apply or fail a task bound to a managed window, even when adapters are
@@ -78,6 +85,12 @@ receipts. Admission receipts use a separately locked private journal namespace.
 These optional receipt capabilities default to disabled. Paid cycles explicitly
 select `provision_task_id` and require original admission receipts. The agent
 saves native paid acceptance before subsequent freeze/finality work.
+An optional `successor_cycles` registry selects a finite list of request keys,
+byte budgets, freeze intervals and retry settings, with explicit local and API
+cycle capacities. Component window, admission, record and barrier budgets must
+cover the entire chain before launch. A separate private successor journal is
+anchored to the completed initial paid journal. Recovery never relaunches an old
+child or fabricates a missing snapshot; it may retry only durable finality.
 Component revocation requires a positive `max_revocations`; its separate private
 namespace and both intent/receipt artifacts count against `max_records`.
 
@@ -100,8 +113,11 @@ prepare, strict admission, activation, TLS traffic and final accounting. Another
 actual gate deliberately omits activation ACK, cancels the pending purchase,
 proves blocked traffic and original revocation/finality, then verifies exactly
 one wallet refund across concurrent retries. These gates stop their owned children.
+A further actual paid gate exercises an initial window and two successors with
+distinct TLS payloads, cumulative baselines, three exact final usage events,
+one original charge and completed replay without restarting the owned child.
 
-Continuous successor windows, safe epoch rollover, never-admitted reservation
+Unbounded service across safe epoch rollover, never-admitted reservation
 recovery, automatic node cancellation orchestration, process-kill/fsync crash
 checkpoints and equivalent enforcement for other engines remain open. Normal
 managed readiness remains disabled; these bounded gates do not establish a
