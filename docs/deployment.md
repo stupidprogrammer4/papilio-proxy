@@ -87,12 +87,19 @@ labels prevent lifecycle commands from adopting another installation. Applicatio
 image tags are scoped to that project, so sibling deployments do not reuse a
 shared mutable application image tag.
 It contains editable native `config.yml`, `bot.env`, `compose.env`, `Caddyfile`,
-private secret files, and persistent media/temp directories. Initial secrets are
+private secret files, a derived private `web.env`, and persistent media/temp directories. Initial secrets are
 random; passwords/tokens are not passed as command arguments or printed.
 Repeat installation with the same options preserves existing secrets and the
 owner password. Different settings require explicit changes; incomplete or
 inconsistent state is rejected. Keep the complete state and database volumes
 when moving or recovering an installation.
+
+`Caddyfile` remains the authoritative gateway configuration and stays private
+(`0600`). Repeat installation refreshes `web.env` from that file. The container
+validates the transported bytes and digest, writes its own private configuration
+in the existing Caddy config volume, then clears the transport environment.
+This supports private host files with a different UID while retaining
+`cap_drop: ALL`, `no-new-privileges`, and existing certificate volumes.
 
 ```bash
 bash scripts/deploy/status.sh --state-dir "$HOME/papilio-state"
@@ -136,10 +143,19 @@ collision was reproduced and the replacement address connected successfully.
 Actual Bash ownership checks rejected a different state for both running and
 stopped containers while the matching state's stop preserved volumes.
 
-The API image build could not complete because this host could not resolve
-`files.pythonhosted.org`. Therefore a complete first-install application-stack
-run, live certificate issuance, Telegram delivery and actual macOS/Windows
-execution remain unverified. The standalone gateway probe also passed controlled
-HTTP and real untrusted-TLS unit tests; its transport doubles do not establish
-public certificate issuance. These gates are not replaced by Compose parsing or
-component checks. Existing local application services remain untouched.
+On **2026-10-11**, DNS recovered and actual API/web image builds, Bash installation
+and installer replay passed on Linux. Full stack start and stop/start passed on
+an isolated loopback HTTP port. The gateway served panel HTML and API health,
+owner login and authenticated settings succeeded, and anonymous settings returned
+401. Replay preserved the owner/password and all private configuration hashes.
+Confirmed migration-file permissions, missing async SQLAlchemy dependency,
+numeric-user lookup, Redis restart, Caddy file capability and private host-config
+access failures were repaired before the successful runs. Nine configuration
+tests also passed. Worker and scheduler startup is checked by Compose process
+state; they do not have Docker healthchecks.
+
+Live certificate issuance, Telegram delivery and actual macOS/Windows execution
+remain unverified. The standalone gateway probe also passed controlled HTTP and
+real untrusted-TLS unit tests; its transport doubles do not establish public
+certificate issuance. The owned isolated deployment resources were removed after
+the gate. Ordinary local services remain available and proxy cores remain stopped.
