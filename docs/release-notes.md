@@ -210,8 +210,43 @@ no second payment request was created. Unmodified default notification titles
 were updated through revisioned preferences while custom templates were retained.
 
 **Paid launch remains blocked.** Physical SMS forwarding/settlement and the live
-sales webhook have not passed end-to-end acceptance; the phone still requires USB
-authorization. Continuous proxy lifecycle, target-network reachability and other
+sales webhook have not passed end-to-end acceptance. The later physical
+enrollment check below supersedes the temporary USB authorization blocker.
+Continuous proxy lifecycle, target-network reachability and other
 previously recorded launch gates remain open. Permanent cores stay stopped. The
 owner invoice explicitly says not to transfer yet. No real purchase or bank credit
 is claimed by these tests.
+
+## Manual and simulated SMS payment acceptance — 2026-10-11
+
+Four native scenarios passed in **104.878 seconds**, with separate disposable
+MySQL schemas and an initially empty isolated Redis database:
+
+- Manual selection of an ambiguous generated SMS through authenticated admin
+  HTTP, followed by actual Papilio Tasks queue/worker checkout: one full wallet
+  credit, one purchase debit, one payment notice, and the correct remaining
+  balance. Provisioning waits for manual profiles; no live core delivery is claimed.
+- Concurrent equal requested amounts receive distinct captured four-digit rial
+  identifiers. Only the exactly matched invoice receives the full payable amount.
+  Repeated requests and repeated SMS do not create another credit.
+- A generated bank Melli-format `انتقال:<amount>+` with a synthetic sender and
+  sanitized account credits the matched invoice once; the same format with `-`
+  does not credit it. The other pending invoice remains untouched.
+- Debit messages, multiple candidates and a subsequently revoked device do not
+  auto-credit. Ambiguous evidence remains reviewable.
+
+The first invocation skipped because its Redis test setting was absent; that run
+is not counted as acceptance. The subsequent run executed all four scenarios.
+The owned Redis target contained zero keys after cleanup. The ordinary owner's
+real invoice remained pending and its wallet remained zero. These are simulated
+bank inputs against real application/database/queue boundaries, not bank transfers
+or physical SMS delivery. Scoped Ruff/format and Pyright passed.
+
+The A54 subsequently authorized ADB. The real app form saved its panel-issued
+enrollment through native encrypted storage, with SMS permission granted. A
+runner launch issue was corrected with Android's required new-task flag. The
+installed app's actual TLS check passed for the USB-forwarded localhost API and
+rejected the local CA on another hostname. The test package and temporary phone
+credential file were removed; the ordinary app was cold launched afterward.
+Physical bank SMS reception, unattended battery behavior, the live sales webhook
+and continuous proxy operation remain separate launch gates.
