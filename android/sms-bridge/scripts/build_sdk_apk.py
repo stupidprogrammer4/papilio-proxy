@@ -75,6 +75,8 @@ def build(args: argparse.Namespace) -> Path:
         version_code,
         "--version-name",
         version_name,
+        "--java",
+        work / "generated",
         "-A",
         app / "src/main/assets",
         work / "resources.zip",
@@ -94,6 +96,7 @@ def build(args: argparse.Namespace) -> Path:
         "-d",
         classes,
         *sorted((app / "src/main/java").rglob("*.java")),
+        *sorted((work / "generated").rglob("*.java")),
     )
     with zipfile.ZipFile(work / "classes.jar", "w") as archive:
         for file in sorted(classes.rglob("*.class")):

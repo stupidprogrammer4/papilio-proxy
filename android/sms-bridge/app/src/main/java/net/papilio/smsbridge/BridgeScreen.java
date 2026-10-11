@@ -10,6 +10,7 @@ import android.view.View;
 import android.view.WindowInsets;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -21,14 +22,14 @@ import java.util.List;
 /** Native presentation only: enrollment, storage and delivery belong to their owners. */
 final class BridgeScreen extends LinearLayout {
     private static final int INK = 0xff20263c, MUTED = 0xff727a90;
-    private static final int ACCENT = 0xff6858df, BORDER = 0xffe7e8f0;
-    private static final int BACKGROUND = 0xfff5f5fa, WHITE = 0xffffffff;
+    private static final int ACCENT = 0xff6554d9, BORDER = 0xffe6e8f1;
+    private static final int BACKGROUND = 0xfff4f6fb, WHITE = 0xffffffff;
     EditText origin, device, key, senders, keywords, policy;
     private final LinearLayout content, form, footer;
     private final TextView heading, detail, badge, queued, permission;
     private final Button retryLoading, saveButton;
     private final List<Button> actions = new ArrayList<>();
-    private final Runnable allowSms, retryUploads;
+    private final Runnable allowSms, retryUploads, restoreAddress;
     private boolean enrolled;
 
     /** Rotation-only draft; no key is written to an Android saved-state bundle. */
@@ -53,10 +54,10 @@ final class BridgeScreen extends LinearLayout {
         content.requestFocus();
     }
 
-    BridgeScreen(Context context, Runnable save, Runnable allowSms,
+    BridgeScreen(Context context, Runnable save, Runnable restoreAddress, Runnable allowSms,
                  Runnable retryUploads, Runnable retryLoad) {
         super(context);
-        this.allowSms = allowSms; this.retryUploads = retryUploads;
+        this.allowSms = allowSms; this.retryUploads = retryUploads; this.restoreAddress = restoreAddress;
         setOrientation(VERTICAL);
         setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
         setBackgroundColor(BACKGROUND);
@@ -83,21 +84,27 @@ final class BridgeScreen extends LinearLayout {
         scroll.addView(content);
 
         LinearLayout brand = row();
-        TextView mark = text("P", 22, WHITE, true);
-        mark.setGravity(Gravity.CENTER); mark.setBackground(shape(ACCENT, 14, ACCENT));
-        brand.addView(mark, new LayoutParams(dp(46), dp(46)));
+        ImageView mark = new ImageView(context);
+        mark.setImageResource(R.drawable.ic_papilio);
+        mark.setContentDescription("Papilio butterfly logo");
+        mark.setBackground(shape(ACCENT, 16, ACCENT));
+        brand.addView(mark, new LayoutParams(dp(50), dp(50)));
         LinearLayout name = column();
         name.setPadding(dp(12), 0, 0, 0);
         name.addView(text("Papilio", 22, INK, true));
         TextView subtitle = text("SMS BRIDGE", 10, MUTED, true);
         subtitle.setLetterSpacing(0.15f); name.addView(subtitle);
         brand.addView(name, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1));
-        TextView local = text("ON YOUR PHONE", 9, MUTED, true);
+        TextView local = text("PRIVATE", 9, ACCENT, true);
+        local.setPadding(dp(10), dp(7), dp(10), dp(7));
+        local.setBackground(shape(0xffeeebff, 10, 0xffeeebff));
         local.setLetterSpacing(0.06f); brand.addView(local);
         content.addView(brand); space(content, 22);
 
         LinearLayout hero = column(); hero.setPadding(dp(20), dp(20), dp(20), dp(20));
-        hero.setBackground(shape(0xff20263e, 24, 0xff20263e));
+        GradientDrawable heroBackground = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[]{0xff252b49, 0xff363265});
+        heroBackground.setCornerRadius(dp(26)); hero.setBackground(heroBackground);
         badge = text("LOADING", 10, 0xffc7bfff, true);
         badge.setLetterSpacing(0.12f); hero.addView(badge); space(hero, 10);
         heading = text("Your payment companion", 24, WHITE, true); hero.addView(heading);
@@ -115,7 +122,12 @@ final class BridgeScreen extends LinearLayout {
         access.addView(permission); space(access, 5);
         access.addView(text("SMS permission", 11, 0xffb8bed3, false));
         metrics.addView(access, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1));
-        hero.addView(metrics); content.addView(hero); space(content, 20);
+        hero.addView(metrics); space(hero, 18);
+        TextView security = text("SIGNED DELIVERY  /  ENCRYPTED STORAGE", 9, 0xffc7bfff, true);
+        security.setLetterSpacing(0.08f); hero.addView(security);
+        content.addView(hero); space(content, 24);
+        content.addView(text("Bridge settings", 20, INK, true)); space(content, 5);
+        content.addView(text("Your connection. Your delivery rules.", 12, MUTED, false)); space(content, 16);
 
         form = column(); content.addView(form);
         retryLoading = action("Retry loading enrollment", false, retryLoad);
@@ -131,13 +143,18 @@ final class BridgeScreen extends LinearLayout {
         content.requestFocus();
     }
 
-    void showEnrollment(JSONObject current) {
+    void showEnrollment(JSONObject current, String defaultOrigin) {
         form.removeAllViews();
         actions.removeIf(action -> action != saveButton && action != retryLoading);
         enrolled = current.has("device_id") && !current.optString("api_key").isEmpty();
         LinearLayout connection = card("01", "Connect your panel", "Use the enrollment created in your admin panel.");
         origin = field(connection, "API address", current.optString("origin"),
-                "https://your-panel.example", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+                "Your deployed HTTPS address", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        space(connection, 9);
+        TextView defaultAddress = text("Default: " + defaultOrigin
+                + (defaultOrigin.endsWith(".example") ? " · sample address" : ""), 11, MUTED, false);
+        connection.addView(defaultAddress); space(connection, 8);
+        connection.addView(action("Use default address", false, restoreAddress));
         device = field(connection, "Device ID", current.optString("device_id"),
                 "Enrolled phone identifier", InputType.TYPE_CLASS_NUMBER);
         key = field(connection, "Enrollment key", "", enrolled ? "Saved securely · leave blank to keep" : "Paste your private API key",

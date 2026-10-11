@@ -13,12 +13,13 @@ import java.util.concurrent.Executors;
 public final class MainActivity extends Activity {
     private BridgeScreen screen;
     private JSONObject current;
+    private String defaultOrigin;
     private final ExecutorService storage = Executors.newSingleThreadExecutor();
     private boolean destroyed;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        screen = new BridgeScreen(this, this::save,
+        screen = new BridgeScreen(this, this::save, this::restoreDefaultAddress,
                 () -> requestPermissions(new String[]{Manifest.permission.RECEIVE_SMS}, 1),
                 this::retryUploads, this::loadEnrollment);
         setContentView(screen);
@@ -29,10 +30,12 @@ public final class MainActivity extends Activity {
         storage.execute(() -> {
             try {
                 JSONObject enrollment = BridgeSettings.editable(this);
+                String configuredOrigin = BridgeSettings.defaults(this).optString("origin");
                 runOnUiThread(() -> {
                     if (!destroyed) {
                         current = enrollment;
-                        screen.showEnrollment(enrollment);
+                        defaultOrigin = configuredOrigin;
+                        screen.showEnrollment(enrollment, configuredOrigin);
                         Object retained = getLastNonConfigurationInstance();
                         if (retained instanceof BridgeScreen.EnrollmentDraft) {
                             screen.restoreDraft((BridgeScreen.EnrollmentDraft) retained);
@@ -44,6 +47,11 @@ public final class MainActivity extends Activity {
                 runOnUiThread(() -> { if (!destroyed) screen.showLoadFailure(); });
             }
         });
+    }
+
+    private void restoreDefaultAddress() {
+        screen.origin.setText(defaultOrigin);
+        screen.showMessage("Default address restored in your draft. Save to apply a real HTTPS address.");
     }
 
     private void save() {
