@@ -15,6 +15,7 @@ dependencies = [
   "aiomysql>=0.2,<1",
   "PyMySQL==1.1.2",
   "sqlmodel>=0.0.24,<1",
+  "sqlalchemy[asyncio]>=2.0.14,<2.1",
   "alembic>=1.16,<2",
   "taskiq>=0.12.6,<0.13",
   "taskiq-redis>=1.2.3,<1.2.4",
