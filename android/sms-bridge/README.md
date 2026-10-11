@@ -5,6 +5,21 @@ Papilio API. It uses Android Keystore encryption, a durable encrypted SQLite
 outbox and Android JobScheduler. Incoming messages must match the configured exact
 sender IDs and credit keywords. The application does not read the existing SMS inbox.
 
+## Interface
+
+Version 0.2.0 uses a native card layout with queue and SMS-permission status,
+separate connection and bank-filter sections, collapsible delivery settings and
+a persistent save action. Failed saves retain the form; drafts survive rotation
+in memory without writing the enrollment key to Android's saved-state bundle.
+Storage work stays off the UI thread. No web view or animation framework is used.
+
+The updated APK was built, signature-verified, installed and visually inspected
+on the owner's Samsung A54 on **2026-10-11**. SMS permission was visibly granted;
+the phone remains unenrolled. This does not establish real-bank forwarding or
+automatic settlement.
+
+<img src="../../assets/screenshots/android-sms-bridge.png" width="320" alt="Actual Android SMS Bridge showing setup status, empty queue and connection card" />
+
 ## Enroll a phone
 
 1. Create an SMS device in the panel and select its payment destination and approval
@@ -20,6 +35,13 @@ sender IDs and credit keywords. The application does not read the existing SMS i
 Direct SMS observations preserve the Android provider timestamp and original
 sender in the API's revision-1 origin contract. Signing covers the exact JSON body,
 including that origin, and the enrolled device ID and request timestamp.
+
+The initial message filters include `انتقال:` for the supplied Bank Melli format.
+This also forwards matching negative-transfer text for server classification;
+the phone does not approve payments. Existing saved filters are retained. A parser
+profile can require `+` immediately after its selected deposit amount using
+`required_amount_suffix`, so a balance or unrelated plus sign cannot settle an
+order. Currency must be explicitly configured for formats without a currency label.
 
 The phone needs network access to that HTTPS origin and a certificate trusted by
 Android. A localhost HTTP development URL cannot be used directly. Redirects and

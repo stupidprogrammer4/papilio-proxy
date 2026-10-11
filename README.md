@@ -501,7 +501,19 @@ The APK installed on an authorized Samsung A54 running Android API 36, and cold
 activity launches succeeded. Initial UI inspection found an empty queue and
 missing SMS permission. Real bank reception, trusted HTTPS enrollment, background
 battery behavior and physical payment approval remain unverified. The Gradle
-build was not executed.
+build was not executed. The updated native interface was visually checked on the
+phone with SMS permission granted, a real empty queue and no saved enrollment.
+Connection, bank filters and collapsible delivery settings have separate cards;
+the save action remains visible while scrolling.
+
+<a href="assets/screenshots/android-sms-bridge.png"><img src="assets/screenshots/android-sms-bridge.png" width="320" alt="Actual Samsung A54 SMS Bridge showing setup status, empty queue and connection settings" /></a>
+
+Supplied Blu credit/withdrawal and Bank Melli transfer formats have dedicated
+parser regressions. A literal amount rule may require a configurable
+`required_amount_suffix`, such as `+` immediately after the selected deposit
+amount. Missing, negative or unrelated balance suffixes remain unresolved.
+Formats without currency require an explicit rule-level currency choice;
+there is no bank-specific automatic unit inference.
 
 ### SMS forwarder contract
 
