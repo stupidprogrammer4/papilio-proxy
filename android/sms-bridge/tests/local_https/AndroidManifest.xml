@@ -2,4 +2,6 @@
     <application android:label="Papilio local TLS check" />
     <instrumentation android:name="net.papilio.smsbridge.tests.LocalHttpsInstrumentation"
         android:targetPackage="net.papilio.smsbridge" />
+    <instrumentation android:name="net.papilio.smsbridge.tests.EnrollPhoneInstrumentation"
+        android:targetPackage="net.papilio.smsbridge" />
 </manifest>

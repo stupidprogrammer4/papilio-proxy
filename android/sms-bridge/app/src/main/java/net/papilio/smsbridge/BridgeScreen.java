@@ -243,6 +243,7 @@ final class BridgeScreen extends LinearLayout {
     private EditText field(LinearLayout parent, String name, String value, String hint, int type) {
         space(parent, 16); parent.addView(text(name, 12, INK, true)); space(parent, 7);
         EditText field = new EditText(getContext()); field.setId(View.generateViewId());
+        field.setTag(name);
         field.setInputType(type); field.setSingleLine((type & InputType.TYPE_TEXT_FLAG_MULTI_LINE) == 0);
         field.setTextSize(14); field.setTextColor(INK); field.setHintTextColor(MUTED);
         field.setHint(hint); field.setText(value); field.setSelectAllOnFocus(false);

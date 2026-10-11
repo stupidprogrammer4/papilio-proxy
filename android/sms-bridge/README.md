@@ -165,3 +165,25 @@ adb shell am start -n net.papilio.smsbridge/.MainActivity
 Only an authorized device can be installed through ADB. Compilation and signature
 verification do not establish actual SMS reception, battery-policy behavior or
 end-to-end payment approval on a physical device.
+
+## Authorized local enrollment check
+
+`tests/local_https/EnrollPhoneInstrumentation.java` exercises the actual native
+form and encrypted save. It belongs to the separate instrumentation APK, signed
+with the target app's local debug key; it is not packaged in the normal app.
+The input must be a private ADB-shell-owned file named
+`/data/local/tmp/papilio-enrollment-<hex>.json`, containing the panel-issued
+`origin`, `device_id`, `api_key`, `senders` and `credit_keywords`. Push it only to
+your authorized test phone, set mode `0600`, and pass its filename rather than the
+credential as an instrumentation argument. `input_capacity` and `wait_ms` bound
+the input and observed-save wait.
+
+The runner fills the real form, presses Save, and requires the saved badge and
+cleared key field. It does not alter private preferences directly or approve any
+payment. Delete the temporary phone file and uninstall the instrumentation package
+after use. Never commit enrollment files or include them in screenshots.
+
+On the A54, the native encrypted-save check and SMS permission check passed.
+The installed app also passed the localhost HTTPS test while rejecting that local
+CA on a different hostname. This establishes enrollment and the USB test network
+path, not receipt of an actual banking SMS or unattended forwarding reliability.
