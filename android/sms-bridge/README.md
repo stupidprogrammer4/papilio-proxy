@@ -5,18 +5,39 @@ Papilio API. It uses Android Keystore encryption, a durable encrypted SQLite
 outbox and Android JobScheduler. Incoming messages must match the configured exact
 sender IDs and credit keywords. The application does not read the existing SMS inbox.
 
+<img src="../../assets/branding/papilio-mark.svg" width="80" alt="Papilio butterfly mark" />
+
+## API defaults
+
+`app/src/main/assets/defaults.json` owns the initial API origin, sender filters,
+timeouts, retry delay, batch size, queue capacity and response capacities. Change
+that file before building to set installation defaults. Existing encrypted
+settings take precedence; adding defaults never replaces saved user choices.
+
+The initial origin is `https://panel.example`, a clearly labelled placeholder
+until a real deployment address is supplied. Enrollment rejects this sample
+address. The app requires HTTPS with Android-trusted certificates. Device IDs and
+API keys are assigned by the panel and are never shared or seeded in the APK.
+
+Users can edit the API address and delivery policy in the app. **Use default
+address** restores the packaged origin in the form; **Save enrollment** applies
+the change after validation. Pending events still prevent a change of device or
+API origin. Restoring the address does not clear credentials or other draft values.
+
 ## Interface
 
-Version 0.2.0 uses a native card layout with queue and SMS-permission status,
+Version 0.3.0 adds an original vector butterfly mark, an adaptive launcher icon,
+a gradient status card and explicit API defaults. It uses a native card layout with queue and SMS-permission status,
 separate connection and bank-filter sections, collapsible delivery settings and
 a persistent save action. Failed saves retain the form; drafts survive rotation
 in memory without writing the enrollment key to Android's saved-state bundle.
 Storage work stays off the UI thread. No web view or animation framework is used.
 
-The updated APK was built, signature-verified, installed and visually inspected
-on the owner's Samsung A54 on **2026-10-11**. SMS permission was visibly granted;
-the phone remains unenrolled. This does not establish real-bank forwarding or
-automatic settlement.
+Version 0.3.0 was built, signature-verified, installed and cold-launched on the
+owner's Samsung A54 on **2026-10-11**. Its visual and default-reset checks await
+an unlocked phone. The screenshot below records the previous 0.2.0 physical
+review, which showed SMS permission granted and no enrollment. This does not
+establish real-bank forwarding or automatic settlement.
 
 <img src="../../assets/screenshots/android-sms-bridge.png" width="320" alt="Actual Android SMS Bridge showing setup status, empty queue and connection card" />
 

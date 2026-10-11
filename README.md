@@ -506,7 +506,18 @@ phone with SMS permission granted, a real empty queue and no saved enrollment.
 Connection, bank filters and collapsible delivery settings have separate cards;
 the save action remains visible while scrolling.
 
+The app includes an original vector butterfly mark and adaptive launcher icon.
+API origin and delivery defaults live in its `defaults.json`; saved encrypted
+settings and user edits take precedence. The packaged `https://panel.example`
+origin is labelled as a sample and cannot be enrolled. Replace it with your
+actual HTTPS origin in the app or before building. No enrollment credentials
+are embedded in the APK.
+
 <a href="assets/screenshots/android-sms-bridge.png"><img src="assets/screenshots/android-sms-bridge.png" width="320" alt="Actual Samsung A54 SMS Bridge showing setup status, empty queue and connection settings" /></a>
+
+This screenshot records version 0.2.0. Version 0.3.0 with vector branding and API
+default controls passed build, signature verification, installation and cold
+launch; its new visual and reset checks await an unlocked phone.
 
 Supplied Blu credit/withdrawal and Bank Melli transfer formats have dedicated
 parser regressions. A literal amount rule may require a configurable
