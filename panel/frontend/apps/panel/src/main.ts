@@ -36,6 +36,14 @@ const ResellerTeamPage = () => import("./pages/ResellerTeamPage.vue");
 const ResellerLoginPage = () => import("./pages/ResellerLoginPage.vue");
 const ResellerProfilePage = () => import("./pages/ResellerProfilePage.vue");
 import "./style.css";
+import "@papilio/ui/display.css";
+import { i18n } from "./i18n";
+import { setApiErrorTranslator } from "@papilio/api";
+
+setApiErrorTranslator(code => {
+  const key = `errors.${code}`;
+  return i18n.global.te(key) ? i18n.global.t(key) : undefined;
+});
 
 const pinia = createPinia();
 const router = createRouter({
@@ -98,4 +106,4 @@ router.beforeEach(async to => {
   if (auth.session && Array.isArray(to.meta.scopes) && !to.meta.scopes.some(scope => typeof scope === "string" && auth.can(scope))) return "/";
   return true;
 });
-createApp(App).use(pinia).use(router).mount("#app");
+createApp(App).use(pinia).use(i18n).use(router).mount("#app");

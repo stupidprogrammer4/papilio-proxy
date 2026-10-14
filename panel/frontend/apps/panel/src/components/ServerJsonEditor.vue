@@ -2,11 +2,13 @@
 import { onUnmounted, ref, watch } from "vue";
 import { item, request, query, type Page, type ConfigurationDetail, type ConfigurationDraft, type ConfigurationDownload, type ServerJsonState, type ServerJsonRevision, type ServerJsonDocument } from "@papilio/api";
 import { useAuth } from "@papilio/auth";
+import { useI18n } from "vue-i18n";
 import { faNumber, faDate } from "@papilio/ui";
 import type { JsonEditorRequest, JsonEditorReply } from "../workers/configurationJson.worker";
 const props = defineProps<{ configuration: ConfigurationDetail }>();
 const emit = defineEmits<{ changed: [configuration: ConfigurationDraft]; busy: [value: boolean] }>();
 const auth = useAuth();
+const { t } = useI18n();
 const opened = ref(false), busy = ref(false), dirty = ref(false), error = ref(""), notice = ref("");
 const state = ref<ServerJsonState | null>(null), text = ref(""), reason = ref(""), mode = ref<ServerJsonDocument["mode"]>("managed");
 const history = ref<ServerJsonRevision[]>([]), page = ref(1), pages = ref(1), preview = ref<ConfigurationDownload | null>(null);
@@ -18,7 +20,7 @@ function compute(text: string): Promise<JsonEditorReply> {
   if (!worker) {
     worker = new Worker(new URL("../workers/configurationJson.worker.ts", import.meta.url), { type: "module" });
     worker.onmessage = ({ data }: MessageEvent<JsonEditorReply>) => { const task = pending.get(data.id); pending.delete(data.id); task?.resolve(data); };
-    worker.onerror = () => { pending.forEach(task => task.reject(new Error("The editor is not ready."))); pending.clear(); worker?.terminate(); worker = null; };
+    worker.onerror = () => { pending.forEach(task => task.reject(new Error(t("configurationEditors.editorNotReady")))); pending.clear(); worker?.terminate(); worker = null; };
   }
   const id = ++sequence;
   const result = new Promise<JsonEditorReply>((resolve, reject) => pending.set(id, { resolve, reject }));
@@ -74,31 +76,31 @@ watch(() => props.configuration.revision, () => { if (!opened.value || busy.valu
 onUnmounted(() => { alive = false; worker?.terminate(); pending.forEach(task => task.reject(new Error("Editor closed."))); pending.clear(); });
 </script>
 <template>
-  <section v-if="auth.can('network','manage')" class="form-grid" aria-label="Core server JSON">
-    <button v-if="!opened" type="button" class="btn secondary" :disabled="busy" @click="open">Full server JSON and history</button>
+  <section v-if="auth.can('network','manage')" class="form-grid" :aria-label="t('configurationEditors.serverRegion')">
+    <button v-if="!opened" type="button" class="btn secondary" :disabled="busy" @click="open">{{ t("configurationEditors.serverOpen") }}</button>
     <template v-else>
-      <h3>JSON Core · {{ state?.core_kind }} · revision {{ faNumber(state?.revision ?? configuration.revision) }}</h3>
+      <h3>{{ t("configurationEditors.serverTitle") }} · {{ state?.core_kind }} · {{ t("configurationEditors.revision", { revision: faNumber(state?.revision ?? configuration.revision) }) }}</h3>
       <p v-if="error" class="message error" role="alert">{{ error }}</p><p v-if="notice" class="message" role="status">{{ notice }}</p>
-      <p v-if="state && !state.supported">This core uses a native configuration file. Use the settings JSON editor or native download.</p>
+      <p v-if="state && !state.supported">{{ t("configurationEditors.nativeCore") }}</p>
       <template v-if="state?.supported">
-        <p>Managed mode preserves authoritative customer inbounds while allowing DNS, routing and outbounds. Experimental mode allows a complete document but prevents customer assignment. Validate compatibility with the installed core before applying changes.</p>
-        <p v-if="state.capacity">Document limit: {{ faNumber(state.capacity.max_document_bytes) }} bytes; depth: {{ faNumber(state.capacity.max_depth) }}.</p>
-        <p v-if="!state.capacity?.enabled">New documents are disabled. You can restore automatic generation.</p>
-        <label class="field">Document mode<select aria-label="Document mode" v-model="mode" :disabled="busy || !auth.can('network','update')" @change="dirty = true; preview = null"><option value="managed">Managed</option><option value="experimental">Experimental · no customer assignments</option></select></label>
-        <label class="field">JSON Core<textarea v-model="text" class="json-input" dir="ltr" spellcheck="false" :disabled="busy" :readonly="!auth.can('network','update')" @input="dirty = true; preview = null" /></label>
-        <label v-if="auth.can('network','update')" class="field">Change reason<input v-model="reason" minlength="3" maxlength="250" :disabled="busy" /></label>
+        <p>{{ t("configurationEditors.modeHint") }}</p>
+        <p v-if="state.capacity">{{ t("configurationEditors.documentLimits", { bytes: faNumber(state.capacity.max_document_bytes), depth: faNumber(state.capacity.max_depth) }) }}</p>
+        <p v-if="!state.capacity?.enabled">{{ t("configurationEditors.documentsDisabled") }}</p>
+        <label class="field">{{ t("configurationEditors.documentMode") }}<select :aria-label="t('configurationEditors.documentMode')" v-model="mode" :disabled="busy || !auth.can('network','update')" @change="dirty = true; preview = null"><option value="managed">{{ t("configurationEditors.managedMode") }}</option><option value="experimental">{{ t("configurationEditors.experimentalNoAssignments") }}</option></select></label>
+        <label class="field">{{ t("configurationEditors.jsonCore") }}<textarea v-model="text" class="json-input" dir="ltr" spellcheck="false" :disabled="busy" :readonly="!auth.can('network','update')" @input="dirty = true; preview = null" /></label>
+        <label v-if="auth.can('network','update')" class="field">{{ t("configurationEditors.changeReason") }}<input v-model="reason" minlength="3" maxlength="250" :disabled="busy" /></label>
         <div class="inline-actions">
-          <button type="button" class="btn secondary" :disabled="busy" @click="format">Format document</button>
-          <button v-if="auth.can('network','update')" type="button" class="btn" :disabled="busy || !dirty || reason.trim().length < 3 || !state.capacity?.enabled" @click="save()">Save server document</button>
-          <button v-if="auth.can('network','update')" type="button" class="btn secondary" :disabled="busy || reason.trim().length < 3 || !state.document" @click="save(true)">Restore automatic generation</button>
+          <button type="button" class="btn secondary" :disabled="busy" @click="format">{{ t("configurationEditors.formatDocument") }}</button>
+          <button v-if="auth.can('network','update')" type="button" class="btn" :disabled="busy || !dirty || reason.trim().length < 3 || !state.capacity?.enabled" @click="save()">{{ t("configurationEditors.saveServerDocument") }}</button>
+          <button v-if="auth.can('network','update')" type="button" class="btn secondary" :disabled="busy || reason.trim().length < 3 || !state.document" @click="save(true)">{{ t("configurationEditors.restoreAutomatic") }}</button>
           <button type="button" class="btn secondary" :disabled="busy" @click="fresh">{{ dirty ? 'Discard draft and reload current version' : 'Reload current version' }}</button>
-          <button type="button" class="btn secondary" :disabled="busy || dirty" @click="showExport">Preview saved output</button>
+          <button type="button" class="btn secondary" :disabled="busy || dirty" @click="showExport">{{ t("configurationEditors.previewOutput") }}</button>
         </div>
-        <template v-if="preview"><p>The output contains private credentials. Keep it private.</p><pre class="json-input" dir="ltr">{{ preview.content }}</pre><button type="button" class="btn secondary" @click="download">Download core file</button></template>
-        <h4>Server document history</h4>
-        <p v-if="!history.length">No changes recorded yet.</p>
-        <article v-for="row in history" :key="row.id"><p>Revision {{ faNumber(row.revision) }} · {{ faDate(row.created_at) }} · Staff {{ faNumber(row.staff_id) }} · {{ row.reason }}</p><p>{{ row.document?.mode === 'experimental' ? 'Experimental' : row.document ? 'Managed' : 'Automatic generation' }}</p><button v-if="auth.can('network','update')" type="button" class="btn secondary" :disabled="busy || dirty || reason.trim().length < 3" @click="save(false,row.id)">Restore this revision</button></article>
-        <nav aria-label="History pages" class="inline-actions"><button type="button" class="btn secondary" :disabled="busy || page <= 1" @click="changePage(page-1)">Previous</button><span>{{ faNumber(page) }} of {{ faNumber(pages) }}</span><button type="button" class="btn secondary" :disabled="busy || page >= pages" @click="changePage(page+1)">Next</button></nav>
+        <template v-if="preview"><p>{{ t("configurationEditors.privateCredentials") }}</p><pre class="json-input" dir="ltr">{{ preview.content }}</pre><button type="button" class="btn secondary" @click="download">{{ t("configurationEditors.downloadCore") }}</button></template>
+        <h4>{{ t("configurationEditors.serverHistory") }}</h4>
+        <p v-if="!history.length">{{ t("configurationEditors.noHistory") }}</p>
+        <article v-for="row in history" :key="row.id"><p>{{ t("configurationEditors.revision", { revision: faNumber(row.revision) }) }} · {{ faDate(row.created_at) }} · {{ t("configurationEditors.staff", { id: faNumber(row.staff_id) }) }} · {{ row.reason }}</p><p>{{ t(row.document?.mode === 'experimental' ? 'configurationEditors.experimental' : row.document ? 'configurationEditors.managed' : 'configurationEditors.automatic') }}</p><button v-if="auth.can('network','update')" type="button" class="btn secondary" :disabled="busy || dirty || reason.trim().length < 3" @click="save(false,row.id)">{{ t("configurationEditors.restoreRevision") }}</button></article>
+        <nav :aria-label="t('configurationEditors.historyPages')" class="inline-actions"><button type="button" class="btn secondary" :disabled="busy || page <= 1" @click="changePage(page-1)">{{ t("configurationEditors.previous") }}</button><span>{{ t("configurationEditors.page", { page: faNumber(page), pages: faNumber(pages) }) }}</span><button type="button" class="btn secondary" :disabled="busy || page >= pages" @click="changePage(page+1)">{{ t("configurationEditors.next") }}</button></nav>
       </template>
     </template>
   </section>

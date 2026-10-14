@@ -39,7 +39,11 @@ try{
  await history.getByRole('button',{name:'Refresh checkouts'}).click();await history.getByText('No checkouts yet.',{exact:true}).waitFor();
  await page.getByRole('row').filter({hasText:plan.title}).click();
  await page.getByRole('button',{name:'Automated checkout',exact:true}).click();
- const dialog=page.getByRole('dialog',{name:'Plan checkout'});await dialog.getByRole('heading',{name:plan.title}).waitFor();
+ const initialDialog=page.getByRole('dialog');await initialDialog.getByRole('heading',{name:plan.title}).waitFor();
+ await page.getByTestId('locale-selector').selectOption('fa');
+ await page.getByRole('dialog',{name:'پرداخت خرید پلن'}).waitFor();
+ await page.getByTestId('locale-selector').selectOption('en');
+ const dialog=page.getByRole('dialog',{name:'Plan checkout'});
  await dialog.getByLabel('Purchase funding').selectOption('approved_topup');
  await dialog.getByLabel('Requested wallet top-up (toman)').fill('12000');
  await dialog.getByRole('button',{name:'Next destinations'}).click();

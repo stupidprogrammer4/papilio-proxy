@@ -2,8 +2,10 @@
 import { onMounted, onUnmounted, ref } from "vue";
 import { useAuth } from "@papilio/auth";
 import { ApiError, item, type SmsOriginCapabilities } from "@papilio/api";
+import { useI18n } from "vue-i18n";
 import SmsParserProfiles from "./SmsParserProfiles.vue";
 import ReceivingRealms from "./ReceivingRealms.vue";
+const {t}=useI18n();
 const emit=defineEmits<{capabilities:[value:SmsOriginCapabilities|null]}>();
 const auth = useAuth();
 const capabilities = ref<SmsOriginCapabilities|null>(null);
@@ -25,23 +27,23 @@ async function load():Promise<void> {
     capabilities.value=null;
     emit("capabilities",null);
     if (cause instanceof ApiError && cause.status===404) state.value="unavailable";
-    else { state.value="error"; error.value=cause instanceof Error?cause.message:"Could not read SMS capabilities."; }
+    else { state.value="error"; error.value=cause instanceof Error?cause.message:t("errors.request_failed"); }
   }
 }
 onMounted(load);
 onUnmounted(()=>{alive=false;++sequence;});
 </script>
 <template>
-  <section class="card card-pad" aria-label="SMS parsing and source identity">
-    <div class="page-head"><div><p class="eyebrow">SMS EVIDENCE</p><h2>Parsing and source identity</h2><p class="subtitle">Manage how deposits are recognized and linked to receiving accounts.</p></div><button class="btn secondary" :disabled="state==='loading'" @click="load">Refresh capabilities</button></div>
-    <p v-if="state==='loading'" role="status">Loading SMS capabilities…</p>
-    <p v-else-if="state==='unavailable'" class="hint-box">SMS parser and source-identity management is unavailable. Existing payment review remains available.</p>
+  <section class="card card-pad" :aria-label="t('paymentConfig.origin.title')">
+    <div class="page-head"><div><p class="eyebrow">{{t('paymentConfig.origin.eyebrow')}}</p><h2>{{t('paymentConfig.origin.title')}}</h2><p class="subtitle">{{t('paymentConfig.origin.description')}}</p></div><button class="btn secondary" :disabled="state==='loading'" @click="load">{{t('paymentConfig.origin.refresh')}}</button></div>
+    <p v-if="state==='loading'" role="status">{{t('paymentConfig.origin.loading')}}</p>
+    <p v-else-if="state==='unavailable'" class="hint-box">{{t('paymentConfig.origin.unavailable')}}</p>
     <p v-else-if="state==='error'" class="message error" role="alert">{{error}}</p>
     <template v-else-if="capabilities">
-      <p v-if="!capabilities.enabled||!capabilities.capacity" class="hint-box">SMS parser and source-identity management is disabled in the current operational policy. Existing payment review remains available.</p>
+      <p v-if="!capabilities.enabled||!capabilities.capacity" class="hint-box">{{t('paymentConfig.origin.disabled')}}</p>
       <div v-if="capabilities.read_available">
-        <p class="hint-box">Source metadata is declared by your enrolled webhook sender. It authenticates that sender; it does not independently verify bank settlement. Forwarded, imported and manually entered messages require review.</p>
-        <p>Trusted-origin matching requires the original provider timestamp, original sender, source kind and canonicalization revision. A forwarding timestamp cannot replace the original timestamp.</p>
+        <p class="hint-box">{{t('paymentConfig.origin.sourceHint')}}</p>
+        <p>{{t('paymentConfig.origin.timestampHint')}}</p>
         <SmsParserProfiles :capabilities="capabilities" />
         <ReceivingRealms :capabilities="capabilities" />
         <slot :capabilities="capabilities" />

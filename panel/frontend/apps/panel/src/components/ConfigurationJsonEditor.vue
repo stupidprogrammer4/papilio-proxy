@@ -2,12 +2,14 @@
 import { onUnmounted, ref, watch } from "vue";
 import { item, type ConfigurationDetail, type ConfigurationDraft } from "@papilio/api";
 import { useAuth } from "@papilio/auth";
+import { useI18n } from "vue-i18n";
 import { faNumber } from "@papilio/ui";
 import type { JsonEditorReply, JsonEditorRequest } from "../workers/configurationJson.worker";
 
 const props = defineProps<{ configuration: ConfigurationDetail }>();
 const emit = defineEmits<{ changed: [configuration: ConfigurationDraft]; busy: [busy: boolean] }>();
 const auth = useAuth();
+const { t } = useI18n();
 const opened = ref(false), busy = ref(false), dirty = ref(false);
 const text = ref(""), error = ref(""), notice = ref("");
 const revision = ref(props.configuration.revision);
@@ -60,17 +62,17 @@ watch(() => props.configuration.revision, () => {
 onUnmounted(() => { alive = false; worker?.terminate(); pending.forEach(task => task.reject(new Error("Editor closed."))); pending.clear(); });
 </script>
 <template>
-  <section class="form-grid" aria-label="Configuration settings JSON">
-    <button v-if="!opened" type="button" class="btn secondary" :disabled="busy" @click="open">View and edit JSON</button>
+  <section class="form-grid" :aria-label="t('configurationEditors.settingsRegion')">
+    <button v-if="!opened" type="button" class="btn secondary" :disabled="busy" @click="open">{{ t("configurationEditors.settingsOpen") }}</button>
     <template v-else>
-      <h3>Configuration settings · revision {{ faNumber(revision) }}</h3>
-      <p>Edit this configuration label and settings. Protocol, certificate identity and revision are checked on save.</p>
+      <h3>{{ t("configurationEditors.settingsTitle") }} · {{ t("configurationEditors.revision", { revision: faNumber(revision) }) }}</h3>
+      <p>{{ t("configurationEditors.settingsHint") }}</p>
       <p v-if="error" class="message error" role="alert">{{ error }}</p><p v-if="notice" class="message" role="status">{{ notice }}</p>
-      <label class="field"><span>JSON Configuration</span><textarea v-model="text" dir="ltr" spellcheck="false" class="json-input" :readonly="!auth.can('network', 'update')" :disabled="busy" @input="dirty = true" /></label>
+      <label class="field"><span>{{ t("configurationEditors.configurationJson") }}</span><textarea v-model="text" dir="ltr" spellcheck="false" class="json-input" :readonly="!auth.can('network', 'update')" :disabled="busy" @input="dirty = true" /></label>
       <div class="inline-actions">
-        <button type="button" class="btn secondary" :disabled="busy || !text" @click="apply(false)">Format JSON</button>
-        <button v-if="auth.can('network', 'update')" type="button" class="btn" :disabled="busy || !text || !dirty" @click="apply(true)">Save JSON</button>
-        <button type="button" class="btn secondary" :disabled="busy" @click="fresh">{{ dirty ? 'Discard draft and reload current version' : 'Reload current version' }}</button>
+        <button type="button" class="btn secondary" :disabled="busy || !text" @click="apply(false)">{{ t("configurationEditors.formatJson") }}</button>
+        <button v-if="auth.can('network', 'update')" type="button" class="btn" :disabled="busy || !text || !dirty" @click="apply(true)">{{ t("configurationEditors.saveJson") }}</button>
+        <button type="button" class="btn secondary" :disabled="busy" @click="fresh">{{ dirty ? t("configurationEditors.discardAndReload") : t("configurationEditors.reload") }}</button>
       </div>
     </template>
   </section>

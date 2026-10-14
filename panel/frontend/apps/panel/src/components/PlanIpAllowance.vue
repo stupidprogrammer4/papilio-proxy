@@ -1,15 +1,23 @@
 <script setup lang="ts">
 import type { IpLimitChoice, PlanIpPolicyRead } from "@papilio/api";
-import { ipAllowanceText } from "./ipLimits/policy";
+import { useI18n } from "vue-i18n";
 
 defineProps<{ policy?: PlanIpPolicyRead | null; configured?: IpLimitChoice | null }>();
+const { t } = useI18n();
+function allowanceText(policy: IpLimitChoice | null | undefined): string {
+  if (!policy) return t("plans.ip.noRestriction");
+  if (!policy.enabled) return t("plans.ip.unlimited");
+  if (!Number.isSafeInteger(policy.max_ips) || policy.max_ips <= 0) return t("plans.ip.invalid");
+  if (policy.max_ips === 1) return t("plans.ip.one");
+  return t("plans.ip.upTo", { count: policy.max_ips });
+}
 </script>
 
 <template>
-  <section class="hint-box form-grid" aria-label="Plan source IP allowance">
-    <div class="detail-line"><span>Concurrent source IP allowance</span><strong>{{ policy ? ipAllowanceText(policy.policy) : configured ? ipAllowanceText(configured) : 'Allowance unavailable from this API' }}</strong></div>
-    <p v-if="policy" class="subtitle">{{policy.source==='plan_override'?'Explicit plan terms':'Current purchase-time defaults'}}. The allowance is captured with the purchase and shared by that subscription's configurations.</p>
-    <p v-else class="subtitle">The API has not supplied the effective purchase allowance. Refresh the offer before relying on these terms.</p>
-    <p class="subtitle">API admission decisions only. Core enforcement is not verified. Source IP counts do not represent device counts.</p>
+  <section class="hint-box form-grid" :aria-label="t('plans.ip.allowance')">
+    <div class="detail-line"><span>{{ t("plans.ip.allowance") }}</span><strong>{{ policy || configured ? allowanceText(policy?.policy ?? configured) : t("plans.ip.apiUnavailable") }}</strong></div>
+    <p v-if="policy" class="subtitle">{{ t(policy.source === "plan_override" ? "plans.explicitTerms" : "plans.ip.purchaseDefaults") }}. {{ t("plans.ip.captured") }}</p>
+    <p v-else class="subtitle">{{ t("plans.ip.refreshOffer") }}</p>
+    <p class="subtitle">{{ t("plans.ip.apiOnly") }}</p>
   </section>
 </template>

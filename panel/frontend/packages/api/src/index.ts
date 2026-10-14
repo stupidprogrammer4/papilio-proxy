@@ -225,11 +225,17 @@ export class ApiError extends Error {
   }
 }
 
+export type ApiErrorTranslator = (code: string, status: number) => string | undefined;
+let errorTranslator: ApiErrorTranslator | undefined;
+export function setApiErrorTranslator(translator: ApiErrorTranslator): void {
+  errorTranslator = translator;
+}
+
 function errorMessage(body: unknown, status: number): ApiError {
   const envelope = body && typeof body === "object" ? body as Record<string, unknown> : {};
   const value = envelope.error && typeof envelope.error === "object" ? envelope.error as Record<string, unknown> : envelope;
   const code = typeof value.message_code === "string" ? value.message_code : "request_failed";
-  return new ApiError(status, code, messages[code] ?? (status === 429 ? "Too many requests. Try again later." : status === 413 ? "The request exceeds the allowed size." : status >= 500 ? "Server error. Try again." : "The request could not be completed. Check your input."));
+  return new ApiError(status, code, errorTranslator?.(code, status) ?? messages[code] ?? (status === 429 ? "Too many requests. Try again later." : status === 413 ? "The request exceeds the allowed size." : status >= 500 ? "Server error. Try again." : "The request could not be completed. Check your input."));
 }
 
 let csrf = "";

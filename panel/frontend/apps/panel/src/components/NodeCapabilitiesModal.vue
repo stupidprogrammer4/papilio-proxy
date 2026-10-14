@@ -3,32 +3,34 @@ import { computed, onUnmounted, ref, watch } from "vue";
 import Modal from "@papilio/ui/Modal.vue";
 import { item, query, request, type NodeAdapterCapability, type NodeCapabilityLatest, type NodeCapabilityObservation, type NodeEndpoint, type NodeOperationCapability, type Page } from "@papilio/api";
 import { faDate } from "@papilio/ui";
+import {useI18n} from "vue-i18n";
 
 const props=defineProps<{open:boolean;node:NodeEndpoint|null}>();
 const emit=defineEmits<{close:[]}>();
+const {t}=useI18n();
 const latest=ref<NodeCapabilityLatest|null>(null),selected=ref<NodeCapabilityObservation|null>(null),rows=ref<NodeCapabilityObservation[]>([]);
 const latestState=ref<"loading"|"ready"|"error">("loading"),historyState=ref<"loading"|"ready"|"error">("loading");
 const latestError=ref(""),historyError=ref(""),page=ref(1),pages=ref(1),total=ref(0);
 let version=0,latestVersion=0,historyVersion=0;
 const selectedIsLatest=computed(()=>selected.value?.observation_id===latest.value?.observation?.observation_id);
 const operations:{key:Exclude<keyof NodeAdapterCapability,"kind"|"adapter_revision"|"executable">;label:string}[]=[
- {key:"validation",label:"Document validation"},{key:"installation",label:"Installation adapter"},{key:"installed_membership",label:"Installed membership"},
- {key:"counters",label:"Usage counters"},{key:"polled_stop",label:"Polling and whole-core stop"},{key:"strict_quota_expiry",label:"Strict quota and expiry"},
- {key:"ip_admission",label:"Source IP admission"},{key:"device_admission",label:"Device admission"},{key:"final_counters",label:"Final counter barrier"},{key:"protocol_matrix",label:"Protocol compatibility matrix"},
+ {key:"validation",label:"validation"},{key:"installation",label:"installation"},{key:"installed_membership",label:"installed_membership"},
+ {key:"counters",label:"counters"},{key:"polled_stop",label:"polled_stop"},{key:"strict_quota_expiry",label:"strict_quota_expiry"},
+ {key:"ip_admission",label:"ip_admission"},{key:"device_admission",label:"device_admission"},{key:"final_counters",label:"final_counters"},{key:"protocol_matrix",label:"protocol_matrix"},
 ];
 const adapterNames={xray:"Xray",sing_box:"sing-box",openvpn:"OpenVPN",wireguard:"WireGuard",hysteria:"Hysteria"};
-function compatibility(value:NodeOperationCapability):string{return value.compatibility==="reference_match"?"Reported reference match":value.compatibility==="unverified"?"Compatibility unverified":"Unavailable";}
-function failure(cause:unknown):string{return cause instanceof Error?cause.message:"Could not load node capability reports. Retry the request.";}
-function assertOwner(row:NodeCapabilityObservation,nodeId:number):void{if(row.node_id!==nodeId||row.evidence_kind!=="authenticated_node_self_report"||row.report.schema_revision!==1)throw new Error("The report does not match this node or its supported evidence contract.");}
+function compatibility(value:NodeOperationCapability):string{return value.compatibility==="reference_match"?t("network.capabilityReport.reference"):value.compatibility==="unverified"?t("network.capabilityReport.unverified"):t("network.capabilityReport.unavailable");}
+function failure(cause:unknown):string{return cause instanceof Error?cause.message:t("network.capabilityReport.error");}
+function assertOwner(row:NodeCapabilityObservation,nodeId:number):void{if(row.node_id!==nodeId||row.evidence_kind!=="authenticated_node_self_report"||row.report.schema_revision!==1)throw new Error(t("network.capabilityReport.mismatch"));}
 async function loadLatest():Promise<void>{
  if(!props.node)return;
  const stamp=version,attempt=++latestVersion,nodeId=props.node.id;
- latestState.value="loading";latestError.value="";
+  latestState.value="loading";latestError.value="";
  try{
   const value=await item<NodeCapabilityLatest>(`/v1/admin/network/nodes/${nodeId}/capabilities/latest`);
   if(stamp!==version||attempt!==latestVersion)return;
-  if(value.node_id!==nodeId)throw new Error("The capability result belongs to a different node.");
-  if((value.status==="absent")!==(value.observation===null))throw new Error("The report freshness result is inconsistent. Retry before relying on it.");
+  if(value.node_id!==nodeId)throw new Error(t("network.capabilityReport.wrongNode"));
+  if((value.status==="absent")!==(value.observation===null))throw new Error(t("network.capabilityReport.inconsistent"));
   if(value.observation)assertOwner(value.observation,nodeId);
   const followLatest=!selected.value||selectedIsLatest.value;
   latest.value=value;if(followLatest)selected.value=value.observation;
@@ -55,37 +57,37 @@ onUnmounted(()=>{version++;latestVersion++;historyVersion++;});
 </script>
 
 <template>
- <Modal :model-value="open" :title="`Node capabilities · ${node?.label??''}`" wide @update:model-value="value=>{if(!value)emit('close');}">
-  <p class="hint-box">These are authenticated reports from the node. Version and reference matches do not prove installation, connectivity or enforcement. Runtime installation acknowledgements are tracked separately.</p>
-  <section aria-label="Latest capability report">
-   <div class="toolbar"><h3>Latest report</h3><button class="btn secondary" :disabled="latestState==='loading'" @click="loadLatest">Refresh latest report</button></div>
-   <p v-if="latestState==='loading'">Loading latest report…</p>
+ <Modal :model-value="open" :title="t('network.capabilityReport.title',{node:node?.label??''})" wide @update:model-value="value=>{if(!value)emit('close');}">
+  <p class="hint-box">{{t('network.capabilityReport.hint')}}</p>
+  <section :aria-label="t('network.capabilityReport.latest')">
+   <div class="toolbar"><h3>{{t('network.capabilityReport.latest')}}</h3><button class="btn secondary" :disabled="latestState==='loading'" @click="loadLatest">{{t('network.capabilityReport.refreshLatest')}}</button></div>
+   <p v-if="latestState==='loading'">{{t('network.capabilityReport.loadingLatest')}}</p>
    <p v-if="latestState==='error'" class="message error" role="alert">{{latestError}}</p>
    <template v-if="latestState==='ready'&&latest">
-    <p v-if="latest.status==='absent'">No capability report has been received for this node.</p>
-    <p v-else role="status">Latest report: {{latest.status==='fresh'?'Fresh':latest.status==='stale'?'Stale':'Future timestamp'}} · received {{faDate(latest.observation?.received_at??null)}}</p>
-    <button v-if="latest.observation" class="btn secondary" @click="selected=latest.observation">View latest details</button>
+    <p v-if="latest.status==='absent'">{{t('network.capabilityReport.absent')}}</p>
+    <p v-else role="status">{{t('network.capabilityReport.latest')}}: {{t(`network.capabilityReport.${latest.status==='fresh'?'fresh':latest.status==='stale'?'stale':'future'}`)}} · {{t('network.capabilityReport.received')}} {{faDate(latest.observation?.received_at??null)}}</p>
+    <button v-if="latest.observation" class="btn secondary" @click="selected=latest.observation">{{t('network.capabilityReport.viewLatest')}}</button>
    </template>
   </section>
-  <section v-if="selected" aria-label="Selected capability details">
-   <h3>{{selectedIsLatest?'Latest':'Historical'}} report #{{selected.observation_id}}</h3>
-   <p>Observed {{faDate(selected.observed_at)}} · received {{faDate(selected.received_at)}}</p>
+  <section v-if="selected" :aria-label="t('network.capabilityReport.selectedLatest')">
+   <h3>{{t(selectedIsLatest?'network.capabilityReport.selectedLatest':'network.capabilityReport.historical')}} {{t('network.capabilityReport.reportTitle')}} #{{selected.observation_id}}</h3>
+   <p>{{t('network.capabilityReport.observed')}} {{faDate(selected.observed_at)}} · {{t('network.capabilityReport.received')}} {{faDate(selected.received_at)}}</p>
    <p class="mono report-digest">{{selected.report_sha256}}</p>
    <details v-for="adapter in selected.report.adapters" :key="adapter.kind" class="adapter-card" :open="adapter.kind==='xray'">
-    <summary>{{adapterNames[adapter.kind]}} · {{adapter.executable.available?`Version ${adapter.executable.version}`:'No executable observation'}}</summary>
-    <p>Adapter revision {{adapter.adapter_revision}}</p>
-    <p v-if="adapter.executable.available">Reported binary version: {{adapter.executable.version}}</p><p v-else>Executable observation unavailable.</p>
+    <summary>{{adapterNames[adapter.kind]}} · {{adapter.executable.available?`Version ${adapter.executable.version}`:t('network.capabilityReport.noExecutable')}}</summary>
+    <p>{{t('network.capabilityReport.adapterRevision')}} {{adapter.adapter_revision}}</p>
+    <p v-if="adapter.executable.available">{{t('network.capabilityReport.binaryVersion')}}: {{adapter.executable.version}}</p><p v-else>{{t('network.capabilityReport.unavailable')}}</p>
     <p v-if="adapter.executable.sha256" class="mono report-digest">Binary SHA256: {{adapter.executable.sha256}}</p>
-    <p v-if="adapter.kind==='sing_box'">V2Ray API build tag: {{adapter.executable.v2ray_api_build_tag?'Reported present':'Not reported'}}</p>
-    <dl class="capability-list"><template v-for="operation in operations" :key="operation.key"><dt>{{operation.label}}</dt><dd><span>{{adapter[operation.key].implemented?'Implemented adapter':'No implementation'}}</span> · {{compatibility(adapter[operation.key])}}</dd></template></dl>
+    <p v-if="adapter.kind==='sing_box'">{{t('network.capabilityReport.v2rayTag')}}: {{adapter.executable.v2ray_api_build_tag?t('network.capabilityReport.reported'):t('network.capabilityReport.notReported')}}</p>
+    <dl class="capability-list"><template v-for="operation in operations" :key="operation.key"><dt>{{t(`network.capabilityReport.${operation.label}`)}}</dt><dd><span>{{adapter[operation.key].implemented?t('network.capabilityReport.implemented'):t('network.capabilityReport.noImplementation')}}</span> · {{compatibility(adapter[operation.key])}}</dd></template></dl>
    </details>
   </section>
-  <section aria-label="Capability report history">
-   <div class="toolbar"><h3>Report history</h3><button class="btn secondary" :disabled="historyState==='loading'" @click="loadHistory()">Refresh history</button></div>
-   <p v-if="historyState==='loading'">Loading report history…</p><p v-if="historyState==='error'" class="message error" role="alert">{{historyError}}</p>
-   <p v-if="historyState==='ready'&&!rows.length">No reports on this page.</p>
-   <button v-for="row in rows" :key="row.observation_id" class="btn secondary history-row" :aria-pressed="selected?.observation_id===row.observation_id" @click="selected=row">Report #{{row.observation_id}} · {{faDate(row.observed_at)}}</button>
-   <div class="pager"><button :disabled="page<=1||historyState==='loading'" @click="loadHistory(page-1)">Previous reports</button><span>Page {{page}} · {{total}} reports</span><button :disabled="page>=pages||historyState==='loading'" @click="loadHistory(page+1)">Next reports</button></div>
+  <section :aria-label="t('network.capabilityReport.history')">
+   <div class="toolbar"><h3>{{t('network.capabilityReport.history')}}</h3><button class="btn secondary" :disabled="historyState==='loading'" @click="loadHistory()">{{t('network.capabilityReport.refreshHistory')}}</button></div>
+   <p v-if="historyState==='loading'">{{t('network.capabilityReport.loadingHistory')}}</p><p v-if="historyState==='error'" class="message error" role="alert">{{historyError}}</p>
+   <p v-if="historyState==='ready'&&!rows.length">{{t('network.capabilityReport.empty')}}</p>
+   <button v-for="row in rows" :key="row.observation_id" class="btn secondary history-row" :aria-pressed="selected?.observation_id===row.observation_id" @click="selected=row">{{t('network.capabilityReport.reportButton')}} #{{row.observation_id}} · {{faDate(row.observed_at)}}</button>
+   <div class="pager"><button :disabled="page<=1||historyState==='loading'" @click="loadHistory(page-1)">{{t('network.capabilityReport.previous')}}</button><span>{{t('network.capabilityReport.pages',{page,total})}}</span><button :disabled="page>=pages||historyState==='loading'" @click="loadHistory(page+1)">{{t('network.capabilityReport.next')}}</button></div>
   </section>
  </Modal>
 </template>

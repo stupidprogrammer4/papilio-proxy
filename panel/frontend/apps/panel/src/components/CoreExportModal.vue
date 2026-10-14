@@ -2,8 +2,10 @@
 import { ref, watch, onUnmounted } from "vue";
 import Modal from "@papilio/ui/Modal.vue";
 import { item, type CoreInstance, type CoreExport } from "@papilio/api";
+import {useI18n} from "vue-i18n";
 const props = defineProps<{ core: CoreInstance | null }>();
 const emit = defineEmits<{ close: [] }>();
+const {t}=useI18n();
 const mode = ref<CoreExport["mode"]>("isolated"), busy = ref(false), error = ref("");
 const result = ref<CoreExport | null>(null);
 let sequence = 0;
@@ -26,21 +28,21 @@ function download(index: number): void {
 }
 </script>
 <template>
-  <Modal :model-value="core !== null" :title="`Export ${core?.label ?? 'core'}`" :busy="busy" wide @update:model-value="value => { if (!value) emit('close'); }">
-    <p>Build an export from every configuration assigned to this core. This does not apply or start a core.</p>
+  <Modal :model-value="core !== null" :title="t('network.export.title',{label:core?.label ?? t('network.core')})" :busy="busy" wide @update:model-value="value => { if (!value) emit('close'); }">
+    <p>{{t('network.export.description')}}</p>
     <form class="form-grid" @submit.prevent="generate">
-      <label class="field"><span>Output mode</span><select v-model="mode" :disabled="busy"><option value="isolated">Independent configuration files · all core types</option><option v-if="core?.kind === 'xray' || core?.kind === 'sing_box'" value="merged">One combined server JSON · matching shared settings required</option></select></label>
-      <button class="btn" :disabled="busy">{{busy ? 'Generating…' : 'Generate export'}}</button>
+      <label class="field"><span>{{t('network.export.mode')}}</span><select v-model="mode" :disabled="busy"><option value="isolated">{{t('network.export.isolated')}}</option><option v-if="core?.kind === 'xray' || core?.kind === 'sing_box'" value="merged">{{t('network.export.merged')}}</option></select></label>
+      <button class="btn" :disabled="busy">{{busy ? t('network.export.generating') : t('network.export.generate')}}</button>
     </form>
     <p v-if="error" class="message error" role="alert">{{error}}</p>
     <section v-if="result" class="form-grid">
-      <p class="hint-box">Not applied. Files include server secrets; keep downloaded files private.</p>
+      <p class="hint-box">{{t('network.export.notApplied')}}</p>
       <article v-for="(artifact, index) in result.artifacts" :key="artifact.filename" class="card card-pad">
         <h3>{{artifact.filename}}</h3>
-        <p>Configurations: {{artifact.configurations.map(row => `#${row.configuration_id} · revision ${row.revision}`).join(', ')}}</p>
-        <label class="field"><span>SHA-256</span><input :value="artifact.sha256" readonly /></label>
-        <details><summary>Preview server configuration</summary><label class="field"><textarea :value="artifact.content" readonly rows="12" spellcheck="false" /></label></details>
-        <button type="button" class="btn secondary" @click="download(index)">Download file</button>
+        <p>{{t('network.export.configurations')}}: {{artifact.configurations.map(row => `#${row.configuration_id} · ${t('network.export.revision')} ${row.revision}`).join(', ')}}</p>
+        <label class="field"><span>{{t('network.export.sha')}}</span><input :value="artifact.sha256" readonly /></label>
+        <details><summary>{{t('network.export.preview')}}</summary><label class="field"><textarea :value="artifact.content" readonly rows="12" spellcheck="false" /></label></details>
+        <button type="button" class="btn secondary" @click="download(index)">{{t('network.export.download')}}</button>
       </article>
     </section>
   </Modal>

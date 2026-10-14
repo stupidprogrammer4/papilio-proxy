@@ -3,7 +3,11 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } fro
 import { useRoute,useRouter } from "vue-router";
 import { useAuth,useResellerAuth } from "@papilio/auth";
 import Icon from "@papilio/ui/Icon.vue";
+import { useI18n } from "vue-i18n";
+import DisplayPreferences from "./components/DisplayPreferences.vue";
 import { useBranding } from "./stores/branding";
+const { t } = useI18n();
+const navLabel = (label: string): string => t(`navigation.${label}`);
 const route=useRoute(),router=useRouter(),auth=useAuth(),reseller=useResellerAuth(),branding=useBranding();
 const menuOpen=ref(false),signOutError=ref(""),signingOut=ref(false);
 const navigationToggle=ref<HTMLButtonElement|null>(null),sidebar=ref<HTMLElement|null>(null);
@@ -63,24 +67,26 @@ const navigation=computed(()=>dealer.value?[
  {path:"/settings",label:"Settings",icon:"settings",scope:"settings",group:"Administration"},
 ].filter(link=>link.visible!==false&&(!link.scope||auth.can(link.scope))));
 const groups=computed(()=>[...new Set(navigation.value.map(link=>link.group))]);
+const bareWorkspace = computed(() => route.path === "/login" || route.path === "/reseller/login" || Boolean(route.meta.public || route.meta.customer));
 const current=computed(()=>navigation.value.find(link=>link.path===route.path)||navigation.value.filter(link=>link.path!=="/").find(link=>route.path.startsWith(link.path)));
 watch(()=>auth.session,session=>{if(session)void branding.refresh();else branding.clear();},{immediate:true});
-watch(()=>route.path,()=>{menuOpen.value=false;document.documentElement.lang="en";document.documentElement.dir="ltr";},{immediate:true});
-watch([()=>branding.title,()=>route.path],()=>{document.title=`${current.value?.label??"Account"} · ${branding.title||"Papilio"}`;},{immediate:true});
+watch(()=>route.path,()=>{menuOpen.value=false;},{immediate:true});
+watch([()=>branding.title,()=>route.path,()=>t("navigation.Account")],()=>{document.title=`${navLabel(current.value?.label??"Account")} · ${branding.title||"Papilio"}`;},{immediate:true});
 watch(()=>reseller.session,session=>{if(dealer.value&&reseller.checked&&!session&&!reseller.error&&route.path!=="/reseller/login")void router.push("/reseller/login");});
 async function signOut():Promise<void>{if(signingOut.value)return;signingOut.value=true;signOutError.value="";try{if(dealer.value)await reseller.logout();else await auth.logout();await router.push(dealer.value?"/reseller/login":"/login");}catch(cause){signOutError.value=cause instanceof Error?cause.message:"Could not sign out. Try again.";}finally{signingOut.value=false;}}
 </script>
 <template>
- <RouterView v-if="route.path==='/login'||route.path==='/reseller/login'||route.meta.public||route.meta.customer" />
+ <DisplayPreferences v-if="bareWorkspace" />
+ <RouterView v-if="bareWorkspace" />
  <div v-else class="layout">
-  <button v-if="menuOpen" type="button" class="navigation-backdrop" aria-label="Close navigation" @click="menuOpen=false" />
+  <button v-if="menuOpen" type="button" class="navigation-backdrop" :aria-label="navLabel('Close navigation')" @click="menuOpen=false" />
   <aside ref="sidebar" :id="navigationId" class="sidebar" :class="{'sidebar-open':menuOpen}" :inert="mobileNavigation&&!menuOpen" :aria-hidden="mobileNavigation&&!menuOpen?true:undefined" :role="mobileNavigation&&menuOpen?'dialog':undefined" :aria-modal="mobileNavigation&&menuOpen?true:undefined" aria-label="Workspace navigation">
-   <button type="button" class="icon-button drawer-close" aria-label="Close navigation" @click="menuOpen=false">×</button>
-   <RouterLink :to="dealer?'/reseller':'/'" class="brand"><div class="brand-mark"><img src="/papilio-mark.svg" alt="" width="32" height="32" /></div><div><strong>{{branding.title||'Papilio'}}</strong><small>SUBSCRIPTION WORKSPACE</small></div></RouterLink>
-   <nav><section v-for="group in groups" :key="group" class="navigation-group"><p class="sidebar-caption">{{group}}</p><RouterLink v-for="link in navigation.filter(item=>item.group===group)" :key="link.path" :to="link.path" class="nav-link" :class="{active:current?.path===link.path}"><Icon :name="link.icon" /><span>{{link.label}}</span><span v-if="current?.path===link.path" class="active-dot" /></RouterLink></section></nav>
-   <div class="sidebar-bottom"><div class="workspace-symbol"><img src="/papilio-mark.svg" alt="" width="22" height="22" /></div><div><strong>Control plane</strong><small>Private workspace</small></div><Icon name="shield" :size="18" /></div>
+   <button type="button" class="icon-button drawer-close" :aria-label="navLabel('Close navigation')" @click="menuOpen=false">×</button>
+   <RouterLink :to="dealer?'/reseller':'/'" class="brand"><img class="brand-logo papilio-logo papilio-logo-dark" src="/papilio-logo-dark.png" width="636" height="256" alt="Papilio" /><img class="brand-logo papilio-logo papilio-logo-light" src="/papilio-logo-light.png" width="636" height="256" alt="Papilio" /><small>{{branding.title||navLabel('SUBSCRIPTION WORKSPACE')}}</small></RouterLink>
+   <nav><section v-for="group in groups" :key="group" class="navigation-group"><p class="sidebar-caption">{{navLabel(group)}}</p><RouterLink v-for="link in navigation.filter(item=>item.group===group)" :key="link.path" :to="link.path" class="nav-link" :class="{active:current?.path===link.path}"><Icon :name="link.icon" /><span>{{navLabel(link.label)}}</span><span v-if="current?.path===link.path" class="active-dot" /></RouterLink></section></nav>
+   <div class="sidebar-bottom"><div class="workspace-symbol"><img src="/papilio-mark.svg" alt="" width="22" height="22" /></div><div><strong>{{navLabel('Control plane')}}</strong><small>{{navLabel('Private workspace')}}</small></div><Icon name="shield" :size="18" /></div>
   </aside>
-  <div class="workspace" :inert="mobileNavigation&&menuOpen"><header class="topbar"><div class="topbar-location"><button ref="navigationToggle" class="icon-button mobile-menu" type="button" :aria-label="menuOpen?'Close navigation':'Open navigation'" :aria-controls="navigationId" :aria-expanded="menuOpen" @click="menuOpen=!menuOpen"><Icon name="menu" /></button><span class="breadcrumb">Workspace <span>/</span> <strong>{{current?.label||'Details'}}</strong></span></div><div class="operator"><span class="workspace-pill">Control panel</span><span class="avatar">{{identity?.username.slice(0,1).toUpperCase()}}</span><span>{{identity?.username}}</span><button type="button" class="icon-button" aria-label="Sign out" :aria-busy="signingOut" :disabled="signingOut" @click="signOut"><Icon name="logout" :size="18" /></button></div></header>
+  <div class="workspace" :inert="mobileNavigation&&menuOpen"><header class="topbar"><div class="topbar-location"><button ref="navigationToggle" class="icon-button mobile-menu" type="button" :aria-label="navLabel(menuOpen?'Close navigation':'Open navigation')" :aria-controls="navigationId" :aria-expanded="menuOpen" @click="menuOpen=!menuOpen"><Icon name="menu" /></button><span class="breadcrumb">{{navLabel('Workspace')}} <span>/</span> <strong>{{navLabel(current?.label||'Details')}}</strong></span></div><div class="operator"><DisplayPreferences compact /><span class="workspace-pill">{{navLabel('Control panel')}}</span><span class="avatar">{{identity?.username.slice(0,1).toUpperCase()}}</span><span>{{identity?.username}}</span><button type="button" class="icon-button" :aria-label="navLabel('Sign out')" :aria-busy="signingOut" :disabled="signingOut" @click="signOut"><Icon name="logout" :size="18" /></button></div></header>
    <main><p v-if="signOutError" class="message error" role="alert">{{signOutError}}</p><p v-if="dealer&&reseller.error" class="message error" role="alert">{{reseller.error}} <button class="btn small secondary" @click="reseller.restore">Retry</button></p><p v-if="!dealer&&branding.error" class="message error" role="alert">{{branding.error}} <button class="btn small secondary" @click="branding.refresh">Retry</button></p><RouterView :key="route.path" /></main>
   </div>
  </div>

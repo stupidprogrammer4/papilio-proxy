@@ -1,21 +1,30 @@
 <script setup lang="ts">
 import type { EffectiveIpPolicyRead, PurchasedIpPolicyRead } from "@papilio/api";
-import { faDate } from "@papilio/ui";
+import { useI18n } from "vue-i18n";
+import { useLocalizedFormats } from "../composables/useLocalizedFormats";
 import { ipAllowanceText } from "./ipLimits/policy";
 import IpPolicyTransition from "./ipLimits/IpPolicyTransition.vue";
 
 defineProps<{ purchased?: PurchasedIpPolicyRead | null; effective?: EffectiveIpPolicyRead; compact?: boolean }>();
-const sources = { subscription_override: "Recorded operational policy", purchased_snapshot: "Purchased allowance", legacy_unrestricted: "Legacy: no recorded restriction" };
+const { t } = useI18n();
+const { date } = useLocalizedFormats();
+const sources: Record<string, string> = { subscription_override: "subscriptionOverride", purchased_snapshot: "purchasedSnapshot", legacy_unrestricted: "legacyUnrestricted" };
+function allowance(policy: Parameters<typeof ipAllowanceText>[0]): string {
+  return ipAllowanceText(policy, {
+    none: t("ipPolicySummary.allowance.none"), unlimited: t("ipPolicySummary.allowance.unlimited"), invalid: t("ipPolicySummary.allowance.invalid"),
+    one: t("ipPolicySummary.allowance.one"), many: count => t("ipPolicySummary.allowance.many", { count }),
+  });
+}
 </script>
 
 <template>
-  <section aria-label="Subscription source IP allowance" :class="compact ? 'form-grid' : 'hint-box form-grid'">
-    <div class="detail-line"><span>Purchased concurrency</span><strong>{{ purchased ? ipAllowanceText(purchased.policy) : purchased === null ? 'Legacy: no purchased snapshot' : 'Snapshot unavailable from this API' }}</strong></div>
-    <template v-if="purchased && !compact"><p class="subtitle">Captured {{faDate(purchased.captured_at)}} · {{purchased.source==='plan_override'?'Explicit plan policy':'Purchase-time defaults'}}<span v-if="purchased.plan_id!==null"> · Plan #{{purchased.plan_id}}</span></p></template>
-    <div v-if="effective" class="detail-line"><span>Current admission allowance</span><strong>{{ipAllowanceText(effective.policy)}}</strong></div>
-    <p v-if="effective" class="subtitle">{{sources[effective.source]}} · Shared by this subscription's configurations, not by independent subscriptions.</p>
-    <p v-if="effective?.source==='subscription_override'" class="subtitle">This operational override does not rewrite the purchased snapshot.</p>
+  <section :aria-label="t('ipPolicySummary.region')" :class="compact ? 'form-grid' : 'hint-box form-grid'">
+    <div class="detail-line"><span>{{ t("ipPolicySummary.purchased") }}</span><strong>{{ purchased ? allowance(purchased.policy) : purchased === null ? t('ipPolicySummary.legacyNoSnapshot') : t('ipPolicySummary.unavailable') }}</strong></div>
+    <template v-if="purchased && !compact"><p class="subtitle">{{ t("ipPolicySummary.captured", { date: date(purchased.captured_at) }) }} · {{t(purchased.source==='plan_override'?'ipPolicySummary.explicitPlan':'ipPolicySummary.purchaseDefaults')}}<span v-if="purchased.plan_id!==null"> · {{ t("ipPolicySummary.plan", { id: purchased.plan_id }) }}</span></p></template>
+    <div v-if="effective" class="detail-line"><span>{{ t("ipPolicySummary.current") }}</span><strong>{{allowance(effective.policy)}}</strong></div>
+    <p v-if="effective" class="subtitle">{{t(`ipPolicySummary.sources.${sources[effective.source]}`)}} · {{ t('ipPolicySummary.sharedScope') }}</p>
+    <p v-if="effective?.source==='subscription_override'" class="subtitle">{{ t("ipPolicySummary.overrideNote") }}</p>
     <IpPolicyTransition v-if="effective?.transition" :transition="effective.transition" />
-    <p class="message">API admission decisions only. Core enforcement is not verified. Source IP counts do not represent device counts.</p>
+    <p class="message">{{ t("ipPolicySummary.apiOnly") }}</p>
   </section>
 </template>

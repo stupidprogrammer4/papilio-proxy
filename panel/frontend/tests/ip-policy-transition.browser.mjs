@@ -73,7 +73,13 @@ try{
  assert.match(await region.innerText(),/Current API admission allowance: Up to 3 source IPs/);
  scopes=['subscriptions:read','customers:read'];await page.reload();await region.getByText('No IP records match this filter.',{exact:true}).waitFor();
  assert.equal(await region.getByRole('button',{name:'Save IP policy',exact:true}).count(),0);assert.match(await pending.innerText(),/Blocked/);
- await page.setViewportSize({width:390,height:844});assert(await pending.evaluate(el=>el.getBoundingClientRect().width<=innerWidth));
+ await page.getByTestId('locale-selector').selectOption('fa');
+ const localizedRegion=page.getByRole('region',{name:'محدودیت IP اشتراک'}),localizedPending=localizedRegion.getByRole('region',{name:'سیاست در انتظار IP مبدأ'});
+ await localizedRegion.getByRole('heading',{name:'پذیرش IP مبدأ',exact:true}).waitFor();
+ await localizedPending.getByText('متوقف‌شده',{exact:true}).waitFor();
+ assert.match(await localizedRegion.innerText(),/این تصمیم فقط در API اعمال می‌شود/);
+ assert.match(await localizedPending.innerText(),/رسید معتبر بسته‌شدن اتصال در دسترس نیست/);
+ await page.setViewportSize({width:390,height:844});assert(await localizedPending.evaluate(el=>el.getBoundingClientRect().width<=innerWidth));
  assert.deepEqual(errors,[]);assert.equal(writes.length,2);
  console.log(JSON.stringify({boundary:'actual Vue, controlled typed IP transition HTTP',cases:6,writes:2,pageErrors:0}));
 }finally{await browser.close();}
