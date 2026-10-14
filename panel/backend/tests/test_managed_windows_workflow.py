@@ -15,22 +15,6 @@ from tests.test_managed_installation_workflow import (
 
 
 class ManagedWindowWorkflowFixture(ManagedInstallationWorkflowFixture):
-    async def paid_subscription(self, auto_renew=False):
-        customer, subscription = await super().paid_subscription(auto_renew)
-        quota = getattr(self, "fixture_quota", None)
-        if quota is not None:
-            async with self.connection.uow() as unit:
-                async with transaction(unit):
-                    await unit.execute(
-                        text(
-                            "UPDATE tbl_subscriptions SET quota_bytes=:quota "
-                            "WHERE id=:id"
-                        ),
-                        {"quota": quota, "id": subscription["id"]},
-                    )
-            subscription["quota_bytes"] = quota
-        return customer, subscription
-
     async def setup_closed(self):
         self.settings.usage.policy.mode = "reserved"
         _, subscription, node, configuration = await self.setup_installation()

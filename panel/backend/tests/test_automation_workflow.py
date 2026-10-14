@@ -142,6 +142,7 @@ class AutomationWorkflowFixture(IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200)
 
     async def paid_subscription(self, auto_renew=False):
+        quota_bytes = getattr(self, "fixture_quota", 1000000000)
         customer = await self.post(
             "/v1/admin/customers",
             {"display_name": "آزمون اتوماسیون " + self.suffix},
@@ -151,7 +152,7 @@ class AutomationWorkflowFixture(IsolatedAsyncioTestCase):
             {
                 "code": "ops_" + self.suffix,
                 "title": "پلن آزمون",
-                "quota_bytes": 1000000000,
+                "quota_bytes": quota_bytes,
                 "duration_days": 30,
                 "price_rial": 100000,
             },

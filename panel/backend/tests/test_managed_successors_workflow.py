@@ -118,6 +118,12 @@ class ManagedSuccessorsWorkflowTest(ManagedSuccessorWorkflowFixture):
     async def test_other_node_reservation_bounds_successor_quota(self):
         self.fixture_quota = 1024
         subscription, node, first, expected, _, _ = await self.setup_window()
+        async with self.connection.uow() as fresh:
+            plan_quota = await fresh.execute(
+                text("SELECT quota_bytes FROM tbl_plans WHERE id=:id"),
+                {"id": subscription["plan_id"]},
+            )
+            self.assertEqual(plan_quota.scalar_one(), self.fixture_quota)
         settled, _ = await self.finalize_window(node, first, expected)
         self.enable_successors()
         other = await self.register_assignment(
