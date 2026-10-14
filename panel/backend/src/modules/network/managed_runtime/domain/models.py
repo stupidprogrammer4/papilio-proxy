@@ -27,6 +27,11 @@ class ManagedInstallationModel(PersistenceEntity):
 
 class ManagedEpochModel(PersistenceEntity):
     installation_id: int = ForeignKeyField("tbl_managed_installations.id")
+    previous_epoch_id: int | None = ForeignKeyField(
+        "tbl_managed_epoches.id", default=None
+    )
+    rollover_request_id: str | None = CharField(32, default=None)
+    rollover_request_sha256: str | None = CharField(64, default=None)
     process_epoch: str = CharField(32)
     installed_closed_at: datetime = TimestampField()
     receipt_sha256: str = CharField(64)

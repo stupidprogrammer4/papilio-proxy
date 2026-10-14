@@ -58,6 +58,7 @@ from src.modules.network.core_runtime.interfaces import (
     IInstalledUsageQuery,
     IRuntimeCommandService,
     IRuntimeRevisionService,
+    IRuntimeSnapshotQuery,
     IRuntimeStateService,
 )
 from src.modules.network.core_runtime.tasks.schedulers.provisioning import (
@@ -104,6 +105,9 @@ class CoreRuntimeProvider(Provider):
     )
     commands = provide(RuntimeCommandService, provides=IRuntimeCommandService)
     reader = provide(RuntimeSnapshotReader)
+    snapshot_query = provide(
+        RuntimeSnapshotReader, provides=IRuntimeSnapshotQuery
+    )
     installed = provide(InstalledProfileQuery, provides=IInstalledProfileQuery)
     metadata = provide(RuntimeRevisionMetadataReader)
     query = provide(CoreRuntimeQuery, provides=ICoreRuntimeQuery)

@@ -10,6 +10,10 @@ from src.modules.network.managed_runtime.domain.barriers import (
     ManagedWindowFinalOut,
     ManagedWindowFinalSubmission,
 )
+from src.modules.network.managed_runtime.domain.epoch_seals import (
+    ManagedEpochSealOut,
+    ManagedEpochSealSubmission,
+)
 from src.modules.network.managed_runtime.domain.installations import (
     ManagedClosedStartupAcknowledgement,
     ManagedInstallationClaim,
@@ -18,6 +22,10 @@ from src.modules.network.managed_runtime.domain.installations import (
 from src.modules.network.managed_runtime.domain.revocations import (
     ManagedRevocationOut,
     ManagedRevocationSubmission,
+)
+from src.modules.network.managed_runtime.domain.rollovers import (
+    ManagedEpochRolloverOut,
+    ManagedEpochRolloverSubmission,
 )
 from src.modules.network.managed_runtime.domain.successors import (
     ManagedSuccessorWindowCreate,
@@ -29,6 +37,7 @@ from src.modules.network.managed_runtime.domain.windows import (
 )
 from src.modules.network.managed_runtime.interfaces import (
     IManagedAdmissionCommand,
+    IManagedEpochSealCommand,
     IManagedFinalityCommand,
     IManagedInitialWindowCommand,
     IManagedInstallationCommand,
@@ -39,6 +48,40 @@ from src.modules.network.managed_runtime.interfaces import (
 router = APIRouter(
     prefix="/v1/nodes", tags=["Managed installation"], route_class=DishkaRoute
 )
+
+
+@router.post("/{code}/managed-epochs/{process_epoch}/rollover")
+async def rollover_epoch(
+    code: str,
+    process_epoch: str,
+    data: ManagedEpochRolloverSubmission,
+    response: Response,
+    command: FromDishka[IManagedInstallationCommand],
+    x_papilio_node_key: str = Header(default=""),
+) -> APIResponse[ManagedEpochRolloverOut, None]:
+    """Start one fresh CLOSED epoch after accepted finality."""
+    response.headers["Cache-Control"] = "no-store"
+    result = await command.rollover(
+        code, x_papilio_node_key, process_epoch, data
+    )
+    return APIResponse.from_data(result)
+
+
+@router.post("/{code}/managed-epochs/{process_epoch}/seal")
+async def seal_epoch(
+    code: str,
+    process_epoch: str,
+    data: ManagedEpochSealSubmission,
+    response: Response,
+    command: FromDishka[IManagedEpochSealCommand],
+    x_papilio_node_key: str = Header(default=""),
+) -> APIResponse[ManagedEpochSealOut, None]:
+    """Accept immutable historical finality for one completed process epoch."""
+    response.headers["Cache-Control"] = "no-store"
+    result = await command.accept(
+        code, x_papilio_node_key, process_epoch, data
+    )
+    return APIResponse.from_data(result)
 
 
 @router.post("/{code}/managed-windows/{window_id}/successor")

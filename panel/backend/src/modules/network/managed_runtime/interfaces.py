@@ -12,6 +12,13 @@ from src.modules.network.managed_runtime.domain.barriers import (
 from src.modules.network.managed_runtime.domain.contracts import (
     ManagedRuntimeReadiness,
 )
+from src.modules.network.managed_runtime.domain.epoch_seal_models import (
+    ManagedEpochSealModel,
+)
+from src.modules.network.managed_runtime.domain.epoch_seals import (
+    ManagedEpochSealOut,
+    ManagedEpochSealSubmission,
+)
 from src.modules.network.managed_runtime.domain.installations import (
     ManagedClosedStartupAcknowledgement,
     ManagedInstallationClaim,
@@ -29,6 +36,11 @@ from src.modules.network.managed_runtime.domain.models import (
 from src.modules.network.managed_runtime.domain.revocations import (
     ManagedRevocationOut,
     ManagedRevocationSubmission,
+)
+from src.modules.network.managed_runtime.domain.rollovers import (
+    ManagedEpochRolloverOut,
+    ManagedEpochRolloverSubmission,
+    ManagedInstallationEpochCount,
 )
 from src.modules.network.managed_runtime.domain.successors import (
     ManagedSuccessorWindowCreate,
@@ -48,6 +60,16 @@ class IManagedSuccessorWindowCommand(Protocol):
         predecessor_window_id: str,
         data: ManagedSuccessorWindowCreate,
     ) -> Awaitable[ManagedSuccessorWindowOut]: ...
+
+
+class IManagedEpochSealCommand(Protocol):
+    def accept(
+        self,
+        code: str,
+        key: str,
+        process_epoch: str,
+        data: ManagedEpochSealSubmission,
+    ) -> Awaitable[ManagedEpochSealOut]: ...
 
 
 class IManagedFinalityCommand(Protocol):
@@ -81,6 +103,21 @@ class IManagedEpochService(Protocol):
     ) -> Awaitable[ManagedEpochModel]: ...
     def locked(self, id: int) -> Awaitable[ManagedEpochModel | None]: ...
     def by_epoch(self, epoch: str) -> Awaitable[ManagedEpochModel | None]: ...
+    def rollover_from(
+        self, previous_epoch_id: int
+    ) -> Awaitable[ManagedEpochModel | None]: ...
+    def rollover_by_request(
+        self, request_id: str
+    ) -> Awaitable[ManagedEpochModel | None]: ...
+    def count_for_installation(
+        self, installation_id: int, maximum: int
+    ) -> Awaitable[ManagedInstallationEpochCount]: ...
+
+
+class IManagedEpochSealService(Protocol):
+    def by_epoch(
+        self, epoch_id: int
+    ) -> Awaitable[ManagedEpochSealModel | None]: ...
 
 
 class IManagedInstallationCommand(Protocol):
@@ -97,6 +134,13 @@ class IManagedInstallationCommand(Protocol):
         id: int,
         data: ManagedClosedStartupAcknowledgement,
     ) -> Awaitable[ManagedInstalledClosedOut]: ...
+    def rollover(
+        self,
+        code: str,
+        key: str,
+        previous_process_epoch: str,
+        data: ManagedEpochRolloverSubmission,
+    ) -> Awaitable[ManagedEpochRolloverOut]: ...
 
 
 class IManagedWindowService(Protocol):

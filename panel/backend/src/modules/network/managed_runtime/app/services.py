@@ -1,5 +1,8 @@
 from papilio.errors.exceptions import NotFoundException
 
+from src.modules.network.managed_runtime.domain.epoch_seal_models import (
+    ManagedEpochSealModel,
+)
 from src.modules.network.managed_runtime.domain.models import (
     ManagedAdmissionModel,
     ManagedBarrierModel,
@@ -7,6 +10,12 @@ from src.modules.network.managed_runtime.domain.models import (
     ManagedInstallationModel,
     ManagedRevocationModel,
     ManagedWindowModel,
+)
+from src.modules.network.managed_runtime.domain.rollovers import (
+    ManagedInstallationEpochCount,
+)
+from src.modules.network.managed_runtime.infra.epoch_seal_mysql import (
+    ManagedEpochSealRepository,
 )
 from src.modules.network.managed_runtime.infra.mysql import (
     ManagedAdmissionRepository,
@@ -75,6 +84,35 @@ class ManagedEpochService:
 
     async def by_epoch(self, epoch: str) -> ManagedEpochModel | None:
         result = await self.repo.by_epoch(epoch)
+        return result
+
+    async def rollover_from(
+        self, previous_epoch_id: int
+    ) -> ManagedEpochModel | None:
+        result = await self.repo.rollover_from(previous_epoch_id)
+        return result
+
+    async def rollover_by_request(
+        self, request_id: str
+    ) -> ManagedEpochModel | None:
+        result = await self.repo.rollover_by_request(request_id)
+        return result
+
+    async def count_for_installation(
+        self, installation_id: int, maximum: int
+    ) -> ManagedInstallationEpochCount:
+        result = await self.repo.count_for_installation(
+            installation_id, maximum
+        )
+        return result
+
+
+class ManagedEpochSealService:
+    def __init__(self, repo: ManagedEpochSealRepository) -> None:
+        self.repo = repo
+
+    async def by_epoch(self, epoch_id: int) -> ManagedEpochSealModel | None:
+        result = await self.repo.by_epoch(epoch_id)
         return result
 
 

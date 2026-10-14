@@ -44,6 +44,12 @@ class ManagedEpochTable(ManagedEpochModel, BaseTable, table=True):
             "process_epoch",
             name="uq_managed_epoch_identity",
         ),
+        UniqueConstraint(
+            "previous_epoch_id", name="uq_managed_epoch_successor"
+        ),
+        UniqueConstraint(
+            "rollover_request_id", name="uq_managed_epoch_rollover_request"
+        ),
     )
 
 

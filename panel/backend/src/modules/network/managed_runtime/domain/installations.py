@@ -11,6 +11,9 @@ from src.modules.network.managed_runtime.domain.contracts import (
     ManagedRuntimeCapacity,
     Sha256,
 )
+from src.modules.network.managed_runtime.domain.epoch_seals import (
+    ManagedEpochSealPolicy,
+)
 from src.modules.network.managed_runtime.domain.successors import (
     ManagedSuccessorPolicy,
 )
@@ -25,6 +28,9 @@ class ManagedAdapterPolicy(ImmutableContract):
     enabled: bool = False
     window_mode: Literal["disabled", "reserved"] = "disabled"
     paid_mode: Literal["disabled", "strict_admission"] = "disabled"
+    epoch_seal_policy: ManagedEpochSealPolicy = Field(
+        default_factory=ManagedEpochSealPolicy
+    )
     successor_policy: ManagedSuccessorPolicy = Field(
         default_factory=ManagedSuccessorPolicy
     )

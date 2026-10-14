@@ -9,6 +9,9 @@ from src.modules.network.managed_runtime.app.authority import (
 from src.modules.network.managed_runtime.app.barriers import (
     ManagedFinalityCommand,
 )
+from src.modules.network.managed_runtime.app.epoch_seals import (
+    ManagedEpochSealCommand,
+)
 from src.modules.network.managed_runtime.app.installations import (
     ManagedInstallationCommand,
 )
@@ -18,6 +21,7 @@ from src.modules.network.managed_runtime.app.revocations import (
 from src.modules.network.managed_runtime.app.services import (
     ManagedAdmissionService,
     ManagedBarrierService,
+    ManagedEpochSealService,
     ManagedEpochService,
     ManagedInstallationService,
     ManagedRevocationService,
@@ -28,6 +32,12 @@ from src.modules.network.managed_runtime.app.successors import (
 )
 from src.modules.network.managed_runtime.app.windows import (
     ManagedInitialWindowCommand,
+)
+from src.modules.network.managed_runtime.infra.epoch_seal_mysql import (
+    ManagedEpochSealRepository,
+)
+from src.modules.network.managed_runtime.infra.epoch_seal_reads import (
+    ManagedEpochSealReader,
 )
 from src.modules.network.managed_runtime.infra.mysql import (
     ManagedAdmissionRepository,
@@ -47,6 +57,8 @@ from src.modules.network.managed_runtime.interfaces import (
     IManagedAdmissionCommand,
     IManagedAdmissionService,
     IManagedBarrierService,
+    IManagedEpochSealCommand,
+    IManagedEpochSealService,
     IManagedEpochService,
     IManagedFinalityCommand,
     IManagedInitialWindowCommand,
@@ -63,6 +75,14 @@ from src.modules.network.managed_runtime.interfaces import (
 class ManagedRuntimeProvider(Provider):
     scope = Scope.REQUEST
     successor_reader = provide(ManagedSuccessorReader)
+    epoch_seal_repository = provide(ManagedEpochSealRepository)
+    epoch_seal_reader = provide(ManagedEpochSealReader)
+    epoch_seal_service = provide(
+        ManagedEpochSealService, provides=IManagedEpochSealService
+    )
+    epoch_seal_command = provide(
+        ManagedEpochSealCommand, provides=IManagedEpochSealCommand
+    )
     successor_command = provide(
         ManagedSuccessorWindowCommand, provides=IManagedSuccessorWindowCommand
     )

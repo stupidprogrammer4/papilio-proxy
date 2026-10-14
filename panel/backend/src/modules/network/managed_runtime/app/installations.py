@@ -1,6 +1,7 @@
 """Native leased CLOSED installation proof; never authorizes traffic."""
 
 import asyncio
+import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
 from hmac import compare_digest
@@ -17,10 +18,14 @@ from src.modules.network.core_runtime.infra.readers import (
     RuntimeSnapshotReader,
 )
 from src.modules.network.core_runtime.interfaces import (
+    IRuntimeCommandService,
     IRuntimeRevisionService,
     IRuntimeStateService,
 )
 from src.modules.network.cores.interfaces import ICoreService
+from src.modules.network.managed_runtime.app.admission_membership import (
+    ManagedAdmissionMembership,
+)
 from src.modules.network.managed_runtime.app.installation_encoding import (
     ManagedInstallationEncoding,
 )
@@ -39,13 +44,21 @@ from src.modules.network.managed_runtime.domain.models import (
     ManagedEpochModel,
     ManagedInstallationModel,
 )
+from src.modules.network.managed_runtime.domain.rollovers import (
+    ManagedEpochRolloverOut,
+    ManagedEpochRolloverSubmission,
+)
 from src.modules.network.managed_runtime.domain.scopes import (
     ManagedInstallationScope,
+)
+from src.modules.network.managed_runtime.infra.epoch_seal_reads import (
+    ManagedEpochSealReader,
 )
 from src.modules.network.managed_runtime.infra.scopes import (
     ManagedInstallationScopeReader,
 )
 from src.modules.network.managed_runtime.interfaces import (
+    IManagedEpochSealService,
     IManagedEpochService,
     IManagedInstallationService,
 )
@@ -69,10 +82,13 @@ class ManagedInstallationCommand:
         cores: ICoreService,
         states: IRuntimeStateService,
         revisions: IRuntimeRevisionService,
+        commands: IRuntimeCommandService,
         reader: RuntimeSnapshotReader,
         settings: PapilioSettings,
         scopes: ManagedInstallationScopeReader,
         customers: ICustomerService,
+        epoch_seals: IManagedEpochSealService,
+        epoch_reader: ManagedEpochSealReader,
     ) -> None:
         self.installations, self.epochs = installations, epochs
         self.nodes, self.cores, self.states, self.revisions = (
@@ -81,8 +97,49 @@ class ManagedInstallationCommand:
             states,
             revisions,
         )
+        self.commands = commands
         self.reader, self.settings = reader, settings
         self.scopes, self.customers = scopes, customers
+        self.epoch_seals, self.epoch_reader = epoch_seals, epoch_reader
+
+    @staticmethod
+    def rollover_digest(data: ManagedEpochRolloverSubmission) -> str:
+        payload = data.model_dump_json().encode()
+        return hashlib.sha256(payload).hexdigest()
+
+    @staticmethod
+    def rollover_original_matches(
+        data: ManagedEpochRolloverSubmission,
+    ) -> bool:
+        payload = data.original_receipt.encode()
+        return (
+            len(payload) == data.receipt.bytes
+            and hashlib.sha256(payload).hexdigest()
+            == data.receipt.receipt_sha256
+            and data.receipt.epoch != ""
+        )
+
+    @staticmethod
+    def rollover_output(
+        previous: ManagedEpochModel, current: ManagedEpochModel
+    ) -> ManagedEpochRolloverOut:
+        if (
+            current.rollover_request_id is None
+            or current.rollover_request_sha256 is None
+            or current.previous_epoch_id != previous.id
+        ):
+            raise conflict("managed_rollover_record_unresolved")
+        return ManagedEpochRolloverOut(
+            installation_id=current.installation_id,
+            previous_epoch_id=previous.id,
+            previous_process_epoch=previous.process_epoch,
+            epoch_id=current.id,
+            process_epoch=current.process_epoch,
+            request_id=current.rollover_request_id,
+            request_sha256=current.rollover_request_sha256,
+            receipt_sha256=current.receipt_sha256,
+            observed_at=current.installed_closed_at.replace(tzinfo=UTC),
+        )
 
     async def initial_scope(self, core_id: int) -> ManagedInstallationScope:
         runtime = self.settings.core_runtime
@@ -170,13 +227,19 @@ class ManagedInstallationCommand:
             or len(facts.profiles) > runtime.max_profiles
         ):
             raise conflict("managed_runtime_snapshot_capacity")
-        snapshot, _ = await asyncio.to_thread(
-            RuntimePayload.fingerprints,
-            facts,
-            datetime.now(UTC).replace(tzinfo=None, microsecond=0),
-        )
-        if snapshot != revision.snapshot_sha256:
-            raise conflict("managed_runtime_snapshot_stale")
+        now = datetime.now(UTC).replace(tzinfo=None, microsecond=0)
+        try:
+            await asyncio.to_thread(
+                ManagedAdmissionMembership.verify,
+                facts,
+                revision.encrypted_memberships,
+                revision.membership_sha256,
+                revision.snapshot_sha256,
+                now,
+                self.settings.configuration_encryption_key,
+            )
+        except ValueError:
+            raise conflict("managed_runtime_snapshot_stale") from None
         try:
             expectation = await asyncio.to_thread(
                 ManagedInstallationEncoding.derive,
@@ -429,3 +492,157 @@ class ManagedInstallationCommand:
             receipt_sha256=epoch.receipt_sha256,
             observed_at=observed.replace(tzinfo=UTC),
         )
+
+    @handle_conflicts
+    @transactional
+    async def rollover(
+        self,
+        code: str,
+        key: str,
+        previous_process_epoch: str,
+        data: ManagedEpochRolloverSubmission,
+    ) -> ManagedEpochRolloverOut:
+        node = await self.nodes.authenticate(code, key)
+        hint = await self.epoch_reader.epoch_hint(previous_process_epoch)
+        if hint is None:
+            raise conflict("managed_rollover_epoch_missing")
+        initial = await self.installations.find(hint.installation_id)
+        if initial is None or initial.node_id != node.id:
+            raise conflict("managed_rollover_node_mismatch")
+        policy = self.policy()
+        runtime = self.settings.core_runtime
+        seal_policy = policy.epoch_seal_policy
+        if (
+            runtime is None
+            or seal_policy.mode != "strict"
+            or seal_policy.limits is None
+        ):
+            raise conflict("managed_rollover_disabled")
+        scope = await self.scopes.initial(
+            initial.core_id, runtime.max_profiles + 1
+        )
+        if len(scope.profiles) > runtime.max_profiles:
+            raise conflict("managed_runtime_snapshot_capacity")
+        await self.customers.locked_many(
+            sorted(
+                {
+                    customer_id
+                    for owner in scope.owners
+                    for customer_id in (
+                        owner.customer_id,
+                        owner.payer_customer_id or owner.customer_id,
+                    )
+                }
+            )
+        )
+        await self.nodes.locked(node.id)
+        node = await self.nodes.authenticate(code, key)
+        state = await self.states.locked(initial.core_id)
+        owners = await self.scopes.lock_subscriptions(
+            [owner.subscription_id for owner in scope.owners]
+        )
+        configurations = await self.scopes.lock_configurations(
+            initial.core_id, runtime.max_configurations + 1
+        )
+        profiles = await self.scopes.current_profiles(
+            configurations, runtime.max_profiles + 1
+        )
+        installation = await self.installations.locked(initial.id)
+        previous = await self.epochs.locked(hint.id)
+        if (
+            previous is None
+            or previous.installation_id != installation.id
+            or previous.process_epoch != previous_process_epoch
+            or installation.node_id != node.id
+            or installation.core_id != initial.core_id
+            or installation.encrypted_manifest != initial.encrypted_manifest
+        ):
+            raise conflict("managed_rollover_scope_changed")
+        request_digest, original_matches = await asyncio.gather(
+            asyncio.to_thread(self.rollover_digest, data),
+            asyncio.to_thread(self.rollover_original_matches, data),
+        )
+        existing = await self.epochs.rollover_from(previous.id)
+        if existing is not None:
+            if (
+                not original_matches
+                or existing.rollover_request_id != data.request_id
+                or existing.rollover_request_sha256 != request_digest
+                or existing.receipt_sha256 != data.receipt.receipt_sha256
+            ):
+                raise conflict("managed_rollover_request_reused")
+            return self.rollover_output(previous, existing)
+        if await self.epochs.rollover_by_request(data.request_id) is not None:
+            raise conflict("managed_rollover_request_reused")
+        if await self.epoch_seals.by_epoch(previous.id) is None:
+            raise conflict("managed_rollover_finality_missing")
+        if (
+            owners != scope.owners
+            or profiles != scope.profiles
+            or len(configurations) > runtime.max_configurations
+            or len(profiles) > runtime.max_profiles
+            or installation.state != "installed_closed"
+            or state is None
+            or await self.commands.outstanding(initial.core_id) is not None
+        ):
+            raise conflict("managed_rollover_service_changed")
+        expectation = await self.current_expectation(installation, policy)
+        _, expected_digest = await asyncio.to_thread(
+            ManagedInstallationEncoding.encode,
+            expectation,
+            self.settings.configuration_encryption_key,
+        )
+        if expected_digest != installation.installation_sha256:
+            raise conflict("managed_rollover_policy_changed")
+        try:
+            original = await asyncio.to_thread(
+                ManagedWireEncoding.original_closed_startup,
+                data.original_receipt,
+                data.receipt,
+                policy.capacity,
+            )
+        except (ValueError, TypeError, KeyError):
+            raise conflict("managed_rollover_receipt_invalid") from None
+        startup = original.startup
+        observed = startup.observed_at.astimezone(UTC).replace(tzinfo=None)
+        now = datetime.now(UTC)
+        if (
+            startup.epoch == previous_process_epoch
+            or startup.installation != expectation.installation
+            or startup.profiles != expectation.profiles
+            or startup.adapter_revision != expectation.adapter_revision
+            or startup.source_commit != expectation.source_commit
+            or startup.enforcement_sha256 != expectation.enforcement_sha256
+            or startup.window_policy_sha256 != expectation.window_policy_sha256
+            or observed
+            > now.replace(tzinfo=None)
+            + timedelta(seconds=policy.clock_skew_seconds)
+            or observed + timedelta(seconds=policy.observation_seconds)
+            < now.replace(tzinfo=None)
+        ):
+            raise conflict("managed_rollover_receipt_invalid")
+        if await self.epochs.by_epoch(startup.epoch) is not None:
+            raise conflict("managed_rollover_epoch_reused")
+        epoch_count = await self.epochs.count_for_installation(
+            installation.id, seal_policy.limits.max_epochs
+        )
+        if epoch_count.observed_count >= seal_policy.limits.max_epochs:
+            raise conflict("managed_rollover_capacity")
+        encrypted_receipt = await asyncio.to_thread(
+            encrypt,
+            data.original_receipt,
+            self.settings.configuration_encryption_key,
+        )
+        current = await self.epochs.create(
+            ManagedEpochModel(
+                installation_id=installation.id,
+                previous_epoch_id=previous.id,
+                rollover_request_id=data.request_id,
+                rollover_request_sha256=request_digest,
+                process_epoch=startup.epoch,
+                installed_closed_at=observed,
+                receipt_sha256=data.receipt.receipt_sha256,
+                encrypted_receipt=encrypted_receipt,
+            )
+        )
+        return self.rollover_output(previous, current)

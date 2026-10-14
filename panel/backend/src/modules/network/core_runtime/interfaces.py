@@ -9,6 +9,7 @@ from src.modules.network.core_runtime.domain.dtos import (
     RuntimeRevisionCreate,
     RuntimeSearch,
 )
+from src.modules.network.core_runtime.domain.facts import RuntimeSnapshotFacts
 from src.modules.network.core_runtime.domain.memberships import (
     CoreProvisioningDecision,
     InstalledProfileProof,
@@ -28,6 +29,12 @@ from src.modules.network.core_runtime.domain.usage import (
     RuntimeUsageCapability,
     RuntimeUsageObservation,
 )
+
+
+class IRuntimeSnapshotQuery(Protocol):
+    def facts(
+        self, core_id: int, configuration_limit: int, profile_limit: int
+    ) -> Awaitable[RuntimeSnapshotFacts]: ...
 
 
 class ICoreUsageObservationCommand(Protocol):

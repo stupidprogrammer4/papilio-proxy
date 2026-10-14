@@ -53,6 +53,7 @@ from src.modules.network.managed_runtime.infra.successor_reads import (
 from src.modules.network.managed_runtime.interfaces import (
     IManagedAdmissionService,
     IManagedBarrierService,
+    IManagedEpochSealService,
     IManagedEpochService,
     IManagedInstallationService,
     IManagedWindowService,
@@ -74,6 +75,7 @@ class ManagedSuccessorWindowCommand:
         self,
         installations: IManagedInstallationService,
         epochs: IManagedEpochService,
+        epoch_seals: IManagedEpochSealService,
         windows: IManagedWindowService,
         barriers: IManagedBarrierService,
         admissions: IManagedAdmissionService,
@@ -92,9 +94,10 @@ class ManagedSuccessorWindowCommand:
         requests: ProvisionRequestRepository,
         settings: PapilioSettings,
     ) -> None:
-        self.installations, self.epochs, self.windows = (
+        self.installations, self.epochs, self.epoch_seals, self.windows = (
             installations,
             epochs,
+            epoch_seals,
             windows,
         )
         self.barriers, self.admissions, self.chains = (
@@ -360,8 +363,21 @@ class ManagedSuccessorWindowCommand:
             or state.automation_paused
         ):
             raise conflict("managed_window_entitlement_inactive")
+        rollover_continuation = False
         if subscription.provisioning_managed:
-            if (
+            if epoch.previous_epoch_id is not None:
+                previous_seal = await self.epoch_seals.by_epoch(
+                    epoch.previous_epoch_id
+                )
+                if previous_seal is None:
+                    raise conflict("managed_rollover_finality_missing")
+                if (
+                    root.provision_task_id is not None
+                    or root.encrypted_provision_claim is not None
+                ):
+                    raise conflict("managed_rollover_paid_claim_unexpected")
+                rollover_continuation = True
+            if not rollover_continuation and (
                 policy.paid_mode != "strict_admission"
                 or root.provision_task_id is None
                 or not root.encrypted_provision_claim
@@ -458,7 +474,7 @@ class ManagedSuccessorWindowCommand:
             )
         except (ValueError, TypeError, KeyError):
             raise conflict("managed_runtime_snapshot_stale") from None
-        if subscription.provisioning_managed:
+        if subscription.provisioning_managed and not rollover_continuation:
             admission = await self.admissions.by_window(root.id)
             if admission is None:
                 raise conflict("managed_successor_paid_root_invalid")

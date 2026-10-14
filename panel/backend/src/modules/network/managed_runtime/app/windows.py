@@ -12,7 +12,6 @@ from src.config.settings import PapilioSettings
 from src.modules.accounts.customers.app.policies import CustomerAccessPolicy
 from src.modules.accounts.customers.interfaces import ICustomerService
 from src.modules.network.core_runtime.app.commands import conflict
-from src.modules.network.core_runtime.app.payloads import RuntimePayload
 from src.modules.network.core_runtime.infra.readers import (
     RuntimeSnapshotReader,
 )
@@ -20,6 +19,9 @@ from src.modules.network.core_runtime.interfaces import (
     IRuntimeCommandService,
     IRuntimeRevisionService,
     IRuntimeStateService,
+)
+from src.modules.network.managed_runtime.app.admission_membership import (
+    ManagedAdmissionMembership,
 )
 from src.modules.network.managed_runtime.app.installation_encoding import (
     ManagedInstallationEncoding,
@@ -40,6 +42,7 @@ from src.modules.network.managed_runtime.infra.scopes import (
     ManagedInstallationScopeReader,
 )
 from src.modules.network.managed_runtime.interfaces import (
+    IManagedEpochSealService,
     IManagedEpochService,
     IManagedInstallationService,
     IManagedWindowService,
@@ -67,6 +70,7 @@ class ManagedInitialWindowCommand:
         epochs: IManagedEpochService,
         windows: IManagedWindowService,
         scopes: ManagedInstallationScopeReader,
+        epoch_seals: IManagedEpochSealService,
         customers: ICustomerService,
         nodes: INodeService,
         states: IRuntimeStateService,
@@ -85,7 +89,8 @@ class ManagedInitialWindowCommand:
             epochs,
             windows,
         )
-        self.scopes, self.customers, self.nodes = scopes, customers, nodes
+        self.scopes, self.epoch_seals = scopes, epoch_seals
+        self.customers, self.nodes = customers, nodes
         self.states, self.revisions, self.commands = (
             states,
             revisions,
@@ -185,11 +190,15 @@ class ManagedInitialWindowCommand:
             or installation.node_id != node.id
         ):
             raise conflict("managed_installation_scope_changed")
-        epoch = await self.epochs.by_epoch(data.process_epoch)
+        epoch_hint = await self.epochs.by_epoch(data.process_epoch)
+        if epoch_hint is None:
+            raise conflict("managed_window_epoch_invalid")
+        epoch = await self.epochs.locked(epoch_hint.id)
         if (
             installation.state != "installed_closed"
             or epoch is None
             or epoch.installation_id != id
+            or epoch.process_epoch != data.process_epoch
         ):
             raise conflict("managed_window_epoch_invalid")
         request_digest = await asyncio.to_thread(
@@ -210,6 +219,8 @@ class ManagedInitialWindowCommand:
                 self.settings.configuration_encryption_key,
             )
             return result
+        if await self.epoch_seals.by_epoch(epoch.id) is not None:
+            raise conflict("managed_window_epoch_sealed")
         previous = await self.windows.initial_for_profile_epoch(
             data.profile_id, epoch.id
         )
@@ -253,6 +264,15 @@ class ManagedInitialWindowCommand:
             )
             if task.attempts >= fulfillment.max_attempts:
                 raise conflict("provision_attempts_exhausted")
+        rollover_continuation = False
+        if task is None and epoch.previous_epoch_id is not None:
+            previous_epoch = await self.epochs.find(epoch.previous_epoch_id)
+            rollover_continuation = (
+                previous_epoch is not None
+                and previous_epoch.installation_id == installation.id
+                and await self.epoch_seals.by_epoch(previous_epoch.id)
+                is not None
+            )
         if (
             not node.is_enabled
             or not CustomerAccessPolicy.services_available(customer)
@@ -264,6 +284,7 @@ class ManagedInitialWindowCommand:
             )
             or task is None
             and subscription.provisioning_managed
+            and not rollover_continuation
             or subscription.renewal_count != data.generation
             or subscription.expires_at is not None
             and subscription.expires_at <= now
@@ -302,16 +323,28 @@ class ManagedInitialWindowCommand:
         revision = await self.revisions.get(
             installation.runtime_revision_id, installation.core_id
         )
+        if (
+            revision.encrypted_memberships is None
+            or revision.membership_sha256 is None
+        ):
+            raise conflict("managed_runtime_snapshot_stale")
         snapshot = await self.snapshots.facts(
             initial.core_id,
             runtime.max_configurations + 1,
             runtime.max_profiles + 1,
         )
-        fingerprint = await asyncio.to_thread(
-            RuntimePayload.fingerprints, snapshot, now
-        )
-        if fingerprint[0] != revision.snapshot_sha256:
-            raise conflict("managed_runtime_snapshot_stale")
+        try:
+            await asyncio.to_thread(
+                ManagedAdmissionMembership.verify,
+                snapshot,
+                revision.encrypted_memberships,
+                revision.membership_sha256,
+                revision.snapshot_sha256,
+                now,
+                self.settings.configuration_encryption_key,
+            )
+        except (ValueError, TypeError, KeyError):
+            raise conflict("managed_runtime_snapshot_stale") from None
         member = next(
             (
                 row
