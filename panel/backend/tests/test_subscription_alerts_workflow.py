@@ -188,14 +188,16 @@ class SubscriptionAlertsWorkflowTest(StaffAdministrationWorkflowFixture):
                     col(NotificationTable.id) == quota[0]["id"]
                 )
             )
+            row = persisted.scalar_one()
+            assert row.subscription_context is not None
             self.assertEqual(
-                persisted.scalar_one().subscription_context["remaining_bytes"],
-                150000000,
+                row.subscription_context["remaining_bytes"], 150000000
             )
 
     async def test_policy_capacity_and_legacy_placeholder_compatibility(self):
         snapshot = await self.configure_alerts()
         policy = snapshot["values"]["subscription_alerts"]
+        assert policy is not None
         policy["expiry_hours"] = [
             self.settings.subscription_alerts_capacity.max_expiry_hours + 1
         ]

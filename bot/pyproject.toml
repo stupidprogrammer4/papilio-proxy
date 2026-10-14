@@ -22,3 +22,13 @@ select = ["E", "F", "I", "W"]
 include = ["papilio_telegram"]
 pythonVersion = "3.13"
 typeCheckingMode = "standard"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--import-mode=importlib --strict-markers"
+markers = [
+  "bot: Telegram adapter and customer presentation contracts",
+  "unit: isolated behavior",
+  "integration: isolated real infrastructure",
+  "api: HTTP contracts",
+]

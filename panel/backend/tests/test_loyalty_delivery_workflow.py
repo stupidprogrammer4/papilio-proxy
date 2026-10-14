@@ -18,6 +18,7 @@ from tests.test_loyalty_workflow import LoyaltyWorkflowTest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "bot"))
 from papilio_telegram.api import BotApi
+from papilio_telegram.checkout import CheckoutDraftLimits
 from papilio_telegram.config import BotApiLimits, BotSettings
 from papilio_telegram.delivery import register_delivery
 
@@ -132,6 +133,7 @@ class LoyaltyDeliveryWorkflowTest(LoyaltyWorkflowTest):
             delivery_key = uuid4().hex
             bot_settings = BotSettings(
                 api_limits=limits,
+                checkout_limits=CheckoutDraftLimits(20, 60, 5),
                 webhook_max_inflight=4,
                 webhook_processing_timeout_seconds=5,
                 webhook_max_request_bytes=4096,

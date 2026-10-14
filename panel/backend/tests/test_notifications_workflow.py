@@ -23,6 +23,8 @@ from src.modules.operations.notifications.interfaces import (
 )
 from tests.test_support_workflow import SupportWorkflowTest
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "bot"))
+
 
 class NotificationsWorkflowTest(SupportWorkflowTest):
     async def notification_policy(self, **changes):
@@ -595,6 +597,7 @@ class NotificationsWorkflowTest(SupportWorkflowTest):
 
         sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "bot"))
         from papilio_telegram.api import BotApi
+        from papilio_telegram.checkout import CheckoutDraftLimits
         from papilio_telegram.config import BotSettings
         from papilio_telegram.delivery import register_delivery
 
@@ -689,6 +692,7 @@ class NotificationsWorkflowTest(SupportWorkflowTest):
         private_key = uuid4().hex
         settings = BotSettings(
             api_limits=api_limits,
+            checkout_limits=CheckoutDraftLimits(20, 60, 5),
             webhook_max_inflight=2,
             webhook_processing_timeout_seconds=2,
             webhook_max_request_bytes=4096,
