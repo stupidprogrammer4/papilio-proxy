@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"sort"
 	"time"
 )
 
@@ -41,6 +42,28 @@ type OriginalWindowAdmission struct {
 	OriginalBytes []byte
 	Receipt       WindowAdmissionReceipt
 	Admission     StrictWindowAdmission
+}
+
+type OriginalWindowAdmissionBatchItem struct {
+	ProfileID      int64           `json:"profile_id"`
+	OriginalWindow json.RawMessage `json:"original_window"`
+}
+
+type OriginalWindowAdmissionBatchRequest struct {
+	BatchRequestKey string                             `json:"batch_request_key"`
+	Windows         []OriginalWindowAdmissionBatchItem `json:"windows"`
+}
+
+type OriginalWindowAdmissionBatchResult struct {
+	WindowID        string                 `json:"window_id"`
+	OriginalReceipt string                 `json:"original_receipt"`
+	Receipt         WindowAdmissionReceipt `json:"receipt"`
+}
+
+type originalWindowAdmissionInput struct {
+	grant   WindowGrant
+	startup ClosedStartupReceipt
+	digest  string
 }
 
 func (a StrictWindowAdmission) MarshalJSON() ([]byte, error) {
@@ -88,33 +111,51 @@ func (m *WindowManager) admissionStartup(grant WindowGrant) (ClosedStartupReceip
 // AdmitOriginal preserves original API-issued bytes for exact receipt binding.
 // Durable replay never opens a frozen or previously owned process window.
 func (m *WindowManager) AdmitOriginal(payload []byte) (OriginalWindowAdmission, error) {
-	if m.policy.MaxAdmissionReceipts <= 0 || m.store.admissions == nil {
-		return OriginalWindowAdmission{}, errors.New("managed_admission_receipts_disabled")
-	}
-	if CheckJSON(payload, m.policy.MaxRecordBytes, m.gate.policy.MaxJSONDepth) != nil {
-		return OriginalWindowAdmission{}, errors.New("managed_admission_window_invalid")
-	}
-	decoder := json.NewDecoder(bytes.NewReader(payload))
-	decoder.DisallowUnknownFields()
-	var grant WindowGrant
-	if decoder.Decode(&grant) != nil || decoder.Decode(new(any)) != io.EOF || m.validate(grant) != nil || grant.EnforcementMode != "strict_decoded" {
-		return OriginalWindowAdmission{}, errors.New("managed_admission_window_invalid")
-	}
-	startup, err := m.admissionStartup(grant)
+	input, err := m.prepareOriginalAdmission(payload)
 	if err != nil {
 		return OriginalWindowAdmission{}, err
 	}
-	digest := sha256.Sum256(payload)
-	windowHash := hex.EncodeToString(digest[:])
-	owner := m.profiles[grant.Binding.ProfileID]
+	owner := m.profiles[input.grant.Binding.ProfileID]
 	bounded, cancel := context.WithTimeout(context.Background(), time.Duration(m.policy.TransactionTimeoutMS)*time.Millisecond)
 	defer cancel()
 	if err = owner.acquire(bounded); err != nil {
 		return OriginalWindowAdmission{}, err
 	}
 	defer owner.release()
+	return m.admitOriginalLocked(input, owner, bounded)
+}
+
+func (m *WindowManager) prepareOriginalAdmission(payload []byte) (originalWindowAdmissionInput, error) {
+	var input originalWindowAdmissionInput
+	if m.policy.MaxAdmissionReceipts <= 0 || m.store.admissions == nil {
+		return input, errors.New("managed_admission_receipts_disabled")
+	}
+	if CheckJSON(payload, m.policy.MaxRecordBytes, m.gate.policy.MaxJSONDepth) != nil {
+		return input, errors.New("managed_admission_window_invalid")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.DisallowUnknownFields()
+	var grant WindowGrant
+	if decoder.Decode(&grant) != nil || decoder.Decode(new(any)) != io.EOF || m.validate(grant) != nil || grant.EnforcementMode != "strict_decoded" {
+		return input, errors.New("managed_admission_window_invalid")
+	}
+	startup, err := m.admissionStartup(grant)
+	if err != nil {
+		return input, err
+	}
+	digest := sha256.Sum256(payload)
+	input = originalWindowAdmissionInput{
+		grant:   cloneWindow(grant),
+		startup: startup,
+		digest:  hex.EncodeToString(digest[:]),
+	}
+	return input, nil
+}
+
+func (m *WindowManager) admitOriginalLocked(input originalWindowAdmissionInput, owner *windowProfile, bounded context.Context) (OriginalWindowAdmission, error) {
+	grant := input.grant
 	if original, readErr := m.store.originalAdmission(grant.WindowID); readErr == nil {
-		if original.Admission.WindowSHA256 != windowHash || !sameWindow(original.Admission.Window, grant) {
+		if original.Admission.WindowSHA256 != input.digest || !sameWindow(original.Admission.Window, grant) {
 			return OriginalWindowAdmission{}, errors.New("managed_admission_original_conflict")
 		}
 		return original, nil
@@ -130,7 +171,7 @@ func (m *WindowManager) AdmitOriginal(payload []byte) (OriginalWindowAdmission, 
 		m.closeOwnedUncertainAdmission(grant)
 		return OriginalWindowAdmission{}, errors.New("managed_admission_observation_unresolved")
 	}
-	if err = m.admitOwned(cloneWindow(grant), owner, bounded); err != nil {
+	if err := m.admitOwned(cloneWindow(grant), owner, bounded); err != nil {
 		return OriginalWindowAdmission{}, err
 	}
 	m.gate.mu.Lock()
@@ -142,13 +183,101 @@ func (m *WindowManager) AdmitOriginal(payload []byte) (OriginalWindowAdmission, 
 		m.closeUncertainAdmission(grant.Binding.ProfileID, ledger)
 		return OriginalWindowAdmission{}, errors.New("managed_admission_observation_unresolved")
 	}
-	admission := StrictWindowAdmission{1, "historical_strict_window_admission", cloneWindow(grant), windowHash, AdapterRevision, SourceCommit, UpstreamModule, AccountingScope, windowPolicyHash(m.policy), startup.SHA256, observed, true, true, true, false}
+	admission := StrictWindowAdmission{1, "historical_strict_window_admission", cloneWindow(grant), input.digest, AdapterRevision, SourceCommit, UpstreamModule, AccountingScope, windowPolicyHash(m.policy), input.startup.SHA256, observed, true, true, true, false}
 	original, err := m.store.saveOriginalAdmission(admission)
 	if err != nil {
 		m.closeUncertainAdmission(grant.Binding.ProfileID, ledger)
 		return OriginalWindowAdmission{}, err
 	}
 	return original, nil
+}
+
+// AdmitOriginalBatch validates the full membership before taking profile permits
+// and returns one identity-keyed response for a bounded UDS operation.
+func (m *WindowManager) AdmitOriginalBatch(input OriginalWindowAdmissionBatchRequest) ([]OriginalWindowAdmissionBatchResult, error) {
+	if len(input.BatchRequestKey) < 8 || len(input.BatchRequestKey) > 128 || len(input.Windows) == 0 || len(input.Windows) > m.gate.policy.MaxProfiles {
+		return nil, errors.New("managed_admission_batch_invalid")
+	}
+	prepared := make([]originalWindowAdmissionInput, 0, len(input.Windows))
+	profileIDs := make([]int64, 0, len(input.Windows))
+	seenWindows := make(map[string]struct{}, len(input.Windows))
+	seenGrants := make(map[int64]struct{}, len(input.Windows))
+	seenProfiles := make(map[int64]struct{}, len(input.Windows))
+	for _, item := range input.Windows {
+		value, err := m.prepareOriginalAdmission(item.OriginalWindow)
+		if err != nil || item.ProfileID != value.grant.Binding.ProfileID {
+			return nil, errors.New("managed_admission_batch_member_invalid")
+		}
+		if _, exists := seenProfiles[item.ProfileID]; exists {
+			return nil, errors.New("managed_admission_batch_duplicate_profile")
+		}
+		if _, exists := seenWindows[value.grant.WindowID]; exists {
+			return nil, errors.New("managed_admission_batch_duplicate_window")
+		}
+		if _, exists := seenGrants[value.grant.GrantID]; exists {
+			return nil, errors.New("managed_admission_batch_duplicate_grant")
+		}
+		seenProfiles[item.ProfileID] = struct{}{}
+		seenWindows[value.grant.WindowID] = struct{}{}
+		seenGrants[value.grant.GrantID] = struct{}{}
+		prepared = append(prepared, value)
+		profileIDs = append(profileIDs, item.ProfileID)
+	}
+	sort.Slice(profileIDs, func(left, right int) bool { return profileIDs[left] < profileIDs[right] })
+	bounded, cancel := context.WithTimeout(context.Background(), time.Duration(m.policy.TransactionTimeoutMS)*time.Millisecond)
+	defer cancel()
+	locked := make([]*windowProfile, 0, len(profileIDs))
+	for _, profileID := range profileIDs {
+		owner := m.profiles[profileID]
+		if owner == nil {
+			releaseWindowProfiles(locked)
+			return nil, errors.New("managed_admission_batch_profile_unbound")
+		}
+		if err := owner.acquire(bounded); err != nil {
+			releaseWindowProfiles(locked)
+			return nil, err
+		}
+		locked = append(locked, owner)
+	}
+	results := make([]OriginalWindowAdmissionBatchResult, 0, len(prepared))
+	opened := make([]WindowGrant, 0, len(prepared))
+	var failure error
+	for _, value := range prepared {
+		owner := m.profiles[value.grant.Binding.ProfileID]
+		_, lookupErr := m.store.originalAdmission(value.grant.WindowID)
+		fresh := os.IsNotExist(lookupErr)
+		if lookupErr != nil && !fresh {
+			failure = lookupErr
+			break
+		}
+		result, err := m.admitOriginalLocked(value, owner, bounded)
+		if err != nil {
+			failure = err
+			break
+		}
+		if fresh {
+			opened = append(opened, value.grant)
+		}
+		results = append(results, OriginalWindowAdmissionBatchResult{
+			WindowID:        value.grant.WindowID,
+			OriginalReceipt: string(result.OriginalBytes),
+			Receipt:         result.Receipt,
+		})
+	}
+	releaseWindowProfiles(locked)
+	if failure != nil {
+		for _, grant := range opened {
+			m.freezeAutomatic(grant.Binding.ProfileID, grant.WindowID, ReservationContention)
+		}
+		return nil, errors.New("managed_admission_batch_unresolved")
+	}
+	return results, nil
+}
+
+func releaseWindowProfiles(profiles []*windowProfile) {
+	for index := len(profiles) - 1; index >= 0; index-- {
+		profiles[index].release()
+	}
 }
 
 func (m *WindowManager) closeOwnedUncertainAdmission(grant WindowGrant) {

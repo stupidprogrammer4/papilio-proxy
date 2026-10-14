@@ -3,6 +3,7 @@ package managed
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"math"
 	"net/http"
 )
@@ -44,6 +45,36 @@ func (c *Control) handleWindow(writer http.ResponseWriter, path string, payload 
 			return
 		}
 		writeOriginalAdmission(writer, original)
+		return
+	}
+	if path == "/v1/windows/admit-original/batch" {
+		var input OriginalWindowAdmissionBatchRequest
+		batchDecoder := json.NewDecoder(bytes.NewReader(payload))
+		batchDecoder.DisallowUnknownFields()
+		if batchDecoder.Decode(&input) != nil || batchDecoder.Decode(new(any)) != io.EOF {
+			controlError(writer, http.StatusBadRequest, "managed_admission_batch_invalid")
+			return
+		}
+		if !windowAdmissionBatchResponseFits(c.gate.policy, c.windows.policy, input) {
+			controlError(writer, http.StatusServiceUnavailable, "managed_window_response_capacity")
+			return
+		}
+		items, err := c.windows.AdmitOriginalBatch(input)
+		if err != nil {
+			controlError(writer, http.StatusConflict, "managed_admission_batch_unresolved")
+			return
+		}
+		output, marshalErr := json.Marshal(struct {
+			State           string                               `json:"state"`
+			BatchRequestKey string                               `json:"batch_request_key"`
+			Windows         []OriginalWindowAdmissionBatchResult `json:"windows"`
+		}{"local_component_original_admissions", input.BatchRequestKey, items})
+		if marshalErr != nil || !windowBatchOutputFits(c.gate.policy, len(items), int64(len(output))) {
+			controlError(writer, http.StatusServiceUnavailable, "managed_window_response_capacity")
+			return
+		}
+		writer.Header().Set("Cache-Control", "no-store")
+		_, _ = writer.Write(output)
 		return
 	}
 	if path == "/v1/windows/revoke-original" {
@@ -160,4 +191,29 @@ func windowBatchOutputFits(policy Policy, count int, size int64) bool {
 	}
 	maximum := int64(count)*policy.MaxSnapshotBytes + policy.MaxControlBytes
 	return size > 0 && size <= maximum
+}
+
+func windowAdmissionBatchResponseFits(
+	policy Policy,
+	windows WindowPolicy,
+	input OriginalWindowAdmissionBatchRequest,
+) bool {
+	count := len(input.Windows)
+	if count <= 0 || count > policy.MaxProfiles || windows.MaxRecordBytes <= 0 || policy.MaxSnapshotBytes > (math.MaxInt64-policy.MaxControlBytes)/int64(count) {
+		return false
+	}
+	worstCase := int64(policy.MaxControlBytes)
+	for _, item := range input.Windows {
+		itemBytes := int64(len(item.OriginalWindow))
+		if itemBytes <= 0 || itemBytes > windows.MaxRecordBytes || itemBytes > (math.MaxInt64-2048)/2 {
+			return false
+		}
+		itemWorstCase := itemBytes*2 + 2048
+		if worstCase > math.MaxInt64-itemWorstCase {
+			return false
+		}
+		worstCase += itemWorstCase
+	}
+	maximum := int64(count)*policy.MaxSnapshotBytes + policy.MaxControlBytes
+	return worstCase <= maximum
 }

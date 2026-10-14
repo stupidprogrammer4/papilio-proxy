@@ -137,6 +137,108 @@ func TestOriginalAdmissionSocketStrictEnforcementAndHistoricalReplay(t *testing.
 		t.Fatal("changed original bytes accepted")
 	}
 }
+
+func TestOriginalAdmissionBatchSocketMapsAndReplaysEveryProfile(t *testing.T) {
+	m, g, policy := originalAdmissionFixture(t, 2)
+	client := originalAdmissionClient(t, m, g)
+	first := strictGrant(policy, 1, "1", 8)
+	second := strictGrant(policy, 2, "2", 12)
+	firstBytes, _ := json.Marshal(first)
+	secondBytes, _ := json.Marshal(second)
+	input := OriginalWindowAdmissionBatchRequest{
+		BatchRequestKey: "admission-batch-0001",
+		Windows: []OriginalWindowAdmissionBatchItem{
+			{ProfileID: 1, OriginalWindow: firstBytes},
+			{ProfileID: 2, OriginalWindow: secondBytes},
+		},
+	}
+	body, _ := json.Marshal(input)
+	post := func(payload []byte) (*http.Response, []byte) {
+		t.Helper()
+		response, err := client.Post("http://private/v1/windows/admit-original/batch", "application/json", bytes.NewReader(payload))
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, readErr := io.ReadAll(response.Body)
+		_ = response.Body.Close()
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		return response, result
+	}
+	response, result := post(body)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("batch admission status=%d body=%s", response.StatusCode, result)
+	}
+	var accepted struct {
+		State           string                               `json:"state"`
+		BatchRequestKey string                               `json:"batch_request_key"`
+		Windows         []OriginalWindowAdmissionBatchResult `json:"windows"`
+	}
+	if json.Unmarshal(result, &accepted) != nil || accepted.State != "local_component_original_admissions" || accepted.BatchRequestKey != input.BatchRequestKey || len(accepted.Windows) != 2 {
+		t.Fatal("batch response lost operation identity or members")
+	}
+	byWindow := make(map[string]OriginalWindowAdmissionBatchResult, len(accepted.Windows))
+	for _, item := range accepted.Windows {
+		byWindow[item.WindowID] = item
+	}
+	for _, grant := range []WindowGrant{first, second} {
+		item, exists := byWindow[grant.WindowID]
+		var admission StrictWindowAdmission
+		if exists {
+			_ = json.Unmarshal([]byte(item.OriginalReceipt), &admission)
+		}
+		if !exists || item.Receipt.WindowID != grant.WindowID || admission.Window.Binding.ProfileID != grant.Binding.ProfileID || item.OriginalReceipt == "" {
+			t.Fatalf("profile admission missing identity mapping: %+v", item)
+		}
+		if _, err := g.Register(grant.Binding.ProfileID, &testResources{cancel: make(chan struct{})}); err != nil {
+			t.Fatalf("profile %d did not open: %v", grant.Binding.ProfileID, err)
+		}
+	}
+	replayed, replayBody := post(body)
+	if replayed.StatusCode != http.StatusOK || !bytes.Equal(result, replayBody) {
+		t.Fatal("exact batch replay changed original receipts")
+	}
+	changedGrant := second
+	changedGrant.AllocatedBytes++
+	input.Windows[1].OriginalWindow, _ = json.Marshal(changedGrant)
+	changedBody, marshalErr := json.Marshal(input)
+	conflict, responseBody := post(changedBody)
+	if marshalErr != nil || conflict.StatusCode != http.StatusConflict || bytes.Contains(responseBody, []byte("original_admissions")) {
+		t.Fatalf("changed batch replay status=%d body=%s", conflict.StatusCode, responseBody)
+	}
+}
+
+func TestOriginalAdmissionBatchRejectsMixedInvalidMemberBeforeAdmission(t *testing.T) {
+	m, g, policy := originalAdmissionFixture(t, 2)
+	client := originalAdmissionClient(t, m, g)
+	first := strictGrant(policy, 1, "1", 8)
+	second := strictGrant(policy, 2, "2", 12)
+	firstBytes, _ := json.Marshal(first)
+	secondBytes, _ := json.Marshal(second)
+	input := OriginalWindowAdmissionBatchRequest{
+		BatchRequestKey: "admission-batch-0002",
+		Windows: []OriginalWindowAdmissionBatchItem{
+			{ProfileID: 1, OriginalWindow: firstBytes},
+			{ProfileID: 1, OriginalWindow: secondBytes},
+		},
+	}
+	body, _ := json.Marshal(input)
+	response, err := client.Post("http://private/v1/windows/admit-original/batch", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	responseBytes, _ := io.ReadAll(response.Body)
+	_ = response.Body.Close()
+	if response.StatusCode != http.StatusConflict {
+		t.Fatalf("mixed invalid batch status=%d body=%s", response.StatusCode, responseBytes)
+	}
+	for _, profileID := range []int64{1, 2} {
+		if _, err = g.Register(profileID, &testResources{cancel: make(chan struct{})}); err == nil {
+			t.Fatalf("invalid batch partially admitted profile %d", profileID)
+		}
+	}
+}
 func hexDigestAdmission(payload []byte) string {
 	sum := sha256.Sum256(payload)
 	return hex.EncodeToString(sum[:])

@@ -147,15 +147,31 @@ class ManagedInstallationWorkflowFixture(StaffAdministrationWorkflowFixture):
                 "/profiles",
                 {"subscription_id": second_subscription["id"]},
             )
-            async with self.connection.uow() as unit:
-                async with transaction(unit):
-                    await unit.execute(
+            if getattr(self, "second_paid_managed_profile", False):
+                async with self.connection.uow() as fresh:
+                    second_request = await fresh.execute(
                         text(
-                            "UPDATE tbl_subscriptions SET status='active',"
-                            "provisioning_managed=0 WHERE id=:id"
+                            "SELECT id FROM tbl_provision_requests WHERE "
+                            "subscription_id=:id"
                         ),
                         {"id": second_subscription["id"]},
                     )
+                    second_request_id = second_request.scalar_one()
+                prepared = await self.client.post(
+                    f"/v1/admin/provisioning/{second_request_id}/prepare",
+                    headers=self.headers,
+                )
+                self.assertEqual(prepared.status_code, 200, prepared.text)
+            else:
+                async with self.connection.uow() as unit:
+                    async with transaction(unit):
+                        await unit.execute(
+                            text(
+                                "UPDATE tbl_subscriptions SET status='active',"
+                                "provisioning_managed=0 WHERE id=:id"
+                            ),
+                            {"id": second_subscription["id"]},
+                        )
         if getattr(self, "paid_managed_fixture", False):
             async with self.connection.uow() as fresh:
                 requests = await fresh.execute(
