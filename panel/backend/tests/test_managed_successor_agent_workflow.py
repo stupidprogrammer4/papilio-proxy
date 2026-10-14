@@ -1,4 +1,4 @@
-"""Native paid activation, three actual TLS windows and durable finality."""
+"""Paid TLS windows, epoch rollover and durable response-loss recovery."""
 
 import asyncio
 import json
@@ -18,6 +18,7 @@ from src.modules.network.managed_runtime.domain.successors import (
     ManagedSuccessorLimits,
     ManagedSuccessorPolicy,
 )
+from tests.managed_epoch_fault_relay import ManagedRolloverResponseDrop
 from tests.managed_installation_agent import actual_registry, compact, digest
 from tests.managed_successor_agent import run_native_successor_cycles
 from tests.real_core_runtime import RealCoreRuntime
@@ -153,20 +154,35 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                     self.assertEqual(
                         (status, activated), ("pending_provision", None)
                     )
-                result = await asyncio.to_thread(
-                    run_native_successor_cycles,
-                    root,
-                    Path(runtime_binary),
-                    registry["registry"],
-                    installation_id,
-                    profile_id,
-                    f"http://127.0.0.1:{listener.getsockname()[1]}",
-                    node,
-                    Path(binaries),
-                    task_id,
-                    payloads,
-                    freeze_after_ms=8000,
-                    max_epochs=2,
+                api_url = f"http://127.0.0.1:{listener.getsockname()[1]}"
+                with ManagedRolloverResponseDrop(api_url) as relay:
+                    try:
+                        result = await asyncio.to_thread(
+                            run_native_successor_cycles,
+                            root,
+                            Path(runtime_binary),
+                            registry["registry"],
+                            installation_id,
+                            profile_id,
+                            relay.url,
+                            node,
+                            Path(binaries),
+                            task_id,
+                            payloads,
+                            freeze_after_ms=8000,
+                            max_epochs=2,
+                        )
+                    except AssertionError as error:
+                        raise AssertionError(
+                            f"{error}:relay={relay.events()}"
+                        ) from error
+                    rollover_responses = relay.rollover_responses()
+                self.assertEqual(len(rollover_responses), 2)
+                self.assertEqual(
+                    rollover_responses[0][0], rollover_responses[1][0]
+                )
+                self.assertEqual(
+                    rollover_responses[0][1:], rollover_responses[1][1:]
                 )
                 self.assertTrue(
                     result.replay_unchanged and result.child_stopped
