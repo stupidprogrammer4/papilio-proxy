@@ -10,6 +10,10 @@ from pathlib import Path
 import uvicorn
 from sqlalchemy import text
 
+from src.modules.network.managed_runtime.domain.epoch_seals import (
+    ManagedEpochSealLimits,
+    ManagedEpochSealPolicy,
+)
 from src.modules.network.managed_runtime.domain.successors import (
     ManagedSuccessorLimits,
     ManagedSuccessorPolicy,
@@ -25,7 +29,7 @@ from tests.test_managed_installation_workflow import (
 class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
     paid_managed_fixture = True
 
-    async def test_actual_paid_three_tls_windows_account_once_and_replay(self):
+    async def test_actual_paid_windows_survive_epoch_rollover_and_replay(self):
         runtime_binary = os.environ.get("PAPILIO_RUNTIME_TEST_BINARY")
         managed_binary = os.environ.get("PAPILIO_MANAGED_TEST_BINARY")
         binaries = os.environ.get("PAPILIO_CORE_BIN_DIR")
@@ -39,6 +43,9 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
             b"paid-native-initial-window-proof",
             b"paid-native-first-successor-window-proof",
             b"paid-native-second-successor-cumulative-window-proof",
+            b"paid-native-second-epoch-initial-window-proof",
+            b"paid-native-second-epoch-first-successor-proof",
+            b"paid-native-second-epoch-second-successor-proof",
         )
         with tempfile.TemporaryDirectory(
             prefix="papilio-native-successors-"
@@ -80,11 +87,12 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                 registry["registry"]["window_policy"].update(
                     {
                         "max_windows": 8,
-                        "max_records": 16,
+                        "max_records": 24,
                         "max_admission_receipts": 8,
                     }
                 )
                 registry["registry"]["component_policy"]["max_barriers"] = 8
+                registry["registry"]["window_policy"]["max_epoch_seals"] = 2
                 registry["trusted_api_policy"][
                     "window_policy_sha256"
                 ] = await asyncio.to_thread(
@@ -107,6 +115,14 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                                 max_windows_per_epoch=8,
                                 max_epoch_seconds=300,
                                 max_requested_bytes=1024,
+                            ),
+                        ),
+                        "epoch_seal_policy": ManagedEpochSealPolicy(
+                            mode="strict",
+                            limits=ManagedEpochSealLimits(
+                                max_windows_per_epoch=8,
+                                max_receipt_bytes=131072,
+                                max_epochs=2,
                             ),
                         ),
                     }
@@ -150,18 +166,19 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                     task_id,
                     payloads,
                     freeze_after_ms=8000,
+                    max_epochs=2,
                 )
                 self.assertTrue(
                     result.replay_unchanged and result.child_stopped
                 )
-                entries = (result.initial, *result.successors)
-                self.assertEqual(len(entries), 3)
+                entries = result.entries
+                self.assertEqual(len(entries), 6)
                 self.assertEqual(
                     len({e["issued"]["window"]["window_id"] for e in entries}),
-                    3,
+                    6,
                 )
                 self.assertEqual(
-                    len({e["issued"]["window"]["epoch"] for e in entries}), 1
+                    len({e["issued"]["window"]["epoch"] for e in entries}), 2
                 )
                 async with self.connection.uow() as fresh:
                     grants = await fresh.execute(
@@ -182,17 +199,20 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                         {"id": subscription["id"]},
                     )
                     rows = tuple(grants.all())
-                    self.assertEqual(len(rows), 3)
+                    self.assertEqual(len(rows), 6)
                     baseline = 0
-                    for row, entry, payload in zip(
-                        rows, entries, payloads, strict=True
+                    for index, (row, entry, payload) in enumerate(
+                        zip(rows, entries, payloads, strict=True)
                     ):
+                        if index % 3 == 0:
+                            baseline = 0
+                        expected_task_id = task_id if index < 3 else None
                         self.assertEqual(
                             tuple(row[:5]),
                             (
                                 entry["issued"]["window"]["window_id"],
                                 entry["issued"]["window"]["grant_id"],
-                                task_id,
+                                expected_task_id,
                                 baseline,
                                 baseline,
                             ),
@@ -254,8 +274,8 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                             200000,
                             1,
                             1,
-                            3,
-                            3,
+                            6,
+                            6,
                             0,
                             1,
                         ),
@@ -269,8 +289,25 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                         {"id": subscription["id"]},
                     )
                     self.assertEqual(
-                        tuple(events.one()), (2 * sum(map(len, payloads)), 3)
+                        tuple(events.one()), (2 * sum(map(len, payloads)), 6)
                     )
+                    epoch_counts = await fresh.execute(
+                        text(
+                            "SELECT COUNT(*) FROM tbl_managed_epoches "
+                            "WHERE installation_id=:id"
+                        ),
+                        {"id": installation_id},
+                    )
+                    self.assertEqual(epoch_counts.scalar_one(), 2)
+                    rollover_count = await fresh.execute(
+                        text(
+                            "SELECT COUNT(*) FROM tbl_managed_epoches "
+                            "WHERE installation_id=:id "
+                            "AND previous_epoch_id IS NOT NULL"
+                        ),
+                        {"id": installation_id},
+                    )
+                    self.assertEqual(rollover_count.scalar_one(), 1)
             finally:
                 server.should_exit = True
                 try:
