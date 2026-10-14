@@ -207,6 +207,37 @@ class ManagedAdmissionRepository(
         )
         return result.scalar_one_or_none()
 
+    async def by_windows_many(
+        self, window_ids: list[int]
+    ) -> list[ManagedAdmissionModel]:
+        selected = sorted(set(window_ids))
+        if not selected:
+            return []
+        result = await self.uow.execute(
+            select(self.table)
+            .where(col(self.table.window_id).in_(selected))
+            .order_by(col(self.table.window_id))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return list(result.scalars().all())
+
+    async def create_many(self, rows: list[ManagedAdmissionModel]) -> None:
+        if not rows:
+            return
+        columns = {
+            name: ManagedAdmissionTable.__table__.c[name]
+            for name in (
+                "window_id",
+                "provision_task_id",
+                "receipt_sha256",
+                "outcome",
+                "observed_at",
+                "encrypted_receipt",
+            )
+        }
+        await self.bulk_insert(rows, insert_columns=columns)
+
 
 class ManagedRevocationRepository(
     MySQLPersistenceRepository[ManagedRevocationModel]

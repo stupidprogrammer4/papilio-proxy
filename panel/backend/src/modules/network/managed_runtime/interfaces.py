@@ -178,6 +178,12 @@ class IManagedAdmissionService(Protocol):
     def create(
         self, data: ManagedAdmissionModel
     ) -> Awaitable[ManagedAdmissionModel]: ...
+    def by_windows_many(
+        self, window_ids: list[int]
+    ) -> Awaitable[list[ManagedAdmissionModel]]: ...
+    def create_many(
+        self, rows: list[ManagedAdmissionModel]
+    ) -> Awaitable[None]: ...
 
 
 class IManagedAdmissionCommand(Protocol):

@@ -190,6 +190,15 @@ class ManagedAdmissionService:
         result = await self.repo.create(data)
         return result
 
+    async def by_windows_many(
+        self, window_ids: list[int]
+    ) -> list[ManagedAdmissionModel]:
+        result = await self.repo.by_windows_many(window_ids)
+        return result
+
+    async def create_many(self, rows: list[ManagedAdmissionModel]) -> None:
+        await self.repo.create_many(rows)
+
 
 class ManagedRevocationService:
     def __init__(self, repo: ManagedRevocationRepository) -> None:
