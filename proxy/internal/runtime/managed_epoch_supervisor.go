@@ -87,6 +87,17 @@ func managedEpochPolicy(
 		window.RequireAdmissionReceipt = false
 		result.WindowCycle = &window
 	}
+	if policy.WindowBatch != nil {
+		batch := *policy.WindowBatch
+		batch.Profiles = append([]ManagedWindowCyclePolicy(nil), policy.WindowBatch.Profiles...)
+		for index := range batch.Profiles {
+			if initialEpoch != currentEpoch {
+				batch.Profiles[index].ProvisionTaskID = 0
+				batch.Profiles[index].RequireAdmissionReceipt = false
+			}
+		}
+		result.WindowBatch = &batch
+	}
 	if policy.SuccessorCycles != nil {
 		successors := *policy.SuccessorCycles
 		if policy.SuccessorCycles.Template != nil {
@@ -325,43 +336,50 @@ func runManagedEpochPhases(
 	journal *Journal,
 	installation managedInstallationJournal,
 ) error {
-	windowExists, err := managedJournalFileExists(journal, "managed-window-cycle.json")
-	if err != nil {
-		return err
-	}
-	if windowExists {
-		err = replayManagedWindowCycle(ctx, client, policy, journal, installation)
+	if policy.WindowBatch != nil && policy.WindowBatch.Enabled {
+		err := runManagedWindowBatchCycle(ctx, client, policy, journal, installation)
+		if err != nil {
+			return err
+		}
 	} else {
-		err = runManagedWindowCycle(ctx, client, policy, journal, installation)
-	}
-	if err != nil {
-		return err
-	}
-	successorsExist, err := managedJournalFileExists(journal, managedSuccessorJournalName)
-	if err != nil {
-		return err
-	}
-	if successorsExist {
-		err = replayManagedSuccessorChain(
-			ctx,
-			client,
-			policy,
-			policy.SuccessorCycles,
-			journal,
-			installation,
-		)
-	} else {
-		err = runManagedSuccessorChain(
-			ctx,
-			client,
-			policy,
-			policy.SuccessorCycles,
-			journal,
-			installation,
-		)
-	}
-	if err != nil {
-		return err
+		windowExists, err := managedJournalFileExists(journal, "managed-window-cycle.json")
+		if err != nil {
+			return err
+		}
+		if windowExists {
+			err = replayManagedWindowCycle(ctx, client, policy, journal, installation)
+		} else {
+			err = runManagedWindowCycle(ctx, client, policy, journal, installation)
+		}
+		if err != nil {
+			return err
+		}
+		successorsExist, err := managedJournalFileExists(journal, managedSuccessorJournalName)
+		if err != nil {
+			return err
+		}
+		if successorsExist {
+			err = replayManagedSuccessorChain(
+				ctx,
+				client,
+				policy,
+				policy.SuccessorCycles,
+				journal,
+				installation,
+			)
+		} else {
+			err = runManagedSuccessorChain(
+				ctx,
+				client,
+				policy,
+				policy.SuccessorCycles,
+				journal,
+				installation,
+			)
+		}
+		if err != nil {
+			return err
+		}
 	}
 	sealExists, err := managedJournalFileExists(journal, managedEpochSealJournalName)
 	if err != nil {

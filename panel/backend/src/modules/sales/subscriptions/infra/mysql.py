@@ -12,6 +12,9 @@ from src.modules.sales.subscriptions.domain.models import (
     SubscriptionControlModel,
     SubscriptionModel,
 )
+from src.modules.sales.subscriptions.domain.results import (
+    SubscriptionUsageUpdate,
+)
 from src.modules.sales.subscriptions.infra.tables import (
     SubscriptionControlTable,
     SubscriptionTable,
@@ -20,6 +23,37 @@ from src.modules.sales.subscriptions.infra.tables import (
 
 class SubscriptionRepository(MySQLPersistenceRepository[SubscriptionModel]):
     table = SubscriptionTable
+
+    async def locked_many(self, ids: list[int]) -> list[SubscriptionModel]:
+        selected = sorted(set(ids))
+        if not selected:
+            return []
+        result = await self.uow.execute(
+            select(SubscriptionTable)
+            .where(col(SubscriptionTable.id).in_(selected))
+            .order_by(col(SubscriptionTable.id))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return list(result.scalars().all())
+
+    async def update_used_many(
+        self, updates: list[SubscriptionUsageUpdate]
+    ) -> None:
+        if not updates:
+            return
+        rows = [
+            SubscriptionModel.patch(
+                id=item.subscription_id, used_bytes=item.used_bytes
+            )
+            for item in updates
+        ]
+        await self.bulk_update(
+            rows,
+            update_columns={
+                "used_bytes": SubscriptionTable.__table__.c.used_bytes,
+            },
+        )
 
     async def by_purchase_key(self, key: str) -> SubscriptionModel | None:
         result = await self.uow.execute(

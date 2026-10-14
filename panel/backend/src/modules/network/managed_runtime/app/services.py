@@ -8,8 +8,13 @@ from src.modules.network.managed_runtime.domain.models import (
     ManagedBarrierModel,
     ManagedEpochModel,
     ManagedInstallationModel,
+    ManagedOperationBatchModel,
     ManagedRevocationModel,
     ManagedWindowModel,
+)
+from src.modules.network.managed_runtime.domain.results import (
+    ManagedBarrierIdentity,
+    ManagedWindowRequestIdentity,
 )
 from src.modules.network.managed_runtime.domain.rollovers import (
     ManagedInstallationEpochCount,
@@ -22,6 +27,7 @@ from src.modules.network.managed_runtime.infra.mysql import (
     ManagedBarrierRepository,
     ManagedEpochRepository,
     ManagedInstallationRepository,
+    ManagedOperationBatchRepository,
     ManagedRevocationRepository,
     ManagedWindowRepository,
 )
@@ -107,6 +113,25 @@ class ManagedEpochService:
         return result
 
 
+class ManagedOperationBatchService:
+    def __init__(self, repo: ManagedOperationBatchRepository) -> None:
+        self.repo = repo
+
+    async def by_identity(
+        self, installation_id: int, operation: str, request_key: str
+    ) -> ManagedOperationBatchModel | None:
+        result = await self.repo.by_identity(
+            installation_id, operation, request_key
+        )
+        return result
+
+    async def create(
+        self, data: ManagedOperationBatchModel
+    ) -> ManagedOperationBatchModel:
+        result = await self.repo.create(data)
+        return result
+
+
 class ManagedEpochSealService:
     def __init__(self, repo: ManagedEpochSealRepository) -> None:
         self.repo = repo
@@ -122,6 +147,12 @@ class ManagedWindowService:
 
     async def find(self, id: int) -> ManagedWindowModel | None:
         result = await self.repo.get_by_id(id)
+        return result
+
+    async def by_identities_many(
+        self, window_ids: list[str]
+    ) -> list[ManagedWindowModel]:
+        result = await self.repo.by_identities_many(window_ids)
         return result
 
     async def by_identity(self, window_id: str) -> ManagedWindowModel | None:
@@ -148,9 +179,32 @@ class ManagedWindowService:
         )
         return result
 
+    async def initials_for_profiles_epoch(
+        self, profile_ids: list[int], epoch_id: int
+    ) -> list[ManagedWindowModel]:
+        result = await self.repo.initials_for_profiles_epoch(
+            profile_ids, epoch_id
+        )
+        return result
+
     async def create(self, data: ManagedWindowModel) -> ManagedWindowModel:
         result = await self.repo.create(data)
         return result
+
+    async def by_operation_batch(
+        self, operation_batch_id: int
+    ) -> list[ManagedWindowModel]:
+        result = await self.repo.by_operation_batch(operation_batch_id)
+        return result
+
+    async def by_requests_many(
+        self, identities: list[ManagedWindowRequestIdentity]
+    ) -> list[ManagedWindowModel]:
+        result = await self.repo.by_requests_many(identities)
+        return result
+
+    async def create_many(self, rows: list[ManagedWindowModel]) -> None:
+        await self.repo.create_many(rows)
 
 
 class ManagedBarrierService:
@@ -167,9 +221,18 @@ class ManagedBarrierService:
         result = await self.repo.by_identity(epoch_id, barrier_id)
         return result
 
+    async def by_identities_many(
+        self, identities: list[ManagedBarrierIdentity]
+    ) -> list[ManagedBarrierModel]:
+        result = await self.repo.by_identities_many(identities)
+        return result
+
     async def create(self, data: ManagedBarrierModel) -> ManagedBarrierModel:
         result = await self.repo.create(data)
         return result
+
+    async def create_many(self, rows: list[ManagedBarrierModel]) -> None:
+        await self.repo.create_many(rows)
 
 
 class ManagedAdmissionService:

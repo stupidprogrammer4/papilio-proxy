@@ -13,6 +13,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 from socketserver import BaseRequestHandler, ThreadingTCPServer
+from typing import cast
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
@@ -40,15 +41,16 @@ class DrainProbePolicy:
 
 class EchoHandler(BaseRequestHandler):
     def handle(self):
-        self.request.settimeout(self.server.policy.exchange_seconds)
+        server = cast("OwnedEcho", self.server)
+        self.request.settimeout(server.policy.exchange_seconds)
         try:
             while True:
                 payload = self.request.recv(
-                    self.server.policy.max_payload_bytes + 1
+                    server.policy.max_payload_bytes + 1
                 )
                 if not payload:
                     return
-                if len(payload) > self.server.policy.max_payload_bytes:
+                if len(payload) > server.policy.max_payload_bytes:
                     return
                 self.request.sendall(payload)
         except OSError:
@@ -77,9 +79,9 @@ class OwnedEcho(ThreadingTCPServer):
             self.owned[id(request)] = request
         return request, address
 
-    def process_request_thread(self, request, address):
+    def process_request_thread(self, request, client_address):
         try:
-            super().process_request_thread(request, address)
+            super().process_request_thread(request, client_address)
         finally:
             with self.owned_lock:
                 self.owned.pop(id(request), None)

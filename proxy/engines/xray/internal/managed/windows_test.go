@@ -1,8 +1,10 @@
 package managed
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -134,6 +136,71 @@ func TestWindowLifecycleClosedAdmissionReplayRotationAndSessionFence(t *testing.
 		t.Fatal("B blocked by stale A request", err)
 	}
 }
+
+func TestWindowBatchFreezePreservesIndependentProfileBudgets(t *testing.T) {
+	m, gate, _, _ := windowFixture(t)
+	first := windowGrant(1, "1")
+	second := windowGrant(2, "2")
+	if err := m.Admit(first); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Admit(second); err != nil {
+		t.Fatal(err)
+	}
+	firstSession, err := gate.Register(1, &testResources{cancel: make(chan struct{})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondSession, err := gate.Register(2, &testResources{cancel: make(chan struct{})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = gate.Write(firstSession, 11, func() error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if err = gate.Write(secondSession, 17, func() error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	m.freezeAutomatic(1, first.WindowID, BudgetExhausted)
+	if gate.Write(firstSession, 1, func() error { return nil }) == nil {
+		t.Fatal("exhausted profile kept its established session open")
+	}
+	if err = gate.Write(secondSession, 3, func() error { return nil }); err != nil {
+		t.Fatal("closing the exhausted profile disrupted the unrelated user", err)
+	}
+	request := WindowFreezeBatchRequest{first.Epoch, []WindowBatchTarget{
+		{ProfileID: 1, WindowID: first.WindowID, BarrierID: strings.Repeat("7", 32)},
+		{ProfileID: 2, WindowID: second.WindowID, BarrierID: strings.Repeat("8", 32)},
+	}}
+	results, err := m.FreezeBatch(request)
+	if err != nil || len(results) != 2 || results[0].BarrierID == results[1].BarrierID {
+		t.Fatalf("independent batch freeze failed: results=%+v err=%v", results, err)
+	}
+	snapshotRequest := WindowSnapshotBatchRequest{Epoch: first.Epoch, Windows: []WindowBatchTarget{
+		{ProfileID: results[0].ProfileID, WindowID: results[0].WindowID, BarrierID: results[0].BarrierID},
+		{ProfileID: results[1].ProfileID, WindowID: results[1].WindowID, BarrierID: results[1].BarrierID},
+	}}
+	snapshots, err := m.OriginalWindowSnapshots(snapshotRequest)
+	if err != nil || len(snapshots) != 2 {
+		t.Fatalf("independent snapshot batch failed: count=%d err=%v", len(snapshots), err)
+	}
+	var firstSnapshot Snapshot
+	var secondSnapshot Snapshot
+	if json.Unmarshal([]byte(snapshots[0].OriginalReceipt), &firstSnapshot) != nil || json.Unmarshal([]byte(snapshots[1].OriginalReceipt), &secondSnapshot) != nil || len(firstSnapshot.Windows) != 1 || len(secondSnapshot.Windows) != 1 {
+		t.Fatal("batch snapshots were not independently bound to one profile")
+	}
+	if firstSnapshot.Profiles[0].DownloadBytes != 11 || secondSnapshot.Profiles[0].DownloadBytes != 20 {
+		t.Fatal("independent snapshots lost each profile's counters")
+	}
+	if gate.Write(secondSession, 1, func() error { return nil }) == nil {
+		t.Fatal("batch freeze left the second established profile session open")
+	}
+	replayed, err := m.FreezeBatch(request)
+	if err != nil || !reflect.DeepEqual(replayed, results) {
+		t.Fatal("independent freeze replay changed its barriers", err)
+	}
+}
+
 func TestWindowIntentCrashCannotResumeAdmission(t *testing.T) {
 	m, g, store, snapshots := windowFixture(t)
 	grant := windowGrant(1, "1")

@@ -8,6 +8,7 @@ version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
   "aiohttp>=3.11,<4",
+  "anyio>=4.13,<5",
   "papilio[server,mysql,crypto,passwords,rate-limit-redis] @ https://codeload.github.com/stupidprogrammer4/papilio/tar.gz/e026dbc9aa335ab4f6cc79f7ff2aecb198bd93ad",
   "papilio-tasks[scheduler-redis] @ https://codeload.github.com/stupidprogrammer4/papilio-tasks/tar.gz/bca239763eab5c0d176b5ac8af9e878edb6997a7",
   "Pillow>=11,<13",
@@ -46,6 +47,14 @@ typeCheckingMode = "standard"
 testpaths = ["tests"]
 addopts = "--import-mode=importlib --strict-markers"
 markers = [
+  "accounts: customer, staff, reseller identity and access contracts",
+  "billing: payment, SMS settlement and wallet contracts",
+  "sales: catalogue, checkout, fulfillment, renewal and loyalty contracts",
+  "network: configurations, cores, nodes, usage and IP enforcement contracts",
+  "operations: automation, monitoring and notification contracts",
+  "bot: backend Telegram consumer contracts",
+  "support: customer support contracts",
+  "platform: framework, lifecycle, migrations and performance contracts",
   "unit: isolated behavior",
   "integration: isolated real infrastructure",
   "api: HTTP contracts",

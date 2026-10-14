@@ -352,6 +352,123 @@ type WindowFreezeRequest struct {
 	Windows   []WindowTarget `json:"windows"`
 }
 
+type WindowBatchTarget struct {
+	ProfileID int64  `json:"profile_id"`
+	WindowID  string `json:"window_id"`
+	BarrierID string `json:"barrier_id"`
+}
+
+type WindowFreezeBatchRequest struct {
+	Epoch   string              `json:"epoch"`
+	Windows []WindowBatchTarget `json:"windows"`
+}
+
+type WindowFreezeBatchItem struct {
+	ProfileID int64  `json:"profile_id"`
+	WindowID  string `json:"window_id"`
+	BarrierID string `json:"barrier_id"`
+}
+
+type WindowSnapshotBatchRequest struct {
+	Epoch   string              `json:"epoch"`
+	Windows []WindowBatchTarget `json:"windows"`
+}
+
+type WindowSnapshotBatchItem struct {
+	ProfileID       int64           `json:"profile_id"`
+	WindowID        string          `json:"window_id"`
+	Receipt         SnapshotReceipt `json:"receipt"`
+	OriginalReceipt string          `json:"original_receipt"`
+}
+
+func (m *WindowManager) FreezeBatch(input WindowFreezeBatchRequest) ([]WindowFreezeBatchItem, error) {
+	if input.Epoch != m.gate.epoch || len(input.Windows) == 0 || len(input.Windows) > m.gate.policy.MaxProfiles {
+		return nil, errors.New("managed_window_freeze_batch_invalid")
+	}
+	selected := append([]WindowBatchTarget(nil), input.Windows...)
+	sort.Slice(selected, func(i, j int) bool { return selected[i].ProfileID < selected[j].ProfileID })
+	results := make([]WindowFreezeBatchItem, 0, len(selected))
+	seenBarriers := make(map[string]struct{}, len(selected))
+	for index, target := range selected {
+		if target.ProfileID <= 0 || !identityPattern.MatchString(target.WindowID) || !identityPattern.MatchString(target.BarrierID) || index > 0 && selected[index-1].ProfileID == target.ProfileID {
+			return nil, errors.New("managed_window_freeze_batch_invalid")
+		}
+		if _, exists := seenBarriers[target.BarrierID]; exists {
+			return nil, errors.New("managed_window_freeze_batch_duplicate_barrier")
+		}
+		seenBarriers[target.BarrierID] = struct{}{}
+		barrierID, _, found, err := m.frozenWindowReceipt(input.Epoch, target.ProfileID, target.WindowID)
+		if err != nil {
+			return nil, errors.New("managed_window_freeze_batch_recovery_unresolved")
+		}
+		if !found {
+			_, _, err = m.Freeze(WindowFreezeRequest{Epoch: input.Epoch, BarrierID: target.BarrierID, Windows: []WindowTarget{{ProfileID: target.ProfileID, WindowID: target.WindowID}}})
+			if err != nil {
+				barrierID, _, found, err = m.frozenWindowReceipt(input.Epoch, target.ProfileID, target.WindowID)
+				if err != nil || !found {
+					return nil, errors.New("managed_window_freeze_batch_unresolved")
+				}
+			} else {
+				barrierID = target.BarrierID
+			}
+		}
+		results = append(results, WindowFreezeBatchItem{ProfileID: target.ProfileID, WindowID: target.WindowID, BarrierID: barrierID})
+	}
+	return results, nil
+}
+
+func (m *WindowManager) OriginalWindowSnapshots(input WindowSnapshotBatchRequest) ([]WindowSnapshotBatchItem, error) {
+	if input.Epoch != m.gate.epoch || len(input.Windows) == 0 || len(input.Windows) > m.gate.policy.MaxProfiles {
+		return nil, errors.New("managed_window_snapshot_batch_invalid")
+	}
+	selected := append([]WindowBatchTarget(nil), input.Windows...)
+	sort.Slice(selected, func(i, j int) bool { return selected[i].ProfileID < selected[j].ProfileID })
+	result := make([]WindowSnapshotBatchItem, 0, len(selected))
+	for index, target := range selected {
+		if target.ProfileID <= 0 || !identityPattern.MatchString(target.WindowID) || !identityPattern.MatchString(target.BarrierID) || index > 0 && selected[index-1].ProfileID == target.ProfileID {
+			return nil, errors.New("managed_window_snapshot_batch_invalid")
+		}
+		payload, receipt, err := m.snapshots.OriginalWindowSnapshot(target.BarrierID, input.Epoch, m.gate.installation)
+		if err != nil {
+			return nil, errors.New("managed_window_snapshot_batch_unavailable")
+		}
+		var snapshot Snapshot
+		if json.Unmarshal(payload, &snapshot) != nil || len(snapshot.Windows) != 1 || snapshot.Windows[0].Binding.ProfileID != target.ProfileID || snapshot.Windows[0].WindowID != target.WindowID {
+			return nil, errors.New("managed_window_snapshot_batch_binding_invalid")
+		}
+		result = append(result, WindowSnapshotBatchItem{ProfileID: target.ProfileID, WindowID: target.WindowID, Receipt: receipt, OriginalReceipt: string(payload)})
+	}
+	return result, nil
+}
+
+func (m *WindowManager) frozenWindowReceipt(epoch string, profileID int64, windowID string) (string, SnapshotReceipt, bool, error) {
+	m.gate.mu.Lock()
+	barrierID := ""
+	for id, entry := range m.gate.barriers {
+		if entry.snapshot == nil || entry.snapshot.Epoch != epoch {
+			continue
+		}
+		for _, window := range entry.snapshot.Windows {
+			if window.Binding.ProfileID == profileID && window.WindowID == windowID {
+				barrierID = id
+				break
+			}
+		}
+		if barrierID != "" {
+			break
+		}
+	}
+	m.gate.mu.Unlock()
+	if barrierID == "" {
+		return "", SnapshotReceipt{}, false, nil
+	}
+	_, receipt, err := m.snapshots.OriginalWindowSnapshot(barrierID, epoch, m.gate.installation)
+	if err != nil {
+		return "", SnapshotReceipt{}, false, err
+	}
+	return barrierID, receipt, true, nil
+}
+
 func (m *WindowManager) Freeze(input WindowFreezeRequest) (*Snapshot, SnapshotReceipt, error) {
 	if input.Epoch != m.gate.epoch || !identityPattern.MatchString(input.BarrierID) || len(input.Windows) == 0 || len(input.Windows) > m.gate.policy.MaxProfiles {
 		return nil, SnapshotReceipt{}, errors.New("managed_window_freeze_invalid")

@@ -7,6 +7,8 @@ from src.modules.network.managed_runtime.domain.admissions import (
     ManagedAdmissionSubmission,
 )
 from src.modules.network.managed_runtime.domain.barriers import (
+    ManagedWindowFinalBatchCreate,
+    ManagedWindowFinalBatchOut,
     ManagedWindowFinalOut,
     ManagedWindowFinalSubmission,
 )
@@ -32,13 +34,17 @@ from src.modules.network.managed_runtime.domain.successors import (
     ManagedSuccessorWindowOut,
 )
 from src.modules.network.managed_runtime.domain.windows import (
+    ManagedInitialWindowBatchCreate,
+    ManagedInitialWindowBatchOut,
     ManagedInitialWindowCreate,
     ManagedInitialWindowOut,
 )
 from src.modules.network.managed_runtime.interfaces import (
     IManagedAdmissionCommand,
     IManagedEpochSealCommand,
+    IManagedFinalityBatchCommand,
     IManagedFinalityCommand,
+    IManagedInitialWindowBatchCommand,
     IManagedInitialWindowCommand,
     IManagedInstallationCommand,
     IManagedRevocationCommand,
@@ -148,6 +154,20 @@ async def finalize(
     return APIResponse.from_data(result)
 
 
+@router.post("/{code}/managed-windows/finalize/batch")
+async def finalize_batch(
+    code: str,
+    data: ManagedWindowFinalBatchCreate,
+    response: Response,
+    command: FromDishka[IManagedFinalityBatchCommand],
+    x_papilio_node_key: str = Header(default=""),
+) -> APIResponse[ManagedWindowFinalBatchOut, None]:
+    """Settle one original frozen snapshot for its explicit window set."""
+    response.headers["Cache-Control"] = "no-store"
+    result = await command.finalize(code, x_papilio_node_key, data)
+    return APIResponse.from_data(result)
+
+
 @router.post("/{code}/managed-installations/{id:int}/claim")
 async def claim(
     code: str,
@@ -187,6 +207,21 @@ async def initial_window(
     x_papilio_node_key: str = Header(default=""),
 ) -> APIResponse[ManagedInitialWindowOut, None]:
     """Reserve an initial window, optionally bound to a paid task lease."""
+    response.headers["Cache-Control"] = "no-store"
+    result = await command.issue(code, x_papilio_node_key, id, data)
+    return APIResponse.from_data(result)
+
+
+@router.post("/{code}/managed-installations/{id:int}/windows/batch")
+async def initial_windows_batch(
+    code: str,
+    id: int,
+    data: ManagedInitialWindowBatchCreate,
+    response: Response,
+    command: FromDishka[IManagedInitialWindowBatchCommand],
+    x_papilio_node_key: str = Header(default=""),
+) -> APIResponse[ManagedInitialWindowBatchOut, None]:
+    """Reserve initial windows for independent profiles atomically."""
     response.headers["Cache-Control"] = "no-store"
     result = await command.issue(code, x_papilio_node_key, id, data)
     return APIResponse.from_data(result)

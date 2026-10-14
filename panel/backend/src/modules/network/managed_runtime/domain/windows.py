@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from papilio.schemas.inputs import BaseDTO
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from src.modules.network.managed_runtime.domain.contracts import (
     EpochIdentity,
@@ -35,3 +35,32 @@ class ManagedInitialWindowOut(ImmutableContract):
     original_window: str
     window: ManagedWindowWire
     provision_claim: ManagedProvisionClaim | None = None
+
+
+class ManagedInitialWindowBatchCreate(BaseDTO):
+    batch_request_key: str = Field(min_length=8, max_length=128)
+    windows: list[ManagedInitialWindowCreate] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def unique_profiles_and_requests(
+        self,
+    ) -> "ManagedInitialWindowBatchCreate":
+        profile_ids = [window.profile_id for window in self.windows]
+        request_keys = [window.request_key for window in self.windows]
+        if len(profile_ids) != len(set(profile_ids)):
+            raise ValueError("Each profile may appear once in a batch.")
+        if len(request_keys) != len(set(request_keys)):
+            raise ValueError("Each window request key must be unique.")
+        if len({window.process_epoch for window in self.windows}) != 1:
+            raise ValueError("A batch must belong to one process epoch.")
+        return self
+
+
+class ManagedInitialWindowBatchOut(ImmutableContract):
+    batch_request_key: str
+    windows: list["ManagedInitialWindowBatchItemOut"]
+
+
+class ManagedInitialWindowBatchItemOut(ImmutableContract):
+    profile_id: int = Field(gt=0)
+    window: ManagedInitialWindowOut

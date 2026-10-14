@@ -1,5 +1,8 @@
 from dishka import Provider, Scope, provide
 
+from src.modules.sales.subscriptions.app.batches import (
+    SubscriptionBatchService,
+)
 from src.modules.sales.subscriptions.app.commands import SubscriptionCommand
 from src.modules.sales.subscriptions.app.control import (
     SubscriptionControlCommand,
@@ -32,6 +35,7 @@ from src.modules.sales.subscriptions.interfaces import (
     ICustomerHoldFinalizeQuery,
     ICustomerHoldQuery,
     IRenewalQuery,
+    ISubscriptionBatchService,
     ISubscriptionCommand,
     ISubscriptionControlCommand,
     ISubscriptionControlQuery,
@@ -61,6 +65,9 @@ class SubscriptionProvider(Provider):
         SubscriptionRenewalQuoteQuery, provides=ISubscriptionRenewalQuoteQuery
     )
     command = provide(SubscriptionCommand, provides=ISubscriptionCommand)
+    batch_service = provide(
+        SubscriptionBatchService, provides=ISubscriptionBatchService
+    )
     renew_task = provide(RenewSubscription)
     scan_task = provide(ScanRenewals)
     renewal_query = provide(RenewalQuery, provides=IRenewalQuery)

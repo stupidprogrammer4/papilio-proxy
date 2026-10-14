@@ -3,6 +3,7 @@ package managed
 import (
 	"bytes"
 	"encoding/json"
+	"math"
 	"net/http"
 )
 
@@ -65,6 +66,50 @@ func (c *Control) handleWindow(writer http.ResponseWriter, path string, payload 
 		writeControlResult(writer, snapshot, receipt)
 		return
 	}
+	if path == "/v1/windows/freeze/batch" {
+		var input WindowFreezeBatchRequest
+		if decoder.Decode(&input) != nil {
+			controlError(writer, http.StatusBadRequest, "managed_window_freeze_batch_invalid")
+			return
+		}
+		items, err := c.windows.FreezeBatch(input)
+		if err != nil {
+			controlError(writer, http.StatusConflict, "managed_window_freeze_batch_unresolved")
+			return
+		}
+		output, marshalErr := json.Marshal(struct {
+			State   string                  `json:"state"`
+			Windows []WindowFreezeBatchItem `json:"windows"`
+		}{"local_component_windows_frozen_independently", items})
+		if marshalErr != nil || int64(len(output)) > c.gate.policy.MaxControlBytes {
+			controlError(writer, http.StatusServiceUnavailable, "managed_window_response_capacity")
+			return
+		}
+		_, _ = writer.Write(output)
+		return
+	}
+	if path == "/v1/windows/snapshots/batch" {
+		var input WindowSnapshotBatchRequest
+		if decoder.Decode(&input) != nil {
+			controlError(writer, http.StatusBadRequest, "managed_window_snapshot_batch_invalid")
+			return
+		}
+		items, err := c.windows.OriginalWindowSnapshots(input)
+		if err != nil {
+			controlError(writer, http.StatusConflict, "managed_window_snapshot_batch_unavailable")
+			return
+		}
+		output, marshalErr := json.Marshal(struct {
+			State   string                    `json:"state"`
+			Windows []WindowSnapshotBatchItem `json:"windows"`
+		}{"local_component_original_window_snapshots", items})
+		if marshalErr != nil || !windowBatchOutputFits(c.gate.policy, len(items), int64(len(output))) {
+			controlError(writer, http.StatusServiceUnavailable, "managed_window_response_capacity")
+			return
+		}
+		_, _ = writer.Write(output)
+		return
+	}
 	if path == "/v1/windows/admit" {
 		var input WindowGrant
 		if decoder.Decode(&input) != nil {
@@ -107,4 +152,12 @@ func (c *Control) handleWindow(writer http.ResponseWriter, path string, payload 
 		return
 	}
 	_, _ = writer.Write(output)
+}
+
+func windowBatchOutputFits(policy Policy, count int, size int64) bool {
+	if count <= 0 || policy.MaxSnapshotBytes > (math.MaxInt64-policy.MaxControlBytes)/int64(count) {
+		return false
+	}
+	maximum := int64(count)*policy.MaxSnapshotBytes + policy.MaxControlBytes
+	return size > 0 && size <= maximum
 }

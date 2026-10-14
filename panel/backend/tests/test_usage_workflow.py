@@ -1,15 +1,81 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 from sqlmodel import col
 
+from src.modules.network.usage.domain.models import UsageEventModel
 from src.modules.network.usage.infra.tables import UsageGrantTable
+from src.modules.network.usage.interfaces import IUsageEventService
 from src.modules.sales.subscriptions.infra.tables import SubscriptionTable
 from tests.test_fulfillment_workflow import FulfillmentWorkflowFixture
 
 
 class UsageWorkflowTest(FulfillmentWorkflowFixture):
+    async def test_event_batch_uses_grant_identity_and_persists_all_rows(self):
+        from papilio.infra.db.transaction import transaction
+        from papilio.infra.db.uow import MySQLUnitOfWork
+
+        _, tasks, nodes, _ = await self.active_sale()
+        responses = await asyncio.gather(
+            *(
+                self.allocate(task, nodes, 1024, f"batch_{index}")
+                for index, task in enumerate(tasks)
+            )
+        )
+        grants = [response.json()["data"] for response in responses]
+        sampled_at = datetime.now(UTC).replace(tzinfo=None)
+        events = [
+            UsageEventModel(
+                grant_id=grant["id"],
+                subscription_id=grant["subscription_id"],
+                node_id=grant["node_id"],
+                generation=grant["generation"],
+                event_id=f"batch_final_{grant['id']}",
+                payload_hash="a" * 64,
+                sequence=1,
+                upload_bytes=index + 10,
+                download_bytes=index + 20,
+                delta_bytes=index + 30,
+                delta_upload_bytes=index + 10,
+                delta_download_bytes=index + 20,
+                final=True,
+                sampled_at=sampled_at,
+            )
+            for index, grant in enumerate(grants)
+        ]
+
+        async with self.app.state.dishka_container() as scope:
+            unit = await scope.get(MySQLUnitOfWork)
+            service = await scope.get(IUsageEventService)
+            async with transaction(unit):
+                await service.create_many(events)
+
+        async with self.connection.uow() as fresh:
+            result = await fresh.execute(
+                text(
+                    "SELECT grant_id, event_id, delta_bytes FROM "
+                    "tbl_usage_events WHERE event_id IN (:first, :second) "
+                    "ORDER BY grant_id"
+                ),
+                {
+                    "first": events[0].event_id,
+                    "second": events[1].event_id,
+                },
+            )
+            persisted = result.all()
+
+        self.assertEqual(
+            [
+                (row.grant_id, row.event_id, row.delta_bytes)
+                for row in persisted
+            ],
+            [
+                (event.grant_id, event.event_id, event.delta_bytes)
+                for event in sorted(events, key=lambda item: item.grant_id)
+            ],
+        )
+
     async def renew(self, id):
         from src.modules.sales.subscriptions.interfaces import (
             ISubscriptionCommand,

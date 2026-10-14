@@ -54,8 +54,10 @@ from src.modules.network.provisioning.infra.mysql import (
     ProvisionTaskRepository,
 )
 from src.modules.network.usage.domain.models import UsageGrantModel
-from src.modules.network.usage.infra.mysql import UsageGrantRepository
-from src.modules.network.usage.infra.readers import UsageFactsReader
+from src.modules.network.usage.interfaces import (
+    IUsageFactsReader,
+    IUsageGrantService,
+)
 from src.modules.sales.catalog.domain.policies import (
     FulfillmentPolicy,
     QuotaPolicy,
@@ -77,9 +79,9 @@ class ManagedInitialWindowCommand:
         revisions: IRuntimeRevisionService,
         commands: IRuntimeCommandService,
         snapshots: RuntimeSnapshotReader,
-        grants: UsageGrantRepository,
+        grants: IUsageGrantService,
         subscriptions: SubscriptionRepository,
-        facts: UsageFactsReader,
+        facts: IUsageFactsReader,
         tasks: ProvisionTaskRepository,
         requests: ProvisionRequestRepository,
         settings: PapilioSettings,

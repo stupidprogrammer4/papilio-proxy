@@ -10,6 +10,7 @@ from src.modules.network.managed_runtime.domain.models import (
     ManagedBarrierModel,
     ManagedEpochModel,
     ManagedInstallationModel,
+    ManagedOperationBatchModel,
     ManagedRevocationModel,
     ManagedWindowModel,
 )
@@ -49,6 +50,22 @@ class ManagedEpochTable(ManagedEpochModel, BaseTable, table=True):
         ),
         UniqueConstraint(
             "rollover_request_id", name="uq_managed_epoch_rollover_request"
+        ),
+    )
+
+
+class ManagedOperationBatchTable(
+    ManagedOperationBatchModel, BaseTable, table=True
+):
+    accepted_at: datetime = Field(
+        sa_column=Column(DATETIME(fsp=6), nullable=False)
+    )
+    __table_args__ = (
+        UniqueConstraint(
+            "installation_id",
+            "operation",
+            "request_key",
+            name="uq_managed_operation_batch_request",
         ),
     )
 

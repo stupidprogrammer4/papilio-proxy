@@ -47,13 +47,17 @@ type managedWindowCycleJournal struct {
 	APIURL          string                        `json:"api_url"`
 	NodeCode        string                        `json:"node_code"`
 	InstallationID  int64                         `json:"installation_id"`
+	BatchRequestKey string                        `json:"batch_request_key,omitempty"`
 	Policy          ManagedWindowCyclePolicy      `json:"policy"`
 	Request         ManagedWindowRequest          `json:"request"`
 	ManualBarrierID string                        `json:"manual_barrier_id"`
 	Issued          *ManagedIssuedWindow          `json:"issued"`
 	Submission      *ManagedWindowFinalSubmission `json:"submission"`
+	FreezeIntent    bool                          `json:"freeze_intent,omitempty"`
 	Finality        *ManagedWindowFinality        `json:"finality"`
 	Admission       *ManagedOriginalAdmission     `json:"admission,omitempty"`
+	AdmissionIntent bool                          `json:"admission_intent,omitempty"`
+	LocalAdmitted   bool                          `json:"local_admitted,omitempty"`
 	PaidAcceptance  *ManagedPaidAcceptance        `json:"paid_acceptance,omitempty"`
 }
 

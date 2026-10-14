@@ -15,7 +15,10 @@ from src.modules.network.provisioning.domain.models import (
     ProvisionRequestModel,
     ProvisionTaskModel,
 )
-from src.modules.network.provisioning.domain.results import NodeClaim
+from src.modules.network.provisioning.domain.results import (
+    NodeClaim,
+    ProvisionGenerationKey,
+)
 from src.modules.sales.catalog.domain.policies import FulfillmentPolicy
 
 
@@ -72,3 +75,18 @@ class IProvisioningQuery(Protocol):
     def node_tasks(
         self, code: str, key: str, data: ProvisioningSearch
     ) -> Awaitable[ServicePage[ProvisionTaskModel]]: ...
+
+
+class IProvisionRequestBatchService(Protocol):
+    def by_generations(
+        self, keys: list[ProvisionGenerationKey]
+    ) -> Awaitable[list[ProvisionRequestModel]]: ...
+
+
+class IProvisionTaskBatchService(Protocol):
+    def locked_many(
+        self, ids: list[int]
+    ) -> Awaitable[list[ProvisionTaskModel]]: ...
+    def change_many(
+        self, rows: list[ProvisionTaskModel]
+    ) -> Awaitable[None]: ...

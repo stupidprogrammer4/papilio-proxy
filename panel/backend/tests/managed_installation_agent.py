@@ -39,10 +39,11 @@ def actual_registry(root: Path, inputs: Path, binary: Path):
     }
     windows = {
         "max_windows": 8,
-        "max_records": 16,
+        "max_records": 24,
         "max_record_bytes": 16384,
         "max_validity_ms": 120000,
         "transaction_timeout_ms": 5000,
+        "max_epoch_seals": 1,
     }
     component = {
         "remote_read_buffer_bytes": 65536,
@@ -131,7 +132,9 @@ def run_native_closed_installation(
     if exit_code:
         safe_error = (root / "agent-output.log").read_text().strip()
         if safe_error == "managed_child_exited":
-            assert os.getloadavg()[0] <= 8, "native_closed_diagnostic_load_guard"
+            assert os.getloadavg()[0] <= 8, (
+                "native_closed_diagnostic_load_guard"
+            )
             checked = subprocess.run(
                 [
                     registry["binary"],

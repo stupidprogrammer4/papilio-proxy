@@ -24,11 +24,18 @@ from src.modules.network.managed_runtime.app.services import (
     ManagedEpochSealService,
     ManagedEpochService,
     ManagedInstallationService,
+    ManagedOperationBatchService,
     ManagedRevocationService,
     ManagedWindowService,
 )
 from src.modules.network.managed_runtime.app.successors import (
     ManagedSuccessorWindowCommand,
+)
+from src.modules.network.managed_runtime.app.window_batches import (
+    ManagedInitialWindowBatchCommand,
+)
+from src.modules.network.managed_runtime.app.window_final_batches import (
+    ManagedFinalityBatchCommand,
 )
 from src.modules.network.managed_runtime.app.windows import (
     ManagedInitialWindowCommand,
@@ -44,6 +51,7 @@ from src.modules.network.managed_runtime.infra.mysql import (
     ManagedBarrierRepository,
     ManagedEpochRepository,
     ManagedInstallationRepository,
+    ManagedOperationBatchRepository,
     ManagedRevocationRepository,
     ManagedWindowRepository,
 )
@@ -60,10 +68,13 @@ from src.modules.network.managed_runtime.interfaces import (
     IManagedEpochSealCommand,
     IManagedEpochSealService,
     IManagedEpochService,
+    IManagedFinalityBatchCommand,
     IManagedFinalityCommand,
+    IManagedInitialWindowBatchCommand,
     IManagedInitialWindowCommand,
     IManagedInstallationCommand,
     IManagedInstallationService,
+    IManagedOperationBatchService,
     IManagedRevocationCommand,
     IManagedRevocationService,
     IManagedRuntimeAuthority,
@@ -99,6 +110,9 @@ class ManagedRuntimeProvider(Provider):
     finality = provide(
         ManagedFinalityCommand, provides=IManagedFinalityCommand
     )
+    finality_batch = provide(
+        ManagedFinalityBatchCommand, provides=IManagedFinalityBatchCommand
+    )
     installation_scope_reader = provide(ManagedInstallationScopeReader)
     installation_command = provide(
         ManagedInstallationCommand, provides=IManagedInstallationCommand
@@ -106,10 +120,18 @@ class ManagedRuntimeProvider(Provider):
     initial_window_command = provide(
         ManagedInitialWindowCommand, provides=IManagedInitialWindowCommand
     )
+    initial_window_batch_command = provide(
+        ManagedInitialWindowBatchCommand,
+        provides=IManagedInitialWindowBatchCommand,
+    )
     authority = provide(
         ManagedRuntimeAuthority, provides=IManagedRuntimeAuthority
     )
     installation_repo = provide(ManagedInstallationRepository)
+    operation_batch_repo = provide(ManagedOperationBatchRepository)
+    operation_batch_service = provide(
+        ManagedOperationBatchService, provides=IManagedOperationBatchService
+    )
     installation_service = provide(
         ManagedInstallationService, provides=IManagedInstallationService
     )

@@ -15,3 +15,9 @@ class SubscriptionRenewalQuote:
     payer_customer_id: int
     price_rial: int
     commerce: CustomerPriceQuote | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SubscriptionUsageUpdate:
+    subscription_id: int
+    used_bytes: int

@@ -6,6 +6,8 @@ from src.modules.network.managed_runtime.domain.admissions import (
     ManagedAdmissionSubmission,
 )
 from src.modules.network.managed_runtime.domain.barriers import (
+    ManagedWindowFinalBatchCreate,
+    ManagedWindowFinalBatchOut,
     ManagedWindowFinalOut,
     ManagedWindowFinalSubmission,
 )
@@ -30,8 +32,13 @@ from src.modules.network.managed_runtime.domain.models import (
     ManagedBarrierModel,
     ManagedEpochModel,
     ManagedInstallationModel,
+    ManagedOperationBatchModel,
     ManagedRevocationModel,
     ManagedWindowModel,
+)
+from src.modules.network.managed_runtime.domain.results import (
+    ManagedBarrierIdentity,
+    ManagedWindowRequestIdentity,
 )
 from src.modules.network.managed_runtime.domain.revocations import (
     ManagedRevocationOut,
@@ -47,6 +54,8 @@ from src.modules.network.managed_runtime.domain.successors import (
     ManagedSuccessorWindowOut,
 )
 from src.modules.network.managed_runtime.domain.windows import (
+    ManagedInitialWindowBatchCreate,
+    ManagedInitialWindowBatchOut,
     ManagedInitialWindowCreate,
     ManagedInitialWindowOut,
 )
@@ -82,6 +91,15 @@ class IManagedFinalityCommand(Protocol):
     ) -> Awaitable[ManagedWindowFinalOut]: ...
 
 
+class IManagedFinalityBatchCommand(Protocol):
+    def finalize(
+        self,
+        code: str,
+        key: str,
+        data: ManagedWindowFinalBatchCreate,
+    ) -> Awaitable[ManagedWindowFinalBatchOut]: ...
+
+
 class IManagedInstallationService(Protocol):
     def find(self, id: int) -> Awaitable[ManagedInstallationModel | None]: ...
     def create(
@@ -114,6 +132,15 @@ class IManagedEpochService(Protocol):
     ) -> Awaitable[ManagedInstallationEpochCount]: ...
 
 
+class IManagedOperationBatchService(Protocol):
+    def by_identity(
+        self, installation_id: int, operation: str, request_key: str
+    ) -> Awaitable[ManagedOperationBatchModel | None]: ...
+    def create(
+        self, data: ManagedOperationBatchModel
+    ) -> Awaitable[ManagedOperationBatchModel]: ...
+
+
 class IManagedEpochSealService(Protocol):
     def by_epoch(
         self, epoch_id: int
@@ -144,6 +171,9 @@ class IManagedInstallationCommand(Protocol):
 
 
 class IManagedWindowService(Protocol):
+    def by_identities_many(
+        self, window_ids: list[str]
+    ) -> Awaitable[list[ManagedWindowModel]]: ...
     def by_identity(
         self, window_id: str
     ) -> Awaitable[ManagedWindowModel | None]: ...
@@ -154,20 +184,38 @@ class IManagedWindowService(Protocol):
     def initial_for_profile_epoch(
         self, profile_id: int, epoch_id: int
     ) -> Awaitable[ManagedWindowModel | None]: ...
+    def initials_for_profiles_epoch(
+        self, profile_ids: list[int], epoch_id: int
+    ) -> Awaitable[list[ManagedWindowModel]]: ...
     def find(self, id: int) -> Awaitable[ManagedWindowModel | None]: ...
     def create(
         self, data: ManagedWindowModel
     ) -> Awaitable[ManagedWindowModel]: ...
+    def by_operation_batch(
+        self, operation_batch_id: int
+    ) -> Awaitable[list[ManagedWindowModel]]: ...
+    def by_requests_many(
+        self, identities: list[ManagedWindowRequestIdentity]
+    ) -> Awaitable[list[ManagedWindowModel]]: ...
+    def create_many(
+        self, rows: list[ManagedWindowModel]
+    ) -> Awaitable[None]: ...
 
 
 class IManagedBarrierService(Protocol):
     def by_identity(
         self, epoch_id: int, barrier_id: str
     ) -> Awaitable[ManagedBarrierModel | None]: ...
+    def by_identities_many(
+        self, identities: list[ManagedBarrierIdentity]
+    ) -> Awaitable[list[ManagedBarrierModel]]: ...
     def find(self, id: int) -> Awaitable[ManagedBarrierModel | None]: ...
     def create(
         self, data: ManagedBarrierModel
     ) -> Awaitable[ManagedBarrierModel]: ...
+    def create_many(
+        self, rows: list[ManagedBarrierModel]
+    ) -> Awaitable[None]: ...
 
 
 class IManagedAdmissionService(Protocol):
@@ -224,3 +272,13 @@ class IManagedInitialWindowCommand(Protocol):
     def issue(
         self, code: str, key: str, id: int, data: ManagedInitialWindowCreate
     ) -> Awaitable[ManagedInitialWindowOut]: ...
+
+
+class IManagedInitialWindowBatchCommand(Protocol):
+    def issue(
+        self,
+        code: str,
+        key: str,
+        id: int,
+        data: ManagedInitialWindowBatchCreate,
+    ) -> Awaitable[ManagedInitialWindowBatchOut]: ...

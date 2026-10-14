@@ -12,6 +12,28 @@ from src.modules.network.core_runtime.domain.facts import RuntimeSnapshotFacts
 
 class ManagedAdmissionMembership:
     @staticmethod
+    def matches(
+        facts: RuntimeSnapshotFacts,
+        encrypted_memberships: str,
+        captured_membership_sha256: str,
+        captured_snapshot_sha256: str,
+        now: datetime,
+        key: str,
+    ) -> bool:
+        try:
+            ManagedAdmissionMembership.verify(
+                facts,
+                encrypted_memberships,
+                captured_membership_sha256,
+                captured_snapshot_sha256,
+                now,
+                key,
+            )
+        except (ValueError, TypeError, KeyError):
+            return False
+        return True
+
+    @staticmethod
     def verify(
         facts: RuntimeSnapshotFacts,
         encrypted_memberships: str,

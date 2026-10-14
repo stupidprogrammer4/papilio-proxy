@@ -40,6 +40,7 @@ type ManagedInstallationPolicy struct {
 	PollIntervalMS     int                          `json:"poll_interval_ms"`
 	StopTimeoutMS      int                          `json:"stop_timeout_ms"`
 	WindowCycle        *ManagedWindowCyclePolicy    `json:"window_cycle,omitempty"`
+	WindowBatch        *ManagedWindowBatchPolicy    `json:"window_batch,omitempty"`
 	SuccessorCycles    *ManagedSuccessorCyclePolicy `json:"successor_cycles,omitempty"`
 	EpochSeal          *ManagedEpochSealPolicy      `json:"epoch_seal,omitempty"`
 }
@@ -277,6 +278,9 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 	if p.WindowCycle != nil && p.WindowCycle.Enabled && p.WindowCycle.validate() != nil {
 		return errors.New("managed_window_cycle_policy_invalid")
 	}
+	if p.WindowBatch != nil && p.WindowBatch.validateShape(p) != nil {
+		return errors.New("managed_window_batch_policy_invalid")
+	}
 	if err := validateManagedSuccessorPolicyBeforeLaunch(p, p.SuccessorCycles); err != nil {
 		return err
 	}
@@ -305,6 +309,9 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 		if json.Unmarshal(existing, &state) != nil || state.InstallationID != p.InstallationID || state.APIURL != client.config.APIURL || state.NodeCode != client.config.NodeCode {
 			return errors.New("managed_recovery_binding_invalid")
 		}
+		if p.WindowBatch != nil && p.WindowBatch.validate(p, state) != nil {
+			return errors.New("managed_window_batch_policy_invalid")
+		}
 		if managedEpochSupervisorEnabled(p) {
 			binary, verifyErr := openVerifiedManagedBinary(p, state.Claim.Expectation.Installation.ExecutableSHA256)
 			if verifyErr != nil {
@@ -330,11 +337,16 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 			return runManagedEpochSupervisor(ctx, client, p, journal, state, binary, nil, once)
 		}
 		if state.Acceptance != nil {
-			if err = replayManagedWindowCycle(ctx, client, p, journal, state); err != nil {
+			if err = runManagedWindowBatchCycle(ctx, client, p, journal, state); err != nil {
 				return err
 			}
-			if err = replayManagedSuccessorChain(ctx, client, p, p.SuccessorCycles, journal, state); err != nil {
-				return err
+			if p.WindowBatch == nil || !p.WindowBatch.Enabled {
+				if err = replayManagedWindowCycle(ctx, client, p, journal, state); err != nil {
+					return err
+				}
+				if err = replayManagedSuccessorChain(ctx, client, p, p.SuccessorCycles, journal, state); err != nil {
+					return err
+				}
 			}
 			return replayManagedEpochSealCycle(ctx, client, p, p.EpochSeal, journal, state)
 		}
@@ -349,11 +361,16 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 		if err = managedSave(journal, state); err != nil {
 			return err
 		}
-		if err = replayManagedWindowCycle(ctx, client, p, journal, state); err != nil {
+		if err = runManagedWindowBatchCycle(ctx, client, p, journal, state); err != nil {
 			return err
 		}
-		if err = replayManagedSuccessorChain(ctx, client, p, p.SuccessorCycles, journal, state); err != nil {
-			return err
+		if p.WindowBatch == nil || !p.WindowBatch.Enabled {
+			if err = replayManagedWindowCycle(ctx, client, p, journal, state); err != nil {
+				return err
+			}
+			if err = replayManagedSuccessorChain(ctx, client, p, p.SuccessorCycles, journal, state); err != nil {
+				return err
+			}
 		}
 		return replayManagedEpochSealCycle(ctx, client, p, p.EpochSeal, journal, state)
 	}
@@ -363,6 +380,9 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 	claim, err := client.ClaimManagedInstallation(ctx, p.InstallationID)
 	if err != nil {
 		return err
+	}
+	if p.WindowBatch != nil && p.WindowBatch.validate(p, managedInstallationJournal{Claim: claim}) != nil {
+		return errors.New("managed_window_batch_policy_invalid")
 	}
 	binary, err := os.OpenFile(p.Binary, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
 	if err != nil {
@@ -446,11 +466,16 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 	if managedEpochSupervisorEnabled(p) {
 		return runManagedEpochSupervisor(ctx, client, p, journal, state, binary, child, once)
 	}
-	if err = runManagedWindowCycle(ctx, client, p, journal, state); err != nil {
+	if err = runManagedWindowBatchCycle(ctx, client, p, journal, state); err != nil {
 		return err
 	}
-	if err = runManagedSuccessorChain(ctx, client, p, p.SuccessorCycles, journal, state); err != nil {
-		return err
+	if p.WindowBatch == nil || !p.WindowBatch.Enabled {
+		if err = runManagedWindowCycle(ctx, client, p, journal, state); err != nil {
+			return err
+		}
+		if err = runManagedSuccessorChain(ctx, client, p, p.SuccessorCycles, journal, state); err != nil {
+			return err
+		}
 	}
 	if err = runManagedEpochSealCycle(ctx, client, p, p.EpochSeal, journal, state); err != nil {
 		return err

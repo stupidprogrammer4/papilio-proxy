@@ -19,6 +19,7 @@ from tests.managed_ip_agent import (
     private_write,
     roundtrip,
     stage_stock,
+    wait_closed,
 )
 
 
@@ -29,6 +30,333 @@ class NativeSuccessorResult:
     entries: tuple[dict, ...]
     replay_unchanged: bool
     child_stopped: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedBatchProfileInput:
+    profile_id: int
+    generation: int
+    provision_task_id: int
+    requested_bytes: int
+
+
+@dataclass(frozen=True, slots=True)
+class NativeWindowBatchResult:
+    entries: tuple[dict, ...]
+    independent_traffic: bool
+    quota_closed: bool
+    expiry_closed: bool
+
+
+def wait_for_managed_batch_epoch(
+    root: Path,
+    process,
+    profiles: tuple[ManagedBatchProfileInput, ...],
+    epoch_index: int,
+    timeout: float,
+) -> tuple[Path, dict[int, dict]]:
+    deadline = time.monotonic() + timeout
+    result_directory = None
+    result_states: dict[int, dict] = {}
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise AssertionError("native_window_batch_exited_before_admit")
+        directory = epoch_journal(root, epoch_index)
+        try:
+            if directory is None:
+                time.sleep(0.02)
+                continue
+            states = {}
+            for item in profiles:
+                state_path = (
+                    directory
+                    / "managed-window-profiles"
+                    / str(item.profile_id)
+                    / "managed-window-cycle.json"
+                )
+                state = json.loads(state_path.read_bytes())
+                admitted = (
+                    state.get("admission") is not None
+                    and state.get("paid_acceptance") is not None
+                    if item.provision_task_id > 0
+                    else state.get("local_admitted") is True
+                )
+                if state.get("issued") is None or not admitted:
+                    raise ValueError("managed window not yet admitted")
+                states[item.profile_id] = state
+            observation = UnixHTTP(root / "control" / "control.sock")
+            try:
+                observation.request("GET", "/v1/observe")
+                response = observation.getresponse()
+                document = json.loads(response.read(131073))
+            finally:
+                observation.close()
+            profiles_by_id = {
+                row["totals"]["binding"]["profile_id"]: row
+                for row in document["profiles"]
+            }
+            if all(
+                profiles_by_id[item.profile_id]["phase"] == "open"
+                and profiles_by_id[item.profile_id]["totals"]["binding"]
+                == states[item.profile_id]["issued"]["window"]["binding"]
+                and profiles_by_id[item.profile_id]["budget"]["admitted_bytes"]
+                == 0
+                for item in profiles
+            ):
+                result_directory = directory
+                result_states = states
+                break
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+        time.sleep(0.02)
+    if result_directory is None:
+        raise AssertionError("native_window_batch_open_timeout")
+    return result_directory, result_states
+
+
+def run_native_managed_window_batch(
+    root: Path,
+    runtime_binary: Path,
+    registry: dict,
+    installation_id: int,
+    profiles: tuple[ManagedBatchProfileInput, ...],
+    api_url: str,
+    node: dict,
+    binaries: Path,
+    *,
+    freeze_after_ms: int,
+    validity_ms: int,
+) -> NativeWindowBatchResult:
+    if len(profiles) != 2 or len(
+        {item.profile_id for item in profiles}
+    ) != len(profiles):
+        raise AssertionError("native_window_batch_profile_set_invalid")
+    ordered_profiles = tuple(
+        sorted(profiles, key=lambda item: item.profile_id)
+    )
+    profiles_by_budget = {
+        item.requested_bytes: item for item in ordered_profiles
+    }
+    if set(profiles_by_budget) != {64, 4096}:
+        raise AssertionError("native_window_batch_budget_profiles_invalid")
+    quota_profile_id = profiles_by_budget[64].profile_id
+    expiry_profile_id = profiles_by_budget[4096].profile_id
+    registry_policy = registry["registry"]
+    registry_policy["window_policy"].update(
+        {
+            "max_windows": len(ordered_profiles) * 2,
+            "max_records": len(ordered_profiles) * 4,
+            "max_admission_receipts": len(ordered_profiles) * 2,
+            "max_validity_ms": validity_ms,
+            "max_epoch_seals": 1,
+        }
+    )
+    registry_policy["component_policy"]["max_barriers"] = (
+        len(ordered_profiles) * 4
+    )
+    registry["trusted_api_policy"]["window_policy_sha256"] = digest(
+        compact(registry_policy["window_policy"], canonical=True)
+    )
+    batch_key = f"native-batch-{installation_id}"
+    profile_policies = [
+        {
+            "enabled": True,
+            "profile_id": item.profile_id,
+            "generation": item.generation,
+            "request_key": f"native-batch-profile-{item.profile_id}",
+            "requested_bytes": item.requested_bytes,
+            "freeze_after_ms": freeze_after_ms,
+            "operation_timeout_ms": 5000,
+            "retry_interval_ms": 100,
+            "max_attempts": 3,
+            "require_admission_receipt": item.provision_task_id > 0,
+            "provision_task_id": item.provision_task_id,
+        }
+        for item in ordered_profiles
+    ]
+    managed = {
+        **registry_policy,
+        "installation_id": installation_id,
+        "window_batch": {
+            "enabled": True,
+            "batch_request_key": batch_key,
+            "max_profiles": len(ordered_profiles),
+            "profiles": profile_policies,
+        },
+        "epoch_seal": {
+            "enabled": True,
+            "request_id": f"{installation_id:032x}",
+            "operation_timeout_ms": 5000,
+            "retry_interval_ms": 100,
+            "max_attempts": 3,
+            "max_receipt_bytes": 131072,
+            "max_profiles": len(ordered_profiles),
+            "max_windows": len(ordered_profiles) * 2,
+            "max_journal_bytes": 4194304,
+            "max_epochs": 2,
+        },
+    }
+    config = {
+        "enabled": True,
+        "api_url": api_url,
+        "node_code": node["node"]["code"],
+        "state_directory": str(root / "unused-stock-state"),
+        "managed_installation": managed,
+        "poll_interval_ms": 300,
+        "http_timeout_ms": 15000,
+        "max_response_bytes": 2097152,
+        "max_idle_connections": 2,
+        "page_size": 8,
+        "max_pages_per_poll": 2,
+    }
+    config_path = root / "window-batch-agent-config.json"
+    private_write(config_path, compact(config))
+    environment = {**os.environ, "PAPILIO_NODE_KEY": node["agent_key"]}
+    assert os.getloadavg()[0] <= 8, "native_window_batch_load_guard"
+    command = [str(runtime_binary), "-config", str(config_path)]
+    with ExitStack() as stack:
+        stock = stage_stock(
+            root, binaries / "xray", binaries.parent / "artifacts.json"
+        )
+        process = launch(
+            command,
+            stack,
+            root / "window-batch-agent.log",
+            environment=environment,
+        )
+        installation_path = (
+            root / "managed-agent" / "managed-installation.json"
+        )
+        first_directory, first_entries = wait_for_managed_batch_epoch(
+            root, process, ordered_profiles, 0, 30
+        )
+        first_batch_path = first_directory / (
+            "managed-window-batch-"
+            + first_entries[quota_profile_id]["request"]["process_epoch"]
+            + ".json"
+        )
+        first_batch = json.loads(first_batch_path.read_bytes())
+        if len(first_batch.get("windows", [])) != len(ordered_profiles):
+            raise AssertionError("native_window_batch_issued_set_invalid")
+        installation = json.loads(installation_path.read_bytes())
+        artifact = installation["claim"]["artifact_content"]
+        if (
+            digest(artifact.encode())
+            != installation["claim"]["expectation"]["artifact_sha256"]
+        ):
+            raise AssertionError("native_window_batch_artifact_digest_invalid")
+        document = json.loads(artifact)
+        endpoints = {}
+        for item in ordered_profiles:
+            state = first_entries[item.profile_id]
+            binding = state["issued"]["window"]["binding"]
+            inbound = next(
+                row
+                for row in document["inbounds"]
+                if row["tag"] == binding["inbound_tag"]
+            )
+            credential = next(
+                row
+                for row in inbound["settings"]["clients"]
+                if row["email"] == binding["counter_identity"]
+            )
+            endpoints[item.profile_id] = (inbound["port"], credential["id"])
+        target = EchoTarget()
+        stack.callback(target.close)
+        tls = InstalledTlsEndpoints(
+            endpoints,
+            Path(registry_policy["certificates"][0]["path"]),
+        )
+        first_client = BoundStockClient(
+            root, stock, tls, quota_profile_id, "127.0.0.2", stack
+        )
+        second_client = BoundStockClient(
+            root, stock, tls, expiry_profile_id, "127.0.0.3", stack
+        )
+        final_entries = []
+        independent_traffic = False
+        quota_closed = False
+        expiry_closed = False
+        for epoch_index in range(2):
+            directory = first_directory
+            if epoch_index == 0:
+                active_entries = first_entries
+            else:
+                directory, active_entries = wait_for_managed_batch_epoch(
+                    root, process, ordered_profiles, epoch_index, 45
+                )
+                batch_path = directory / (
+                    "managed-window-batch-"
+                    + active_entries[quota_profile_id]["request"][
+                        "process_epoch"
+                    ]
+                    + ".json"
+                )
+                batch = json.loads(batch_path.read_bytes())
+                if len(batch.get("windows", [])) != len(ordered_profiles):
+                    raise AssertionError(
+                        "native_window_batch_issued_set_invalid"
+                    )
+            first_connection = first_client.connect(target.port)
+            second_connection = second_client.connect(target.port)
+            stack.callback(first_connection.close)
+            stack.callback(second_connection.close)
+            roundtrip(first_connection, b"q" * 32)
+            wait_closed(first_connection, seconds=3)
+            quota_closed = True
+            roundtrip(second_connection, b"independent-user-still-active")
+            independent_traffic = True
+            wait_closed(second_connection, seconds=8)
+            expiry_closed = True
+            for item in ordered_profiles:
+                state_path = (
+                    directory
+                    / "managed-window-profiles"
+                    / str(item.profile_id)
+                    / "managed-window-cycle.json"
+                )
+                state = json.loads(state_path.read_bytes())
+                if (
+                    state.get("submission") is None
+                    or state.get("finality") is None
+                ):
+                    raise AssertionError(
+                        "native_window_batch_finality_missing"
+                    )
+                original = json.loads(state["submission"]["original_receipt"])
+                enforcement = original["enforcement"]
+                if len(enforcement) != 1:
+                    raise AssertionError(
+                        "native_window_batch_evidence_missing"
+                    )
+                (window_evidence,) = enforcement
+                expected_reason = (
+                    "budget_exhausted"
+                    if item.profile_id == quota_profile_id
+                    else "window_expired"
+                )
+                if window_evidence["closure_reason"] != expected_reason:
+                    raise AssertionError(
+                        "native_window_batch_closure_reason_invalid"
+                    )
+                final_entries.append({**state, "snapshot": original})
+        exit_code = process.wait(timeout=50)
+        if exit_code:
+            raise AssertionError("native_window_batch_finality_failed")
+        barriers = {entry["snapshot"]["barrier_id"] for entry in final_entries}
+        window_ids = {
+            entry["issued"]["window"]["window_id"] for entry in final_entries
+        }
+        if len(barriers) != len(final_entries) or len(window_ids) != len(
+            final_entries
+        ):
+            raise AssertionError("native_window_batch_shared_barrier")
+        return NativeWindowBatchResult(
+            entries=tuple(final_entries),
+            independent_traffic=independent_traffic,
+            quota_closed=quota_closed,
+            expiry_closed=expiry_closed,
+        )
 
 
 def epoch_journal(root, epoch_index):

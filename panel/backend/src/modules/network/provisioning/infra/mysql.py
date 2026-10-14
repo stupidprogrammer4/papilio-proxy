@@ -5,12 +5,15 @@ from papilio.infra.db.repositories.backends.mysql import (
 )
 from papilio.infra.db.tools.read import fetch_page
 from papilio.schemas.results import PagedType
-from sqlalchemy import select, update
+from sqlalchemy import select, tuple_, update
 from sqlmodel import col
 
 from src.modules.network.provisioning.domain.models import (
     ProvisionRequestModel,
     ProvisionTaskModel,
+)
+from src.modules.network.provisioning.domain.results import (
+    ProvisionGenerationKey,
 )
 from src.modules.network.provisioning.infra.tables import (
     ProvisionRequestTable,
@@ -45,6 +48,28 @@ class ProvisionRequestRepository(
             .execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
+
+    async def by_generations(
+        self, keys: list[ProvisionGenerationKey]
+    ) -> list[ProvisionRequestModel]:
+        if not keys:
+            return []
+        result = await self.uow.execute(
+            select(ProvisionRequestTable)
+            .where(
+                tuple_(
+                    col(ProvisionRequestTable.subscription_id),
+                    col(ProvisionRequestTable.generation),
+                ).in_([(key.subscription_id, key.generation) for key in keys])
+            )
+            .order_by(
+                col(ProvisionRequestTable.subscription_id),
+                col(ProvisionRequestTable.generation),
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return list(result.scalars().all())
 
     async def change(
         self, row: ProvisionRequestModel, patch: ProvisionRequestModel
@@ -104,6 +129,38 @@ class ProvisionTaskRepository(MySQLPersistenceRepository[ProvisionTaskModel]):
             .execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
+
+    async def locked_many(self, ids: list[int]) -> list[ProvisionTaskModel]:
+        selected = sorted(set(ids))
+        if not selected:
+            return []
+        result = await self.uow.execute(
+            select(ProvisionTaskTable)
+            .where(col(ProvisionTaskTable.id).in_(selected))
+            .order_by(col(ProvisionTaskTable.id))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return list(result.scalars().all())
+
+    async def change_many(self, rows: list[ProvisionTaskModel]) -> None:
+        if not rows:
+            return
+        columns = {
+            name: ProvisionTaskTable.__table__.c[name]
+            for name in (
+                "installed_revision_id",
+                "membership_sha256",
+                "ack_sha256",
+                "state",
+                "attempts",
+                "claim_hash",
+                "claim_until",
+                "last_outcome",
+                "acknowledged_at",
+            )
+        }
+        await self.bulk_update(rows, update_columns=columns)
 
     async def for_request(
         self, request_id: int, limit: int

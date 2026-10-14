@@ -85,12 +85,20 @@ receipts. Admission receipts use a separately locked private journal namespace.
 These optional receipt capabilities default to disabled. Paid cycles explicitly
 select `provision_task_id` and require original admission receipts. The agent
 saves native paid acceptance before subsequent freeze/finality work.
-An optional `successor_cycles` registry selects a finite list of request keys,
-byte budgets, freeze intervals and retry settings, with explicit local and API
-cycle capacities. Component window, admission, record and barrier budgets must
-cover the entire chain before launch. A separate private successor journal is
-anchored to the completed initial paid journal. Recovery never relaunches an old
-child or fabricates a missing snapshot; it may retry only durable finality.
+An optional `successor_cycles` registry now selects one repeated `template`
+(request-key prefix, byte budget, freeze interval and retry settings) plus an
+explicit per-epoch cycle cap and API capacity. Request keys derive from the
+template, sequence and the preceding accepted finality, so exact replay retains
+identity without a manually listed window chain. Component window, admission,
+record and barrier budgets are checked against the complete configured cap before
+launch. Explicit API results for successor capacity, quota, inactive entitlement
+or disabled successors end the chain durably; network errors and other API errors
+remain unresolved. A separate private successor journal is anchored to the
+completed initial paid journal. Recovery never relaunches an old child or
+fabricates a missing snapshot; it may retry only durable finality. This does not
+yet create a new process epoch after the configured cap or terminal response.
+New launches reject manually listed `cycles`; the legacy journal shape remains
+readable only for exact replay of already persisted work.
 Component revocation requires a positive `max_revocations`; its separate private
 namespace and both intent/receipt artifacts count against `max_records`.
 

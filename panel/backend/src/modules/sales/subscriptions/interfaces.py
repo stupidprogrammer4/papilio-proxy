@@ -19,6 +19,7 @@ from src.modules.sales.subscriptions.domain.models import (
 )
 from src.modules.sales.subscriptions.domain.results import (
     SubscriptionRenewalQuote,
+    SubscriptionUsageUpdate,
 )
 
 
@@ -49,6 +50,15 @@ class ISubscriptionCommand(Protocol):
     def search(
         self, data: SubscriptionSearch
     ) -> Awaitable[ServicePage[SubscriptionModel]]: ...
+
+
+class ISubscriptionBatchService(Protocol):
+    def locked_many(
+        self, ids: list[int]
+    ) -> Awaitable[list[SubscriptionModel]]: ...
+    def update_used_many(
+        self, updates: list[SubscriptionUsageUpdate]
+    ) -> Awaitable[None]: ...
 
 
 class IRenewalQuery(Protocol):

@@ -3,12 +3,16 @@ from papilio.infra.db.repositories.backends.mysql import (
 )
 from papilio.infra.db.tools.read import fetch_page
 from papilio.schemas.results import PagedType
-from sqlalchemy import select
+from sqlalchemy import select, tuple_
 from sqlmodel import col
 
 from src.modules.network.usage.domain.models import (
     UsageEventModel,
     UsageGrantModel,
+)
+from src.modules.network.usage.domain.results import (
+    UsageEventIdentity,
+    UsageGrantAllocationKey,
 )
 from src.modules.network.usage.infra.tables import (
     UsageEventTable,
@@ -18,6 +22,81 @@ from src.modules.network.usage.infra.tables import (
 
 class UsageGrantRepository(MySQLPersistenceRepository[UsageGrantModel]):
     table = UsageGrantTable
+
+    async def locked_many(self, ids: list[int]) -> list[UsageGrantModel]:
+        selected = sorted(set(ids))
+        if not selected:
+            return []
+        result = await self.uow.execute(
+            select(UsageGrantTable)
+            .where(col(UsageGrantTable.id).in_(selected))
+            .order_by(col(UsageGrantTable.id))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return list(result.scalars().all())
+
+    async def allocations_many(
+        self, keys: list[UsageGrantAllocationKey]
+    ) -> list[UsageGrantModel]:
+        if not keys:
+            return []
+        result = await self.uow.execute(
+            select(UsageGrantTable)
+            .where(
+                tuple_(
+                    col(UsageGrantTable.profile_id),
+                    col(UsageGrantTable.generation),
+                    col(UsageGrantTable.request_key),
+                ).in_(
+                    [
+                        (key.profile_id, key.generation, key.request_key)
+                        for key in keys
+                    ]
+                )
+            )
+            .order_by(col(UsageGrantTable.id))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return list(result.scalars().all())
+
+    async def create_many(self, rows: list[UsageGrantModel]) -> None:
+        columns = {
+            name: UsageGrantTable.__table__.c[name]
+            for name in (
+                "subscription_id",
+                "profile_id",
+                "node_id",
+                "generation",
+                "configuration_revision",
+                "request_key",
+                "mode",
+                "allocated_bytes",
+                "valid_until",
+                "installed_revision_id",
+                "process_epoch",
+            )
+        }
+        await self.bulk_insert(rows, insert_columns=columns)
+
+    async def change_many(
+        self, rows: list[UsageGrantModel]
+    ) -> list[UsageGrantModel]:
+        if not rows:
+            return []
+        columns = {
+            name: UsageGrantTable.__table__.c[name]
+            for name in (
+                "upload_bytes",
+                "download_bytes",
+                "sequence",
+                "sampled_at",
+                "is_closed",
+            )
+        }
+        await self.bulk_update(rows, update_columns=columns)
+        return await self.locked_many([row.id for row in rows])
 
     async def allocation(
         self, profile_id: int, generation: int, request_key: str
@@ -82,6 +161,30 @@ class UsageGrantRepository(MySQLPersistenceRepository[UsageGrantModel]):
 class UsageEventRepository(MySQLPersistenceRepository[UsageEventModel]):
     table = UsageEventTable
 
+    async def create_many(self, rows: list[UsageEventModel]) -> None:
+        if not rows:
+            return
+        columns = {
+            name: UsageEventTable.__table__.c[name]
+            for name in (
+                "grant_id",
+                "subscription_id",
+                "node_id",
+                "generation",
+                "event_id",
+                "payload_hash",
+                "sequence",
+                "upload_bytes",
+                "download_bytes",
+                "delta_bytes",
+                "delta_upload_bytes",
+                "delta_download_bytes",
+                "final",
+                "sampled_at",
+            )
+        }
+        await self.bulk_insert(rows, insert_columns=columns)
+
     async def by_identity(
         self, node_id: int, event_id: str
     ) -> UsageEventModel | None:
@@ -95,3 +198,22 @@ class UsageEventRepository(MySQLPersistenceRepository[UsageEventModel]):
             .execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
+
+    async def by_identities_many(
+        self, identities: list[UsageEventIdentity]
+    ) -> list[UsageEventModel]:
+        if not identities:
+            return []
+        result = await self.uow.execute(
+            select(UsageEventTable)
+            .where(
+                tuple_(
+                    col(UsageEventTable.node_id),
+                    col(UsageEventTable.event_id),
+                ).in_([(item.node_id, item.event_id) for item in identities])
+            )
+            .order_by(col(UsageEventTable.id))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return list(result.scalars().all())

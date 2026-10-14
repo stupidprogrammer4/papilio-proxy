@@ -141,6 +141,9 @@ func managedEpochSealMembers(installation managedInstallationJournal, maximum in
 // loadManagedEpochSealWindows reads completed immutable source journals only.
 // Missing or unfinished paid/admission proof cannot become a seal/refund proof.
 func loadManagedEpochSealWindows(client *Client, p ManagedInstallationPolicy, policy ManagedEpochSealPolicy, journal *Journal, installation managedInstallationJournal) ([]managedEpochSealWindow, string, string, error) {
+	if p.WindowBatch != nil && p.WindowBatch.Enabled {
+		return loadManagedWindowBatchSealWindows(client, p, journal, installation)
+	}
 	raw, err := managedReadPrivate(filepath.Join(journal.root, "managed-window-cycle.json"), journal.maxBytes)
 	if os.IsNotExist(err) && (p.WindowCycle == nil || !p.WindowCycle.Enabled) {
 		if _, chainErr := managedReadPrivate(filepath.Join(journal.root, managedSuccessorJournalName), journal.maxBytes); !os.IsNotExist(chainErr) {

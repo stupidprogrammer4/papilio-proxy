@@ -3,7 +3,7 @@ from datetime import datetime
 from papilio.infra.db.tools.read import fetch_page
 from papilio.infra.db.uow import MySQLUnitOfWork
 from papilio.schemas.results import PagedType
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, tuple_
 from sqlmodel import col
 
 from src.modules.network.configurations.infra.tables import (
@@ -14,6 +14,9 @@ from src.modules.network.managed_runtime.infra.tables import ManagedWindowTable
 from src.modules.network.usage.domain.models import UsageEventModel
 from src.modules.network.usage.domain.results import (
     ProfileUsageAssignment,
+    UsageGenerationKey,
+    UsageProfileGenerationKey,
+    UsageReservationTotal,
     UsageSummary,
 )
 from src.modules.network.usage.infra.tables import (
@@ -54,6 +57,104 @@ class UsageFactsReader:
                 row.ProfileTable, row.ConfigurationTable
             )
         )
+
+    async def assignment_many(
+        self, profile_ids: list[int], node_id: int, lock: bool = False
+    ) -> list[ProfileUsageAssignment]:
+        selected = sorted(set(profile_ids))
+        if not selected:
+            return []
+        statement = (
+            select(ProfileTable, ConfigurationTable)
+            .join(
+                ConfigurationTable,
+                col(ConfigurationTable.id)
+                == col(ProfileTable.configuration_id),
+            )
+            .where(
+                col(ProfileTable.id).in_(selected),
+                col(ConfigurationTable.node_id) == node_id,
+            )
+            .order_by(col(ProfileTable.id))
+        )
+        if lock:
+            statement = statement.with_for_update().execution_options(
+                populate_existing=True
+            )
+        result = await self.uow.execute(statement)
+        return [
+            ProfileUsageAssignment(row.ProfileTable, row.ConfigurationTable)
+            for row in result.all()
+        ]
+
+    async def has_open_profiles_many(
+        self, keys: list[UsageProfileGenerationKey]
+    ) -> list[UsageProfileGenerationKey]:
+        if not keys:
+            return []
+        result = await self.uow.execute(
+            select(
+                col(UsageGrantTable.profile_id),
+                col(UsageGrantTable.generation),
+            )
+            .where(
+                tuple_(
+                    col(UsageGrantTable.profile_id),
+                    col(UsageGrantTable.generation),
+                ).in_([(key.profile_id, key.generation) for key in keys]),
+                col(UsageGrantTable.is_closed).is_(False),
+            )
+            .order_by(
+                col(UsageGrantTable.profile_id),
+                col(UsageGrantTable.generation),
+            )
+            .with_for_update()
+        )
+        return [
+            UsageProfileGenerationKey(profile_id=row[0], generation=row[1])
+            for row in result.all()
+        ]
+
+    async def reserved_bytes_many(
+        self, keys: list[UsageGenerationKey], modes: list[str]
+    ) -> list[UsageReservationTotal]:
+        if not keys:
+            return []
+        remaining = (
+            col(UsageGrantTable.allocated_bytes)
+            - col(UsageGrantTable.upload_bytes)
+            - col(UsageGrantTable.download_bytes)
+        )
+        result = await self.uow.execute(
+            select(
+                col(UsageGrantTable.subscription_id),
+                col(UsageGrantTable.generation),
+                func.coalesce(
+                    func.sum(case((remaining > 0, remaining), else_=0)), 0
+                ),
+            )
+            .where(
+                tuple_(
+                    col(UsageGrantTable.subscription_id),
+                    col(UsageGrantTable.generation),
+                ).in_([(key.subscription_id, key.generation) for key in keys]),
+                col(UsageGrantTable.mode).in_(modes),
+                col(UsageGrantTable.is_closed).is_(False),
+            )
+            .group_by(
+                col(UsageGrantTable.subscription_id),
+                col(UsageGrantTable.generation),
+            )
+            .with_for_update()
+        )
+        return [
+            UsageReservationTotal(
+                subscription_id=row[0],
+                generation=row[1],
+                allocated_bytes=int(row[2]),
+            )
+            for row in result.all()
+        ]
 
     async def managed_window_id(self, grant_id: int) -> int | None:
         result = await self.uow.execute(

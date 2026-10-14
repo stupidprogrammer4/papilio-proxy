@@ -38,6 +38,16 @@ class ManagedEpochModel(PersistenceEntity):
     encrypted_receipt: str = TextField()
 
 
+class ManagedOperationBatchModel(PersistenceEntity):
+    installation_id: int = ForeignKeyField("tbl_managed_installations.id")
+    epoch_id: int = ForeignKeyField("tbl_managed_epoches.id")
+    operation: str = CharField(16)
+    request_key: str = CharField(128)
+    request_sha256: str = CharField(64)
+    item_count: int = IntField()
+    accepted_at: datetime = TimestampField()
+
+
 class ManagedBarrierModel(PersistenceEntity):
     epoch_id: int = ForeignKeyField("tbl_managed_epoches.id")
     barrier_id: str = CharField(32)
@@ -50,6 +60,9 @@ class ManagedBarrierModel(PersistenceEntity):
 
 
 class ManagedWindowModel(PersistenceEntity):
+    operation_batch_id: int | None = ForeignKeyField(
+        "tbl_managed_operation_batches.id", default=None, index=True
+    )
     encrypted_provision_claim: str | None = TextField(default=None)
     epoch_id: int = ForeignKeyField("tbl_managed_epoches.id")
     grant_id: int = ForeignKeyField("tbl_usage_grants.id", unique=True)

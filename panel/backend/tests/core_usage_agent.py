@@ -198,7 +198,7 @@ def _journal(directory, core_id):
     )
 
 
-def _wait(call, complete, message, seconds=20):
+def _wait(call, complete, message, seconds: float = 20):
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
         value = call()

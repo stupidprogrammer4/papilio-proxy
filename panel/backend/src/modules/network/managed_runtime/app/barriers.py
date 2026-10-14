@@ -42,10 +42,8 @@ from src.modules.network.usage.domain.models import (
     UsageEventModel,
     UsageGrantModel,
 )
-from src.modules.network.usage.infra.mysql import (
-    UsageEventRepository,
-    UsageGrantRepository,
-)
+from src.modules.network.usage.infra.mysql import UsageEventRepository
+from src.modules.network.usage.interfaces import IUsageGrantService
 from src.modules.sales.subscriptions.domain.models import SubscriptionModel
 from src.modules.sales.subscriptions.infra.mysql import SubscriptionRepository
 
@@ -60,7 +58,7 @@ class ManagedFinalityCommand:
         nodes: INodeService,
         states: IRuntimeStateService,
         subscriptions: SubscriptionRepository,
-        grants: UsageGrantRepository,
+        grants: IUsageGrantService,
         events: UsageEventRepository,
         settings: PapilioSettings,
     ) -> None:

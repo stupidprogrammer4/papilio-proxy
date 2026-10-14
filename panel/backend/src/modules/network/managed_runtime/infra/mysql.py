@@ -3,7 +3,7 @@
 from papilio.infra.db.repositories.backends.mysql import (
     MySQLPersistenceRepository,
 )
-from sqlalchemy import select
+from sqlalchemy import select, tuple_
 from sqlmodel import col
 
 from src.modules.network.managed_runtime.domain.models import (
@@ -11,8 +11,13 @@ from src.modules.network.managed_runtime.domain.models import (
     ManagedBarrierModel,
     ManagedEpochModel,
     ManagedInstallationModel,
+    ManagedOperationBatchModel,
     ManagedRevocationModel,
     ManagedWindowModel,
+)
+from src.modules.network.managed_runtime.domain.results import (
+    ManagedBarrierIdentity,
+    ManagedWindowRequestIdentity,
 )
 from src.modules.network.managed_runtime.domain.rollovers import (
     ManagedInstallationEpochCount,
@@ -22,6 +27,7 @@ from src.modules.network.managed_runtime.infra.tables import (
     ManagedBarrierTable,
     ManagedEpochTable,
     ManagedInstallationTable,
+    ManagedOperationBatchTable,
     ManagedRevocationTable,
     ManagedWindowTable,
 )
@@ -124,6 +130,27 @@ class ManagedEpochRepository(MySQLPersistenceRepository[ManagedEpochModel]):
         return result.scalar_one_or_none()
 
 
+class ManagedOperationBatchRepository(
+    MySQLPersistenceRepository[ManagedOperationBatchModel]
+):
+    table = ManagedOperationBatchTable
+
+    async def by_identity(
+        self, installation_id: int, operation: str, request_key: str
+    ) -> ManagedOperationBatchModel | None:
+        result = await self.uow.execute(
+            select(self.table)
+            .where(
+                col(self.table.installation_id) == installation_id,
+                col(self.table.operation) == operation,
+                col(self.table.request_key) == request_key,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
+
+
 class ManagedWindowRepository(MySQLPersistenceRepository[ManagedWindowModel]):
     table = ManagedWindowTable
 
@@ -172,6 +199,104 @@ class ManagedWindowRepository(MySQLPersistenceRepository[ManagedWindowModel]):
         )
         return result.scalar_one_or_none()
 
+    async def initials_for_profiles_epoch(
+        self, profile_ids: list[int], epoch_id: int
+    ) -> list[ManagedWindowModel]:
+        selected = sorted(set(profile_ids))
+        if not selected:
+            return []
+        result = await self.uow.execute(
+            select(self.table)
+            .where(
+                col(self.table.profile_id).in_(selected),
+                col(self.table.epoch_id) == epoch_id,
+                col(self.table.predecessor_id).is_(None),
+            )
+            .order_by(col(self.table.profile_id))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return list(result.scalars().all())
+
+    async def by_operation_batch(
+        self, operation_batch_id: int
+    ) -> list[ManagedWindowModel]:
+        result = await self.uow.execute(
+            select(self.table)
+            .where(col(self.table.operation_batch_id) == operation_batch_id)
+            .order_by(col(self.table.profile_id))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return list(result.scalars().all())
+
+    async def by_identities_many(
+        self, window_ids: list[str]
+    ) -> list[ManagedWindowModel]:
+        selected = sorted(set(window_ids))
+        if not selected:
+            return []
+        result = await self.uow.execute(
+            select(self.table)
+            .where(col(self.table.window_id).in_(selected))
+            .order_by(col(self.table.id))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return list(result.scalars().all())
+
+    async def by_requests_many(
+        self, identities: list[ManagedWindowRequestIdentity]
+    ) -> list[ManagedWindowModel]:
+        if not identities:
+            return []
+        result = await self.uow.execute(
+            select(self.table)
+            .where(
+                tuple_(
+                    col(self.table.profile_id),
+                    col(self.table.generation),
+                    col(self.table.request_key),
+                ).in_(
+                    [
+                        (item.profile_id, item.generation, item.request_key)
+                        for item in identities
+                    ]
+                )
+            )
+            .order_by(col(self.table.profile_id))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return list(result.scalars().all())
+
+    async def create_many(self, rows: list[ManagedWindowModel]) -> None:
+        columns = {
+            name: ManagedWindowTable.__table__.c[name]
+            for name in (
+                "operation_batch_id",
+                "encrypted_provision_claim",
+                "epoch_id",
+                "grant_id",
+                "profile_id",
+                "subscription_id",
+                "provision_task_id",
+                "generation",
+                "window_id",
+                "request_key",
+                "request_sha256",
+                "window_sha256",
+                "baseline_upload_bytes",
+                "baseline_download_bytes",
+                "allocated_bytes",
+                "issued_at",
+                "valid_until",
+                "predecessor_id",
+                "encrypted_window",
+            )
+        }
+        await self.bulk_insert(rows, insert_columns=columns)
+
 
 class ManagedBarrierRepository(
     MySQLPersistenceRepository[ManagedBarrierModel]
@@ -191,6 +316,42 @@ class ManagedBarrierRepository(
             .execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
+
+    async def by_identities_many(
+        self, identities: list[ManagedBarrierIdentity]
+    ) -> list[ManagedBarrierModel]:
+        if not identities:
+            return []
+        result = await self.uow.execute(
+            select(self.table)
+            .where(
+                tuple_(
+                    col(self.table.epoch_id), col(self.table.barrier_id)
+                ).in_(
+                    [(item.epoch_id, item.barrier_id) for item in identities]
+                )
+            )
+            .order_by(col(self.table.id))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return list(result.scalars().all())
+
+    async def create_many(self, rows: list[ManagedBarrierModel]) -> None:
+        columns = {
+            name: ManagedBarrierTable.__table__.c[name]
+            for name in (
+                "epoch_id",
+                "barrier_id",
+                "acceptance_id",
+                "snapshot_sha256",
+                "request_sha256",
+                "frozen_at",
+                "accepted_at",
+                "encrypted_receipt",
+            )
+        }
+        await self.bulk_insert(rows, insert_columns=columns)
 
 
 class ManagedAdmissionRepository(

@@ -32,6 +32,12 @@ class ProvisionTarget:
 
 
 @dataclass(frozen=True, slots=True)
+class ProvisionGenerationKey:
+    subscription_id: int
+    generation: int
+
+
+@dataclass(frozen=True, slots=True)
 class NodeProvisionFacts:
     task: ProvisionTaskModel
     request: ProvisionRequestModel

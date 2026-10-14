@@ -135,6 +135,27 @@ class ManagedInstallationWorkflowFixture(StaffAdministrationWorkflowFixture):
             f"/v1/admin/network/configurations/{configuration['id']}/profiles",
             {"subscription_id": subscription["id"]},
         )
+        if getattr(self, "add_second_managed_profile", False):
+            previous_suffix = self.suffix
+            self.suffix = previous_suffix + "_second"
+            try:
+                _, second_subscription = await self.paid_subscription()
+            finally:
+                self.suffix = previous_suffix
+            await self.post(
+                f"/v1/admin/network/configurations/{configuration['id']}"
+                "/profiles",
+                {"subscription_id": second_subscription["id"]},
+            )
+            async with self.connection.uow() as unit:
+                async with transaction(unit):
+                    await unit.execute(
+                        text(
+                            "UPDATE tbl_subscriptions SET status='active',"
+                            "provisioning_managed=0 WHERE id=:id"
+                        ),
+                        {"id": second_subscription["id"]},
+                    )
         if getattr(self, "paid_managed_fixture", False):
             async with self.connection.uow() as fresh:
                 requests = await fresh.execute(

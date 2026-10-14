@@ -189,6 +189,92 @@ func (c *Client) FinalizeManagedWindow(ctx context.Context, issued ManagedIssued
 }
 
 func FetchManagedWindowSnapshot(ctx context.Context, p ManagedInstallationPolicy, barrierID string, issued ManagedIssuedWindow) (ManagedWindowFinalSubmission, error) {
+	return fetchManagedWindowSnapshot(ctx, p, barrierID, func(submission ManagedWindowFinalSubmission) error {
+		_, _, validationErr := validateManagedFinalSubmission(submission, issued.Window, p.MaxReceiptBytes)
+		return validationErr
+	})
+}
+
+func FetchManagedWindowBatchSnapshots(ctx context.Context, p ManagedInstallationPolicy, targets []managedWindowFreezeTarget, issued []ManagedBatchIssuedWindow, maximum int64) (map[int64]ManagedWindowFinalSubmission, error) {
+	if len(targets) == 0 || len(targets) != len(issued) || maximum <= 0 || maximum >= math.MaxInt64 || !filepath.IsAbs(p.ControlRoot) || p.PollIntervalMS <= 0 || int64(p.PollIntervalMS) > math.MaxInt64/int64(time.Millisecond) {
+		return nil, errors.New("managed_snapshot_batch_request_invalid")
+	}
+	requestPayload, marshalErr := json.Marshal(struct {
+		Epoch   string                      `json:"epoch"`
+		Windows []managedWindowFreezeTarget `json:"windows"`
+	}{issued[0].Window.Window.Epoch, targets})
+	if marshalErr != nil {
+		return nil, errors.New("managed_snapshot_batch_request_invalid")
+	}
+	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, "unix", filepath.Join(p.ControlRoot, "control.sock"))
+	}, MaxResponseHeaderBytes: p.MaxReceiptBytes, ResponseHeaderTimeout: time.Duration(p.PollIntervalMS) * time.Millisecond}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, Timeout: time.Duration(p.PollIntervalMS) * time.Millisecond, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	request, requestErr := http.NewRequestWithContext(ctx, http.MethodPost, "http://private/v1/windows/snapshots/batch", bytes.NewReader(requestPayload))
+	if requestErr != nil {
+		return nil, requestErr
+	}
+	request.Header.Set("Accept-Encoding", "identity")
+	request.Header.Set("Content-Type", "application/json")
+	response, requestErr := client.Do(request)
+	if requestErr != nil {
+		return nil, requestErr
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK || response.ContentLength > maximum || response.Header.Get("Content-Encoding") != "" && response.Header.Get("Content-Encoding") != "identity" {
+		return nil, errors.New("managed_snapshot_batch_response_invalid")
+	}
+	payload, readErr := io.ReadAll(io.LimitReader(response.Body, maximum+1))
+	if readErr != nil || response.ContentLength >= 0 && int64(len(payload)) != response.ContentLength || int64(len(payload)) > maximum {
+		return nil, errors.New("managed_snapshot_batch_response_unavailable")
+	}
+	var decoded struct {
+		State   string `json:"state"`
+		Windows []struct {
+			ProfileID       int64                  `json:"profile_id"`
+			WindowID        string                 `json:"window_id"`
+			Receipt         ManagedSnapshotReceipt `json:"receipt"`
+			OriginalReceipt string                 `json:"original_receipt"`
+		} `json:"windows"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&decoded) != nil || len(decoded.Windows) != len(issued) {
+		return nil, errors.New("managed_snapshot_batch_binding_invalid")
+	}
+	issuedByProfile := make(map[int64]ManagedIssuedWindow, len(issued))
+	targetByProfile := make(map[int64]managedWindowFreezeTarget, len(targets))
+	for index, item := range issued {
+		if item.ProfileID <= 0 || item.ProfileID != item.Window.Window.Binding.ProfileID || targets[index].ProfileID != item.ProfileID || targets[index].WindowID != item.Window.Window.WindowID {
+			return nil, errors.New("managed_snapshot_batch_binding_invalid")
+		}
+		issuedByProfile[item.ProfileID] = item.Window
+		targetByProfile[item.ProfileID] = targets[index]
+	}
+	result := make(map[int64]ManagedWindowFinalSubmission, len(issued))
+	for _, item := range decoded.Windows {
+		window, exists := issuedByProfile[item.ProfileID]
+		target, targetExists := targetByProfile[item.ProfileID]
+		if !exists || !targetExists || item.WindowID != window.Window.WindowID || item.Receipt.BarrierID != target.BarrierID || item.Receipt.Epoch != window.Window.Epoch || len(item.OriginalReceipt) == 0 || int64(len(item.OriginalReceipt)) > p.MaxReceiptBytes {
+			return nil, errors.New("managed_snapshot_batch_profile_invalid")
+		}
+		if _, duplicate := result[item.ProfileID]; duplicate {
+			return nil, errors.New("managed_snapshot_batch_duplicate_profile")
+		}
+		submission := ManagedWindowFinalSubmission{Receipt: item.Receipt, OriginalReceipt: item.OriginalReceipt}
+		if _, _, validationErr := validateManagedFinalSubmission(submission, window.Window, p.MaxReceiptBytes); validationErr != nil {
+			return nil, validationErr
+		}
+		result[item.ProfileID] = submission
+	}
+	if len(result) != len(issued) {
+		return nil, errors.New("managed_snapshot_batch_incomplete")
+	}
+	return result, nil
+}
+
+func fetchManagedWindowSnapshot(ctx context.Context, p ManagedInstallationPolicy, barrierID string, validate func(ManagedWindowFinalSubmission) error) (ManagedWindowFinalSubmission, error) {
 	if !epochPattern.MatchString(barrierID) || !filepath.IsAbs(p.ControlRoot) || p.MaxReceiptBytes <= 0 || p.MaxReceiptBytes >= math.MaxInt64 || p.PollIntervalMS <= 0 || int64(p.PollIntervalMS) > math.MaxInt64/int64(time.Millisecond) {
 		return ManagedWindowFinalSubmission{}, errors.New("managed_snapshot_request_invalid")
 	}
@@ -219,7 +305,7 @@ func FetchManagedWindowSnapshot(ctx context.Context, p ManagedInstallationPolicy
 	if err != nil || length != response.ContentLength || result.Receipt.BarrierID != barrierID {
 		return ManagedWindowFinalSubmission{}, errors.New("managed_snapshot_headers_invalid")
 	}
-	if _, _, err = validateManagedFinalSubmission(result, issued.Window, p.MaxReceiptBytes); err != nil {
+	if err = validate(result); err != nil {
 		return ManagedWindowFinalSubmission{}, err
 	}
 	return result, nil
