@@ -215,12 +215,54 @@ func (s *SnapshotStore) commitImmutable(name string, payload []byte, maximum int
 	return nil
 }
 
+func (s *SnapshotStore) replacePrivate(name string, payload []byte, maximum int64) error {
+	if int64(len(payload)) > maximum {
+		return errors.New("managed_journal_capacity")
+	}
+	if _, err := s.readPrivate(name, maximum); err != nil {
+		return errors.New("managed_journal_unavailable")
+	}
+	temporary, err := os.CreateTemp(s.root, "journal-replace-")
+	if err != nil {
+		return errors.New("managed_journal_unavailable")
+	}
+	defer os.Remove(temporary.Name())
+	if err = temporary.Chmod(0600); err != nil {
+		_ = temporary.Close()
+		return errors.New("managed_journal_write_failed")
+	}
+	if _, err = temporary.Write(payload); err != nil {
+		_ = temporary.Close()
+		return errors.New("managed_journal_write_failed")
+	}
+	if err = temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return errors.New("managed_journal_sync_failed")
+	}
+	if err = temporary.Close(); err != nil {
+		return errors.New("managed_journal_sync_failed")
+	}
+	if err = os.Rename(temporary.Name(), filepath.Join(s.root, name)); err != nil {
+		return errors.New("managed_journal_commit_failed")
+	}
+	if err = s.syncDirectory(); err != nil {
+		return errors.New("managed_journal_sync_failed")
+	}
+	return nil
+}
+
 // RequireRecoverable never restarts a previously owned epoch. It only permits
 // construction if every prior intent has a durable exactly-bound snapshot.
 func (s *SnapshotStore) RequireRecoverable() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, err := s.readPrivate("epoch-active.json", s.policy.MaxSnapshotBytes); !os.IsNotExist(err) {
+	active, activeErr := s.readPrivate("epoch-active.json", s.policy.MaxSnapshotBytes)
+	if activeErr == nil {
+		record, decodeErr := decodeEpochRecord(active, s.policy.MaxSnapshotBytes, s.policy.MaxJSONDepth)
+		if decodeErr != nil || record.State != "sealed_accepted" {
+			return errors.New("managed_epoch_recovery_unresolved")
+		}
+	} else if !os.IsNotExist(activeErr) {
 		return errors.New("managed_epoch_recovery_unresolved")
 	}
 	ids, err := s.journalEntries()
@@ -245,6 +287,45 @@ func (s *SnapshotStore) RequireRecoverable() error {
 	}
 	return nil
 }
+
+// ResumeClosedEpoch permits a supervisor-selected replay only while the exact
+// immutable startup receipt remains the sole epoch observation. WindowStore
+// freshness is checked by WindowManager before this local resume is accepted.
+func (s *SnapshotStore) ResumeClosedEpoch(epoch string, installation Installation, expected ClosedStartupReceipt) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	active, err := s.readPrivate("epoch-active.json", s.policy.MaxSnapshotBytes)
+	if err != nil {
+		return errors.New("managed_epoch_resume_unresolved")
+	}
+	record, err := decodeEpochRecord(active, s.policy.MaxSnapshotBytes, s.policy.MaxJSONDepth)
+	if err != nil || record.State != "open_unresolved" || record.Epoch != epoch || record.Installation != installation {
+		return errors.New("managed_epoch_resume_unresolved")
+	}
+	_, actual, err := s.closedStartupBytes()
+	if err != nil || actual != expected || actual.Epoch != epoch {
+		return errors.New("managed_epoch_resume_receipt_mismatch")
+	}
+	ids, err := s.journalEntries()
+	if err != nil {
+		return errors.New("managed_epoch_resume_unresolved")
+	}
+	for id := range ids {
+		intent, intentErr := s.readIntent(id)
+		if os.IsNotExist(intentErr) {
+			continue
+		}
+		if intentErr != nil {
+			return errors.New("managed_epoch_resume_unresolved")
+		}
+		snapshot, snapshotErr := s.loadSnapshot(id)
+		if snapshotErr != nil || !matchesIntent(snapshot, intent) {
+			return errors.New("managed_epoch_resume_unresolved")
+		}
+	}
+	return nil
+}
+
 func matchesIntent(snapshot *Snapshot, intent FreezeIntent) bool {
 	if snapshot.Epoch != intent.Epoch || snapshot.BarrierID != intent.BarrierID || snapshot.Installation != intent.Installation || len(snapshot.Profiles) != len(intent.ProfileIDs) {
 		return false

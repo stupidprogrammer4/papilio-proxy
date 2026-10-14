@@ -15,6 +15,7 @@ type WindowStore struct {
 	policy      WindowPolicy
 	admissions  *SnapshotStore
 	revocations *SnapshotStore
+	seals       *SnapshotStore
 	mu          sync.Mutex
 }
 
@@ -49,6 +50,15 @@ func OpenWindowStore(root string, base Policy, policy WindowPolicy) (*WindowStor
 			return nil, err
 		}
 	}
+	if policy.MaxEpochSeals > 0 {
+		sealPolicy := local
+		sealPolicy.MaxBarriers = policy.MaxEpochSeals
+		store.seals, err = OpenSnapshotStore(root+".seals", sealPolicy)
+		if err != nil {
+			_ = store.Close()
+			return nil, err
+		}
+	}
 	return store, nil
 }
 func (s *WindowStore) Close() error {
@@ -60,6 +70,11 @@ func (s *WindowStore) Close() error {
 	}
 	if s.revocations != nil {
 		if closeErr := s.revocations.Close(); err == nil {
+			err = closeErr
+		}
+	}
+	if s.seals != nil {
+		if closeErr := s.seals.Close(); err == nil {
 			err = closeErr
 		}
 	}
@@ -83,7 +98,10 @@ func (s *WindowStore) requireFresh() error {
 	if err := s.admissionNamespaceFresh(); err != nil {
 		return err
 	}
-	return s.revocationNamespaceFresh()
+	if err := s.revocationNamespaceFresh(); err != nil {
+		return err
+	}
+	return s.sealNamespaceFresh()
 }
 func (s *WindowStore) save(name string, value any) error {
 	payload, err := json.Marshal(value)

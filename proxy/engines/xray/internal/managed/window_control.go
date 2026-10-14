@@ -9,6 +9,33 @@ import (
 // These controls accept explicit same-UID LOCAL component input, not native API
 // grant/receipt authority. Metadata-only enforcement flags are always false.
 func (c *Control) handleWindow(writer http.ResponseWriter, path string, payload []byte) {
+	if path == "/v1/epochs/seal-original" {
+		c.handleSealOriginal(writer, payload)
+		return
+	}
+	if path == "/v1/epochs/seal-accepted" {
+		var acceptance EpochSealAcceptance
+		decoder := json.NewDecoder(bytes.NewReader(payload))
+		decoder.DisallowUnknownFields()
+		if decoder.Decode(&acceptance) != nil {
+			controlError(writer, http.StatusBadRequest, "managed_epoch_seal_acceptance_invalid")
+			return
+		}
+		if err := c.windows.AcceptEpochSeal(acceptance); err != nil {
+			controlError(writer, http.StatusConflict, err.Error())
+			return
+		}
+		output, marshalErr := json.Marshal(struct {
+			State      string              `json:"state"`
+			Acceptance EpochSealAcceptance `json:"acceptance"`
+		}{"local_component_epoch_seal_accepted", acceptance})
+		if marshalErr != nil || int64(len(output)) > c.gate.policy.MaxControlBytes {
+			controlError(writer, http.StatusServiceUnavailable, "managed_window_response_capacity")
+			return
+		}
+		_, _ = writer.Write(output)
+		return
+	}
 	if path == "/v1/windows/admit-original" {
 		original, err := c.windows.AdmitOriginal(payload)
 		if err != nil {

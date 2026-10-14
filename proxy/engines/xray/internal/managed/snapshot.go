@@ -24,10 +24,11 @@ type SnapshotReceipt struct {
 	Bytes     int64  `json:"bytes"`
 }
 type SnapshotStore struct {
-	mu     sync.Mutex
-	root   string
-	policy Policy
-	lock   *os.File
+	mu            sync.Mutex
+	root          string
+	policy        Policy
+	lock          *os.File
+	maxEpochSeals int
 }
 
 func privateFile(info os.FileInfo) bool {

@@ -44,9 +44,12 @@ func run(arguments []string, output io.Writer) error {
 	path := flags.String("config", "", "private owning settings file")
 	maximumBytes := flags.Int64("max-config-bytes", 0, "owning initial settings byte budget")
 	maximumDepth := flags.Int("max-config-depth", 0, "owning initial settings nesting budget")
+	resumeEpoch := flags.String("resume-epoch", "", "supervisor-selected closed epoch to resume")
+	resumeReceiptSHA := flags.String("resume-startup-sha256", "", "exact persisted closed-startup receipt digest")
+	resumeReceiptBytes := flags.Int64("resume-startup-bytes", 0, "exact persisted closed-startup receipt byte length")
 	start := flags.Bool("run", false, "explicitly start one owned isolated prototype")
 	check := flags.Bool("check", false, "validate local settings/build evidence without core/journal/listeners")
-	if flags.Parse(arguments) != nil || flags.NArg() != 0 || (*start && *check) {
+	if flags.Parse(arguments) != nil || flags.NArg() != 0 || (*start && *check) || (*check && (*resumeEpoch != "" || *resumeReceiptSHA != "" || *resumeReceiptBytes != 0)) || (*resumeEpoch == "") != (*resumeReceiptSHA == "") || (*resumeEpoch == "") != (*resumeReceiptBytes == 0) {
 		return errors.New("managed_cli_invalid")
 	}
 	if !*start && !*check {
@@ -59,6 +62,9 @@ func run(arguments []string, output io.Writer) error {
 	if !settings.Enabled {
 		return json.NewEncoder(output).Encode(localResult{State: "disabled"})
 	}
+	if *resumeEpoch != "" && (settings.AccountingMode != "window_component" || settings.EnforcementPolicy == nil) {
+		return errors.New("managed_epoch_resume_policy_invalid")
+	}
 	build, err := managed.ObserveBuild(settings.Installation.ExecutableSHA256, settings.Policy.MaxExecutableBytes)
 	if err != nil {
 		return err
@@ -66,11 +72,14 @@ func run(arguments []string, output io.Writer) error {
 	if *check {
 		return json.NewEncoder(output).Encode(localResult{State: "local_policy_validated"})
 	}
-	epochBytes := make([]byte, 16)
-	if _, err = rand.Read(epochBytes); err != nil {
-		return errors.New("managed_epoch_unavailable")
+	epoch := *resumeEpoch
+	if epoch == "" {
+		epochBytes := make([]byte, 16)
+		if _, err = rand.Read(epochBytes); err != nil {
+			return errors.New("managed_epoch_unavailable")
+		}
+		epoch = hex.EncodeToString(epochBytes)
 	}
-	epoch := hex.EncodeToString(epochBytes)
 	var gate *managed.Gate
 	if settings.AccountingMode == "window_component" {
 		gate, err = managed.NewWindowGate(settings.Policy, epoch, settings.Bindings, settings.Installation)
@@ -93,12 +102,15 @@ func run(arguments []string, output io.Writer) error {
 			_ = store.Close()
 		}
 	}()
-	if err = store.RequireRecoverable(); err != nil {
-		return err
+	if *resumeEpoch == "" {
+		if err = store.RequireRecoverable(); err != nil {
+			return err
+		}
 	}
 	var windows *managed.WindowManager
 	if settings.AccountingMode == "window_component" {
-		windowStore, openErr := managed.OpenWindowStore(settings.ControlRoot+".windows", settings.Policy, *settings.WindowPolicy)
+		windowRoot := settings.ControlRoot + ".windows-" + epoch
+		windowStore, openErr := managed.OpenWindowStore(windowRoot, settings.Policy, *settings.WindowPolicy)
 		if openErr != nil {
 			return openErr
 		}
@@ -111,11 +123,20 @@ func run(arguments []string, output io.Writer) error {
 		if err != nil {
 			return err
 		}
+		if *resumeEpoch != "" {
+			receipt := managed.ClosedStartupReceipt{Epoch: *resumeEpoch, SHA256: *resumeReceiptSHA, Bytes: *resumeReceiptBytes}
+			if err = windows.ResumeClosedEpoch(receipt); err != nil {
+				return err
+			}
+		}
 		defer func() {
 			if windows.Close() != nil {
 				closeStore = false
 			}
 		}()
+	}
+	if *resumeEpoch != "" && windows == nil {
+		return errors.New("managed_epoch_resume_policy_invalid")
 	}
 	targets := make(map[string]xnet.Destination, len(settings.InternalTargets))
 	for _, target := range settings.InternalTargets {
@@ -137,9 +158,11 @@ func run(arguments []string, output io.Writer) error {
 			return errors.New("managed_core_close_unresolved")
 		}
 	}
-	if err = store.BeginEpoch(epoch, settings.Installation); err != nil {
-		_ = closeInstance()
-		return err
+	if *resumeEpoch == "" {
+		if err = store.BeginEpoch(epoch, settings.Installation); err != nil {
+			_ = closeInstance()
+			return err
+		}
 	}
 	if err = instance.Start(); err != nil {
 		_ = closeInstance()

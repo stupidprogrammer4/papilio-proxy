@@ -11,12 +11,12 @@ import (
 )
 
 func (s *WindowStore) recordCapacity(target *SnapshotStore, name string) error {
-	if s.admissions == nil && s.revocations == nil {
+	if s.admissions == nil && s.revocations == nil && s.seals == nil {
 		return nil
 	}
 	exists := false
 	total := 0
-	for _, journal := range []*SnapshotStore{s.journal, s.admissions, s.revocations} {
+	for _, journal := range []*SnapshotStore{s.journal, s.admissions, s.revocations, s.seals} {
 		if journal == nil {
 			continue
 		}
@@ -29,6 +29,10 @@ func (s *WindowStore) recordCapacity(target *SnapshotStore, name string) error {
 		if readErr != nil && readErr != io.EOF {
 			return errors.New("managed_admission_journal_unavailable")
 		}
+		names := make(map[string]bool, len(entries))
+		for _, entry := range entries {
+			names[entry.Name()] = true
+		}
 		for _, entry := range entries {
 			if entry.Name() == "snapshot.lock" {
 				continue
@@ -38,12 +42,24 @@ func (s *WindowStore) recordCapacity(target *SnapshotStore, name string) error {
 				return errors.New("managed_admission_journal_unsafe")
 			}
 			total++
+			// A durable seal intent reserves its original receipt slot.
+			if journal == s.seals && strings.HasSuffix(entry.Name(), ".intent") && !names[id+".json"] {
+				total++
+			}
 			if journal == target && entry.Name() == name {
 				exists = true
 			}
 		}
 	}
-	if total > s.policy.MaxRecords || (!exists && total >= s.policy.MaxRecords) {
+	additional := 1
+	if target == s.seals {
+		if strings.HasSuffix(name, ".intent") {
+			additional = 2
+		} else {
+			additional = 0
+		}
+	}
+	if total > s.policy.MaxRecords || (!exists && total+additional > s.policy.MaxRecords) {
 		return errors.New("managed_admission_journal_capacity")
 	}
 	return nil

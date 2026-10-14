@@ -29,7 +29,14 @@ func TestCLIInvalidModesAndUnboundedInputsFailBeforeRuntime(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "settings.json")
 	os.WriteFile(path, []byte(`{"enabled":false}`), 0600)
-	for _, arguments := range [][]string{{"--run", "--check"}, {"--check", "--config", path}, {"--check", "--config", path, "--max-config-bytes", "4096"}, {"--run", "unexpected"}} {
+	for _, arguments := range [][]string{
+		{"--run", "--check"},
+		{"--check", "--config", path},
+		{"--check", "--config", path, "--max-config-bytes", "4096"},
+		{"--run", "unexpected"},
+		{"--run", "--resume-epoch", strings.Repeat("a", 32)},
+		{"--run", "--resume-startup-sha256", strings.Repeat("b", 64), "--resume-startup-bytes", "10"},
+	} {
 		var output bytes.Buffer
 		if run(arguments, &output) == nil {
 			t.Fatal("invalid mode or missing owning budget accepted")

@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"os"
+	"reflect"
 	"sort"
 	"time"
 )
@@ -69,6 +71,9 @@ func windowPolicyHash(policy WindowPolicy) string {
 	if policy.MaxRevocations > 0 {
 		document["max_revocations"] = policy.MaxRevocations
 	}
+	if policy.MaxEpochSeals > 0 {
+		document["max_epoch_seals"] = policy.MaxEpochSeals
+	}
 	payload, _ := json.Marshal(document)
 	sum := sha256.Sum256(payload)
 	return hex.EncodeToString(sum[:])
@@ -123,6 +128,21 @@ func (m *WindowManager) RecordClosedStartup(build BuildEvidence) (ClosedStartupR
 	return m.snapshots.saveClosedStartup(startup)
 }
 
+// ResumeClosedEpoch is called before native listeners start. A replayable
+// startup receipt is insufficient after any window/admission record exists.
+func (m *WindowManager) ResumeClosedEpoch(receipt ClosedStartupReceipt) error {
+	m.mu.Lock()
+	if m.closing || len(m.windows) != 0 || len(m.grantIDs) != 0 {
+		m.mu.Unlock()
+		return errors.New("managed_epoch_resume_admission_exists")
+	}
+	epoch := m.gate.epoch
+	installation := m.gate.installation
+	m.mu.Unlock()
+	err := m.snapshots.ResumeClosedEpoch(epoch, installation, receipt)
+	return err
+}
+
 func (s *SnapshotStore) saveClosedStartup(startup ClosedStartup) (ClosedStartupReceipt, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -134,11 +154,63 @@ func (s *SnapshotStore) saveClosedStartup(startup ClosedStartup) (ClosedStartupR
 	if err != nil || int64(len(payload)) > s.policy.MaxSnapshotBytes {
 		return ClosedStartupReceipt{}, errors.New("managed_startup_receipt_capacity")
 	}
+	existing, readErr := s.readPrivate("closed-startup.json", s.policy.MaxSnapshotBytes)
+	if readErr == nil {
+		persisted, receipt, replayErr := s.closedStartupBytes()
+		var original ClosedStartup
+		if replayErr != nil {
+			if !s.previousStartupWasAccepted(existing, epoch, startup) {
+				return ClosedStartupReceipt{}, errors.New("managed_startup_receipt_unresolved")
+			}
+			if err = s.replacePrivate("closed-startup.json", payload, s.policy.MaxSnapshotBytes); err != nil {
+				return ClosedStartupReceipt{}, errors.New("managed_startup_receipt_unresolved")
+			}
+			sum := sha256.Sum256(payload)
+			return ClosedStartupReceipt{startup.Epoch, hex.EncodeToString(sum[:]), int64(len(payload))}, nil
+		}
+		if !bytes.Equal(existing, persisted) || json.Unmarshal(persisted, &original) != nil {
+			return ClosedStartupReceipt{}, errors.New("managed_startup_receipt_unresolved")
+		}
+		original.ObservedAt = time.Time{}
+		startup.ObservedAt = time.Time{}
+		if !reflect.DeepEqual(original, startup) {
+			return ClosedStartupReceipt{}, errors.New("managed_startup_receipt_conflict")
+		}
+		return receipt, nil
+	}
+	if !os.IsNotExist(readErr) {
+		return ClosedStartupReceipt{}, errors.New("managed_startup_receipt_unresolved")
+	}
 	if err = s.commitImmutable("closed-startup.json", payload, s.policy.MaxSnapshotBytes); err != nil {
 		return ClosedStartupReceipt{}, errors.New("managed_startup_receipt_unresolved")
 	}
 	sum := sha256.Sum256(payload)
 	return ClosedStartupReceipt{startup.Epoch, hex.EncodeToString(sum[:]), int64(len(payload))}, nil
+}
+
+func (s *SnapshotStore) previousStartupWasAccepted(
+	payload []byte,
+	active EpochRecord,
+	startup ClosedStartup,
+) bool {
+	if len(active.History) == 0 || active.State != "open_unresolved" {
+		return false
+	}
+	previous := active.History[len(active.History)-1]
+	if previous.Epoch == startup.Epoch || previous.Installation != startup.Installation ||
+		previous.Acceptance.Epoch != previous.Epoch || previous.Acceptance.validate() != nil {
+		return false
+	}
+	if CheckJSON(payload, s.policy.MaxSnapshotBytes, s.policy.MaxJSONDepth) != nil {
+		return false
+	}
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.DisallowUnknownFields()
+	var original ClosedStartup
+	decodeErr := decoder.Decode(&original)
+	return decodeErr == nil && original.Epoch == previous.Epoch &&
+		original.Installation == previous.Installation && original.HistoricalOnly &&
+		!original.APIAuthority && !original.BudgetEnforced && !original.DeadlineEnforced
 }
 
 // ClosedStartupBytes replays original bytes, even after later admission.
@@ -178,13 +250,11 @@ func (s *SnapshotStore) closedStartupBytes() ([]byte, ClosedStartupReceipt, erro
 
 func (s *SnapshotStore) closedStartupEpoch() (EpochRecord, error) {
 	payload, err := s.readPrivate("epoch-active.json", s.policy.MaxSnapshotBytes)
-	if err != nil || CheckJSON(payload, s.policy.MaxSnapshotBytes, s.policy.MaxJSONDepth) != nil {
+	if err != nil {
 		return EpochRecord{}, errors.New("managed_startup_epoch_mismatch")
 	}
-	decoder := json.NewDecoder(bytes.NewReader(payload))
-	decoder.DisallowUnknownFields()
-	var epoch EpochRecord
-	if decoder.Decode(&epoch) != nil || !identityPattern.MatchString(epoch.Epoch) || epoch.Installation.Validate() != nil || epoch.State != "open_unresolved" {
+	epoch, decodeErr := decodeEpochRecord(payload, s.policy.MaxSnapshotBytes, s.policy.MaxJSONDepth)
+	if decodeErr != nil || epoch.State != "open_unresolved" && epoch.State != "sealed_accepted" {
 		return EpochRecord{}, errors.New("managed_startup_epoch_mismatch")
 	}
 	return epoch, nil

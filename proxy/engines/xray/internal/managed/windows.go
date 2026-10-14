@@ -23,10 +23,11 @@ type WindowPolicy struct {
 	TransactionTimeoutMS int   `json:"transaction_timeout_ms"`
 	MaxAdmissionReceipts int   `json:"max_admission_receipts,omitempty"`
 	MaxRevocations       int   `json:"max_revocations,omitempty"`
+	MaxEpochSeals        int   `json:"max_epoch_seals,omitempty"`
 }
 
 func (p WindowPolicy) Validate() error {
-	if p.MaxWindows <= 0 || p.MaxRecords > (int(^uint(0)>>1)-snapshotJournalReservedEntries-1)/2 || p.MaxRecords < p.MaxWindows || p.MaxAdmissionReceipts < 0 || p.MaxAdmissionReceipts > p.MaxWindows || p.MaxAdmissionReceipts > p.MaxRecords-p.MaxWindows || p.MaxRevocations < 0 || p.MaxRevocations > p.MaxWindows || p.MaxRevocations > (p.MaxRecords-p.MaxWindows-p.MaxAdmissionReceipts)/2 || p.MaxRecordBytes <= 0 || p.MaxRecordBytes >= math.MaxInt64 || p.MaxValidityMS <= 0 || p.MaxValidityMS > int(math.MaxInt64/int64(time.Millisecond)) || p.TransactionTimeoutMS <= 0 || p.TransactionTimeoutMS > int(math.MaxInt64/int64(time.Millisecond)) {
+	if p.MaxWindows <= 0 || p.MaxRecords > (int(^uint(0)>>1)-snapshotJournalReservedEntries-1)/2 || p.MaxRecords < p.MaxWindows || p.MaxAdmissionReceipts < 0 || p.MaxAdmissionReceipts > p.MaxWindows || p.MaxAdmissionReceipts > p.MaxRecords-p.MaxWindows || p.MaxRevocations < 0 || p.MaxRevocations > p.MaxWindows || p.MaxRevocations > (p.MaxRecords-p.MaxWindows-p.MaxAdmissionReceipts)/2 || p.MaxEpochSeals < 0 || p.MaxEpochSeals > (p.MaxRecords-p.MaxWindows-p.MaxAdmissionReceipts-2*p.MaxRevocations)/2 || p.MaxRecordBytes <= 0 || p.MaxRecordBytes >= math.MaxInt64 || p.MaxValidityMS <= 0 || p.MaxValidityMS > int(math.MaxInt64/int64(time.Millisecond)) || p.TransactionTimeoutMS <= 0 || p.TransactionTimeoutMS > int(math.MaxInt64/int64(time.Millisecond)) {
 		return errors.New("managed_window_policy_invalid")
 	}
 	return nil
@@ -70,16 +71,18 @@ type windowProfile struct {
 	revoked    *WindowRevokeRequest
 }
 type WindowManager struct {
-	gate      *Gate
-	store     *WindowStore
-	snapshots *SnapshotStore
-	policy    WindowPolicy
-	profiles  map[int64]*windowProfile
-	mu        sync.Mutex
-	windows   map[string]WindowGrant
-	grantIDs  map[int64]string
-	closing   bool
-	automatic sync.WaitGroup
+	gate        *Gate
+	store       *WindowStore
+	snapshots   *SnapshotStore
+	policy      WindowPolicy
+	profiles    map[int64]*windowProfile
+	mu          sync.Mutex
+	windows     map[string]WindowGrant
+	grantIDs    map[int64]string
+	closing     bool
+	sealMu      sync.Mutex
+	sealRequest *EpochSealRequest
+	automatic   sync.WaitGroup
 }
 
 func NewWindowGate(policy Policy, epoch string, bindings []Binding, installation Installation) (*Gate, error) {
@@ -108,6 +111,7 @@ func NewWindowManager(gate *Gate, store *WindowStore, snapshots *SnapshotStore, 
 		}
 		m.profiles[item.Binding.ProfileID] = &windowProfile{expected: item, permit: make(chan struct{}, 1)}
 	}
+	snapshots.maxEpochSeals = store.policy.MaxEpochSeals
 	gate.automaticFreeze = m.freezeAutomatic
 	return m, nil
 }
@@ -159,6 +163,9 @@ func (m *WindowManager) Admit(grant WindowGrant) error {
 }
 
 func (m *WindowManager) admitOwned(grant WindowGrant, owner *windowProfile, bounded context.Context) error {
+	if m.epochSealBlocked() {
+		return errors.New("managed_epoch_sealed")
+	}
 	if m.profileRevoked(grant.Binding.ProfileID) {
 		return errors.New("managed_window_revoked")
 	}
@@ -279,6 +286,9 @@ func (m *WindowManager) AcceptPredecessor(input LocalPredecessorAcceptance) erro
 		return err
 	}
 	defer owner.release()
+	if m.epochSealBlocked() {
+		return errors.New("managed_epoch_sealed")
+	}
 	if m.profileRevoked(input.ProfileID) {
 		return errors.New("managed_window_revoked")
 	}
