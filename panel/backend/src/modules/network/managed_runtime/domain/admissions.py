@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal
 
 from papilio.schemas.inputs import BaseDTO
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from src.modules.network.managed_runtime.domain.contracts import (
     EpochIdentity,
@@ -51,3 +51,41 @@ class ManagedAdmissionOut(ImmutableContract):
     admission_sha256: Sha256
     outcome: Literal["applied"] = "applied"
     observed_at: datetime
+
+
+class ManagedAdmissionBatchItemCreate(BaseDTO):
+    window_id: EpochIdentity
+    submission: ManagedAdmissionSubmission
+
+    @model_validator(mode="after")
+    def receipt_window_matches_item(self) -> "ManagedAdmissionBatchItemCreate":
+        if self.submission.receipt.window_id != self.window_id:
+            raise ValueError(
+                "Admission receipt must match its window identity."
+            )
+        return self
+
+
+class ManagedAdmissionBatchCreate(BaseDTO):
+    batch_request_key: str = Field(min_length=8, max_length=128)
+    windows: list[ManagedAdmissionBatchItemCreate] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def unique_windows_and_claims(self) -> "ManagedAdmissionBatchCreate":
+        window_ids = [item.window_id for item in self.windows]
+        claim_tokens = [item.submission.claim_token for item in self.windows]
+        if len(window_ids) != len(set(window_ids)):
+            raise ValueError("Each managed window may appear once.")
+        if len(claim_tokens) != len(set(claim_tokens)):
+            raise ValueError("Each provision claim may appear once.")
+        return self
+
+
+class ManagedAdmissionBatchItemOut(ImmutableContract):
+    window_id: EpochIdentity
+    result: ManagedAdmissionOut
+
+
+class ManagedAdmissionBatchOut(ImmutableContract):
+    batch_request_key: str
+    windows: list[ManagedAdmissionBatchItemOut]
