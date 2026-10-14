@@ -12,10 +12,8 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 )
@@ -43,6 +41,7 @@ type ManagedInstallationPolicy struct {
 	StopTimeoutMS      int                          `json:"stop_timeout_ms"`
 	WindowCycle        *ManagedWindowCyclePolicy    `json:"window_cycle,omitempty"`
 	SuccessorCycles    *ManagedSuccessorCyclePolicy `json:"successor_cycles,omitempty"`
+	EpochSeal          *ManagedEpochSealPolicy      `json:"epoch_seal,omitempty"`
 }
 type ManagedMaterial struct {
 	Path   string `json:"path"`
@@ -97,12 +96,26 @@ type ManagedClosedAcceptance struct {
 	AdmissionAvailable bool   `json:"admission_available"`
 }
 type managedInstallationJournal struct {
-	APIURL          string                   `json:"api_url"`
-	NodeCode        string                   `json:"node_code"`
-	InstallationID  int64                    `json:"installation_id"`
-	Claim           ManagedClaim             `json:"claim"`
-	Acknowledgement *ManagedAcknowledgement  `json:"acknowledgement"`
-	Acceptance      *ManagedClosedAcceptance `json:"acceptance"`
+	APIURL              string                      `json:"api_url"`
+	NodeCode            string                      `json:"node_code"`
+	InstallationID      int64                       `json:"installation_id"`
+	Claim               ManagedClaim                `json:"claim"`
+	Acknowledgement     *ManagedAcknowledgement     `json:"acknowledgement"`
+	Acceptance          *ManagedClosedAcceptance    `json:"acceptance"`
+	InitialProcessEpoch string                      `json:"initial_process_epoch,omitempty"`
+	EpochHistory        []managedEpochHistoryEntry  `json:"epoch_history,omitempty"`
+	PendingRollover     *managedEpochRolloverIntent `json:"pending_rollover,omitempty"`
+}
+
+type managedEpochHistoryEntry struct {
+	Previous ManagedClosedAcceptance    `json:"previous"`
+	Result   ManagedEpochRolloverResult `json:"result"`
+}
+
+type managedEpochRolloverIntent struct {
+	Previous   ManagedClosedAcceptance         `json:"previous"`
+	RequestID  string                          `json:"request_id"`
+	Submission *ManagedEpochRolloverSubmission `json:"submission,omitempty"`
 }
 
 func (c *Client) ClaimManagedInstallation(ctx context.Context, id int64) (ManagedClaim, error) {
@@ -267,6 +280,9 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 	if err := validateManagedSuccessorPolicyBeforeLaunch(p, p.SuccessorCycles); err != nil {
 		return err
 	}
+	if err := validateManagedEpochSealPolicyBeforeLaunch(p, p.EpochSeal); err != nil {
+		return errors.New("managed_epoch_seal_policy_invalid")
+	}
 	if client == nil || p.InstallationID <= 0 || !filepath.IsAbs(p.Binary) || !filepath.IsAbs(p.InputRoot) || !filepath.IsAbs(p.ControlRoot) || !filepath.IsAbs(p.StateDirectory) || p.MaxSettingsBytes <= 0 || p.MaxSettingsBytes >= math.MaxInt64 || p.MaxSettingsDepth <= 0 || p.MaxExecutableBytes <= 0 || p.MaxExecutableBytes >= math.MaxInt64 || p.MaxReceiptBytes <= 0 || p.MaxReceiptBytes >= math.MaxInt64 || p.MaxJournalBytes <= 0 || p.MaxJournalBytes >= math.MaxInt64 || p.StartupTimeoutMS <= 0 || p.PollIntervalMS <= 0 || p.StopTimeoutMS <= 0 {
 		return errors.New("managed_registry_invalid")
 	}
@@ -289,11 +305,38 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 		if json.Unmarshal(existing, &state) != nil || state.InstallationID != p.InstallationID || state.APIURL != client.config.APIURL || state.NodeCode != client.config.NodeCode {
 			return errors.New("managed_recovery_binding_invalid")
 		}
+		if managedEpochSupervisorEnabled(p) {
+			binary, verifyErr := openVerifiedManagedBinary(p, state.Claim.Expectation.Installation.ExecutableSHA256)
+			if verifyErr != nil {
+				return verifyErr
+			}
+			defer binary.Close()
+			if verifyErr = verifyManagedSettingsFile(journal, p, state.Claim); verifyErr != nil {
+				return verifyErr
+			}
+			if state.Acceptance == nil {
+				if state.Acknowledgement == nil {
+					return errors.New("managed_installation_recovery_unresolved")
+				}
+				acceptance, ackErr := client.AcknowledgeManagedInstallation(ctx, p.InstallationID, *state.Acknowledgement)
+				if ackErr != nil {
+					return ackErr
+				}
+				state.Acceptance = &acceptance
+				if err = managedSave(journal, state); err != nil {
+					return err
+				}
+			}
+			return runManagedEpochSupervisor(ctx, client, p, journal, state, binary, nil, once)
+		}
 		if state.Acceptance != nil {
 			if err = replayManagedWindowCycle(ctx, client, p, journal, state); err != nil {
 				return err
 			}
-			return replayManagedSuccessorChain(ctx, client, p, p.SuccessorCycles, journal, state)
+			if err = replayManagedSuccessorChain(ctx, client, p, p.SuccessorCycles, journal, state); err != nil {
+				return err
+			}
+			return replayManagedEpochSealCycle(ctx, client, p, p.EpochSeal, journal, state)
 		}
 		if state.Acknowledgement == nil {
 			return errors.New("managed_installation_recovery_unresolved")
@@ -309,7 +352,10 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 		if err = replayManagedWindowCycle(ctx, client, p, journal, state); err != nil {
 			return err
 		}
-		return replayManagedSuccessorChain(ctx, client, p, p.SuccessorCycles, journal, state)
+		if err = replayManagedSuccessorChain(ctx, client, p, p.SuccessorCycles, journal, state); err != nil {
+			return err
+		}
+		return replayManagedEpochSealCycle(ctx, client, p, p.EpochSeal, journal, state)
 	}
 	if !os.IsNotExist(err) {
 		return errors.New("managed_journal_unavailable")
@@ -349,40 +395,18 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 		return err
 	}
 	// Execute the verified inode, independent of later registry-path replacement.
-	command := exec.Command("/proc/self/fd/3", "--run", "--config", filepath.Join(journal.root, "managed-settings.json"), "--max-config-bytes", strconv.FormatInt(p.MaxSettingsBytes, 10), "--max-config-depth", strconv.Itoa(p.MaxSettingsDepth))
-	command.ExtraFiles = []*os.File{binary}
-	command.Env = make([]string, 0, len(os.Environ()))
-	for _, value := range os.Environ() {
-		if !strings.HasPrefix(value, "PAPILIO_NODE_KEY=") {
-			command.Env = append(command.Env, value)
-		}
+	child, err := startManagedChild(
+		binary,
+		filepath.Join(journal.root, "managed-settings.json"),
+		p,
+		nil,
+	)
+	if err != nil {
+		return err
 	}
-	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
-	command.Stdout = io.Discard
-	command.Stderr = io.Discard
-	if err = command.Start(); err != nil {
-		return errors.New("managed_child_start_failed")
-	}
-	done := make(chan struct{})
-	go func() { _ = command.Wait(); close(done) }()
 	defer func() {
-		select {
-		case <-done:
-			return
-		default:
-		}
-		_ = command.Process.Signal(syscall.SIGTERM)
-		timer := time.NewTimer(time.Duration(p.StopTimeoutMS) * time.Millisecond)
-		defer timer.Stop()
-		select {
-		case <-done:
-		case <-timer.C:
-			_ = command.Process.Signal(syscall.SIGKILL)
-			select {
-			case <-done:
-			case <-time.After(time.Duration(p.StopTimeoutMS) * time.Millisecond):
-				result = errors.New("managed_child_cleanup_unresolved")
-			}
+		if stopErr := child.stop(p.StopTimeoutMS); stopErr != nil {
+			result = stopErr
 		}
 	}()
 	deadline, cancel := context.WithTimeout(ctx, time.Duration(p.StartupTimeoutMS)*time.Millisecond)
@@ -396,7 +420,7 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 			break
 		}
 		select {
-		case <-done:
+		case <-child.done:
 			return errors.New("managed_child_exited")
 		case <-deadline.Done():
 			return errors.New("managed_closed_startup_unavailable")
@@ -405,6 +429,9 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 	}
 	ack.ClaimToken = claim.ClaimToken
 	state.Acknowledgement = &ack
+	if managedEpochSupervisorEnabled(p) {
+		state.InitialProcessEpoch = ack.Receipt.Epoch
+	}
 	if err = managedSave(journal, state); err != nil {
 		return err
 	}
@@ -416,19 +443,25 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 	if err = managedSave(journal, state); err != nil {
 		return err
 	}
+	if managedEpochSupervisorEnabled(p) {
+		return runManagedEpochSupervisor(ctx, client, p, journal, state, binary, child, once)
+	}
 	if err = runManagedWindowCycle(ctx, client, p, journal, state); err != nil {
 		return err
 	}
 	if err = runManagedSuccessorChain(ctx, client, p, p.SuccessorCycles, journal, state); err != nil {
 		return err
 	}
-	if once {
+	if err = runManagedEpochSealCycle(ctx, client, p, p.EpochSeal, journal, state); err != nil {
+		return err
+	}
+	if once || p.SuccessorCycles != nil && p.SuccessorCycles.Enabled {
 		return nil
 	}
 	select {
 	case <-ctx.Done():
 		return nil
-	case <-done:
+	case <-child.done:
 		return errors.New("managed_child_exited")
 	}
 }

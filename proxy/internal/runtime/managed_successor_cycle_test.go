@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -48,7 +49,7 @@ func successorChainTestFixture(t *testing.T) (ManagedInstallationPolicy, Managed
 	finality := ManagedWindowFinality{issued.Window.WindowID, issued.Window.GrantID, ManagedPredecessorAcceptance{strings.Repeat("4", 32), issued.Window.Epoch, issued.Window.Binding.ProfileID, submission.Receipt.BarrierID, submission.Receipt.SnapshotSHA256}, 12, 18}
 	initial := managedWindowCycleJournal{NodeCode: "owned", InstallationID: 5, Policy: initialPolicy, Request: request, ManualBarrierID: strings.Repeat("3", 32), Issued: &issued, Admission: &original, Submission: &submission, Finality: &finality, PaidAcceptance: &ManagedPaidAcceptance{issued.Window.WindowID, 11, original.Receipt.ReceiptSHA256, "applied", original.Admission.ObservedAt}}
 	p := ManagedInstallationPolicy{InstallationID: 5, MaxReceiptBytes: 65536, PollIntervalMS: 1000, WindowPolicy: windowPolicy, WindowCycle: &initialPolicy, ComponentPolicy: json.RawMessage(`{"max_barriers":8}`)}
-	policy := ManagedSuccessorCyclePolicy{Enabled: true, MaxSuccessorCycles: 2, APIMaxSuccessors: 2, Cycles: []ManagedSuccessorStepPolicy{{"successor-cycle-1", 80, 1, 1000, 1, 1}, {"successor-cycle-2", 80, 1, 1000, 1, 1}}}
+	policy := ManagedSuccessorCyclePolicy{Enabled: true, MaxSuccessorCycles: 2, APIMaxSuccessors: 2, Template: &ManagedSuccessorStepPolicy{"native-successor", 80, 1, 1000, 1, 1}}
 	return p, policy, initial, installation
 }
 func readSuccessorChainTestJournal(t *testing.T, journal *Journal) managedSuccessorCycleJournal {
@@ -64,14 +65,29 @@ func readSuccessorChainTestJournal(t *testing.T, journal *Journal) managedSucces
 	return state
 }
 func TestManagedSuccessorChainPersistsPaidAnchorAndEveryBoundary(t *testing.T) {
-	testManagedSuccessorChain(t, false)
+	testManagedSuccessorChain(t, "complete")
 }
 func TestManagedSuccessorChainUnknownLocalAcceptanceRetainsIntent(t *testing.T) {
-	testManagedSuccessorChain(t, true)
+	testManagedSuccessorChain(t, "local_failure")
 }
-func testManagedSuccessorChain(t *testing.T, failLocal bool) {
+func TestManagedSuccessorChainStopsOnAuthoritativeCapacity(t *testing.T) {
+	testManagedSuccessorChain(t, "terminal_capacity")
+}
+func TestManagedSuccessorChainContinuesActivatedEpochWithoutRepaidReceipt(t *testing.T) {
+	testManagedSuccessorChain(t, "continuation")
+}
+func testManagedSuccessorChain(t *testing.T, mode string) {
 	t.Helper()
 	p, policy, initial, installation := successorChainTestFixture(t)
+	if mode == "continuation" {
+		initial.Policy.RequireAdmissionReceipt = false
+		initial.Policy.ProvisionTaskID = 0
+		initial.Request.ProvisionTaskID = 0
+		initial.Admission = nil
+		initial.PaidAcceptance = nil
+		initial.Issued.ProvisionClaim = nil
+		p.WindowCycle = &initial.Policy
+	}
 	root := t.TempDir()
 	_ = os.Chmod(root, 0700)
 	journal, err := OpenJournal(filepath.Join(root, "journal"), 65536)
@@ -105,13 +121,16 @@ func testManagedSuccessorChain(t *testing.T, failLocal bool) {
 			if json.NewDecoder(r.Body).Decode(&got) != nil || got != entry.Request.Acceptance {
 				t.Error("local acceptance changed")
 			}
-			if failLocal {
+			if mode == "local_failure" {
 				w.WriteHeader(http.StatusConflict)
 				return
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"state": "local_component_predecessor_accepted", "acceptance": got})
 		case "/v1/windows/admit-original":
 			localCalls.Add(1)
+			if initial.Request.ProvisionTaskID == 0 {
+				t.Error("continuation requested another paid admission")
+			}
 			if entry.LocalAcceptance == nil || entry.Issued == nil || entry.Issued.ProvisionClaim != nil {
 				t.Error("successor admission preceded durable issuance/acceptance")
 			}
@@ -131,9 +150,22 @@ func testManagedSuccessorChain(t *testing.T, failLocal bool) {
 			w.Header().Set("X-Papilio-Receipt-Bytes", length)
 			w.Header().Set("Content-Length", length)
 			_, _ = w.Write(raw)
+		case "/v1/windows/admit":
+			localCalls.Add(1)
+			if initial.Request.ProvisionTaskID != 0 || entry.Issued == nil || entry.Admission != nil {
+				t.Error("local continuation admission had paid state")
+			}
+			payload, readErr := io.ReadAll(io.LimitReader(r.Body, p.MaxReceiptBytes+1))
+			if readErr != nil || string(payload) != entry.Issued.OriginalWindow {
+				t.Error("local continuation admission bytes changed")
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"state":  "local_component_window_admitted",
+				"window": entry.Issued.Window,
+			})
 		case "/v1/windows/freeze":
 			localCalls.Add(1)
-			if entry.Admission == nil || entry.Submission != nil {
+			if initial.Request.ProvisionTaskID > 0 && entry.Admission == nil || entry.Submission != nil {
 				t.Error("freeze preceded durable original admission")
 			}
 			var got struct {
@@ -154,7 +186,7 @@ func testManagedSuccessorChain(t *testing.T, failLocal bool) {
 					w.WriteHeader(http.StatusConflict)
 					return
 				}
-				if entry.Admission == nil {
+				if initial.Request.ProvisionTaskID > 0 && entry.Admission == nil {
 					t.Error("snapshot retrieval preceded durable admission proof")
 				}
 				length := strconv.FormatInt(snapshot.Receipt.Bytes, 10)
@@ -185,6 +217,11 @@ func testManagedSuccessorChain(t *testing.T, failLocal bool) {
 			if json.NewDecoder(r.Body).Decode(&got) != nil || got != entry.Request {
 				t.Error("native successor request changed")
 			}
+			if mode == "terminal_capacity" {
+				w.WriteHeader(http.StatusConflict)
+				_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"message_code": "managed_successor_capacity"}})
+				return
+			}
 			previous := initial.Issued
 			finality := initial.Finality
 			if len(state.Entries) > 1 {
@@ -206,7 +243,7 @@ func testManagedSuccessorChain(t *testing.T, failLocal bool) {
 		}
 		if strings.HasSuffix(r.URL.Path, "/finalize") {
 			apiFinalCalls.Add(1)
-			if entry.Submission == nil || entry.Admission == nil {
+			if entry.Submission == nil || initial.Request.ProvisionTaskID > 0 && entry.Admission == nil {
 				t.Error("native finality preceded durable original snapshot")
 			}
 			var got ManagedWindowFinalSubmission
@@ -236,7 +273,7 @@ func testManagedSuccessorChain(t *testing.T, failLocal bool) {
 	}
 	err = runManagedSuccessorChain(context.Background(), client, p, &policy, journal, installation)
 	state := readSuccessorChainTestJournal(t, journal)
-	if failLocal {
+	if mode == "local_failure" {
 		if err == nil || err.Error() != "managed_successor_chain_local_acceptance_unresolved" || apiIssueCalls.Load() != 0 || len(state.Entries) != 1 || state.Entries[0].LocalAcceptance != nil || state.Entries[0].Issued != nil {
 			t.Fatal("unknown local mutation advanced chain", err)
 		}
@@ -245,8 +282,38 @@ func testManagedSuccessorChain(t *testing.T, failLocal bool) {
 		}
 		return
 	}
+	if mode == "terminal_capacity" {
+		if err != nil || state.StopReason != "managed_successor_capacity" || len(state.Entries) != 1 || state.Entries[0].TerminalCode != state.StopReason || state.Entries[0].Issued != nil || apiIssueCalls.Load() != int64(policy.Template.MaxAttempts) {
+			t.Fatal("authoritative capacity lost its durable rejected-request evidence", err)
+		}
+		if err = replayManagedSuccessorChain(context.Background(), client, p, &policy, journal, installation); err != nil || apiIssueCalls.Load() != int64(policy.Template.MaxAttempts) {
+			t.Fatal("terminal replay issued another request", err)
+		}
+		return
+	}
 	if err != nil {
 		t.Fatal("bounded chain failed", err)
+	}
+	if mode == "continuation" {
+		windows, _, _, sealErr := loadManagedEpochSealWindows(
+			client,
+			p,
+			ManagedEpochSealPolicy{MaxWindows: 8},
+			journal,
+			installation,
+		)
+		if sealErr != nil || len(windows) != 3 {
+			t.Fatal("continuation finality was not available to epoch seal", sealErr)
+		}
+		for _, entry := range state.Entries {
+			if entry.Admission != nil || entry.Finality == nil {
+				t.Fatal("continuation repeated paid admission or lost finality")
+			}
+		}
+		if err = replayManagedSuccessorChain(context.Background(), client, p, &policy, journal, installation); err != nil {
+			t.Fatal("continuation recovery rejected completed finality", err)
+		}
+		return
 	}
 	after, _ := managedReadPrivate(filepath.Join(journal.root, "managed-window-cycle.json"), journal.maxBytes)
 	if string(before) != string(after) || state.InitialCycleSHA256 != checksum(before) || len(state.Entries) != 2 || state.Entries[1].Finality == nil || state.Entries[1].Issued.Window.BaselineUploadBytes != 19 || state.Entries[1].Issued.Window.BaselineDownloadBytes != 27 || apiIssueCalls.Load() != 2 || apiFinalCalls.Load() != 2 || localCalls.Load() != 6 {
@@ -282,6 +349,9 @@ func TestManagedSuccessorChainPolicyCapacitiesAndDisabledDefault(t *testing.T) {
 	if policy.validate(p, initial) != nil {
 		t.Fatal("explicit bounded capacities rejected")
 	}
+	if !managedSuccessorStopReason("managed_successor_cycle_cap_reached", policy, policy.MaxSuccessorCycles) || managedSuccessorStopReason("managed_successor_cycle_cap_reached", policy, policy.MaxSuccessorCycles-1) || !managedSuccessorStopReason("managed_successor_capacity", policy, 1) || !managedSuccessorStopReason("managed_successor_capacity", policy, policy.MaxSuccessorCycles) || managedSuccessorStopReason("managed_successor_capacity", policy, 0) {
+		t.Fatal("successor stop reason does not match its durable boundary")
+	}
 	if err := runManagedSuccessorChain(context.Background(), nil, ManagedInstallationPolicy{}, nil, nil, managedInstallationJournal{}); err != nil {
 		t.Fatal("omitted policy is active")
 	}
@@ -290,21 +360,22 @@ func TestManagedSuccessorChainPolicyCapacitiesAndDisabledDefault(t *testing.T) {
 	if changed.validate(p, initial) == nil {
 		t.Fatal("API successor cap ignored")
 	}
-	changed = policy
-	changed.Cycles = append([]ManagedSuccessorStepPolicy{}, policy.Cycles...)
-	changed.Cycles[1].RequestKey = changed.Cycles[0].RequestKey
-	if changed.validate(p, initial) == nil {
-		t.Fatal("duplicate request identity accepted")
+	first, err := policy.step(0, *initial.Finality)
+	if err != nil {
+		t.Fatal("automatic step identity unavailable", err)
+	}
+	second, err := policy.step(1, ManagedWindowFinality{Acceptance: ManagedPredecessorAcceptance{AcceptanceID: strings.Repeat("5", 32)}})
+	if err != nil || first.RequestKey == second.RequestKey || first.RequestKey == initial.Request.RequestKey {
+		t.Fatal("automatic request identities are not distinct", err)
+	}
+	repeated, err := policy.step(0, *initial.Finality)
+	if err != nil || repeated.RequestKey != first.RequestKey {
+		t.Fatal("automatic request identity is not replay-stable", err)
 	}
 	changed = policy
-	changed.Cycles = append([]ManagedSuccessorStepPolicy{}, policy.Cycles...)
-	changed.Cycles[0].RequestKey = initial.Request.RequestKey
-	if changed.validate(p, initial) == nil {
-		t.Fatal("initial paid request identity reused")
-	}
-	changed = policy
-	changed.Cycles = append([]ManagedSuccessorStepPolicy{}, policy.Cycles...)
-	changed.Cycles[0].OperationTimeoutMS = 0
+	invalidTemplate := *policy.Template
+	invalidTemplate.OperationTimeoutMS = 0
+	changed.Template = &invalidTemplate
 	if changed.validate(p, initial) == nil {
 		t.Fatal("implicit operation timeout accepted")
 	}
@@ -325,10 +396,48 @@ func TestManagedSuccessorChainPolicyCapacitiesAndDisabledDefault(t *testing.T) {
 	}
 }
 
+func TestManagedSuccessorTerminalCodesAreExplicit(t *testing.T) {
+	for _, code := range []string{"managed_successor_capacity", "managed_window_entitlement_inactive", "managed_successor_disabled", "usage_quota_unavailable", "managed_window_quota_policy"} {
+		if got := managedSuccessorTerminalCode(&APIStatusError{StatusCode: http.StatusConflict, MessageCode: code}); got != code {
+			t.Fatalf("terminal code %q was not recognized: %q", code, got)
+		}
+	}
+	for _, err := range []error{errors.New("runtime API unavailable"), &APIStatusError{StatusCode: http.StatusConflict, MessageCode: "managed_window_runtime_pending"}, &APIStatusError{StatusCode: http.StatusInternalServerError, MessageCode: "managed_successor_capacity"}} {
+		if got := managedSuccessorTerminalCode(err); got != "" {
+			t.Fatalf("nonterminal failure became a stop: %q", got)
+		}
+	}
+}
+
+func TestManagedSuccessorIssueFailureReportsOnlySafeAPIConflictCodes(t *testing.T) {
+	known := &APIStatusError{
+		StatusCode:  http.StatusConflict,
+		MessageCode: "managed_successor_paid_root_invalid",
+	}
+	if got := managedSuccessorIssueFailure(known).Error(); got != "managed_successor_chain_api_rejected_managed_successor_paid_root_invalid" {
+		t.Fatalf("safe conflict code was lost: %q", got)
+	}
+	for _, err := range []error{
+		errors.New("network failure"),
+		&APIStatusError{StatusCode: http.StatusInternalServerError, MessageCode: "managed_secret"},
+		&APIStatusError{StatusCode: http.StatusConflict, MessageCode: "managed_secret value"},
+	} {
+		if got := managedSuccessorIssueFailure(err).Error(); got != "managed_successor_chain_issue_unresolved" {
+			t.Fatalf("unsafe failure escaped: %q", got)
+		}
+	}
+}
+
 func TestManagedSuccessorChainPrelaunchRejectsInvalidOwnerPolicy(t *testing.T) {
 	registry, policy, _, _ := successorChainTestFixture(t)
 	if err := validateManagedSuccessorPolicyBeforeLaunch(registry, &policy); err != nil {
 		t.Fatal("valid owner preflight rejected", err)
+	}
+	legacy := policy
+	legacy.Template = nil
+	legacy.Cycles = []ManagedSuccessorStepPolicy{{"legacy-cycle", 80, 1, 1000, 1, 1}}
+	if validateManagedSuccessorPolicyBeforeLaunch(registry, &legacy) == nil {
+		t.Fatal("manually listed cycles remained a new service lifecycle")
 	}
 	changed := registry
 	changed.WindowCycle = nil

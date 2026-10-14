@@ -23,6 +23,51 @@ func TestManagedInstallationDisabledDoesNoWork(t *testing.T) {
 	}
 }
 
+func TestManagedChildStopsWithinOwnerTimeout(t *testing.T) {
+	root := t.TempDir()
+	script := filepath.Join(root, "managed-child")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nexec /bin/sleep 30\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	binary, err := os.Open(script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer binary.Close()
+	policy := ManagedInstallationPolicy{
+		MaxSettingsBytes: 65536, MaxSettingsDepth: 8,
+		StopTimeoutMS: 1000,
+	}
+	child, err := startManagedChild(binary, filepath.Join(root, "settings.json"), policy, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = child.stop(policy.StopTimeoutMS); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-child.done:
+	default:
+		t.Fatal("managed child remained running after stop")
+	}
+}
+
+func TestManagedInstallationRejectsInvalidEpochSealBeforeStateMutation(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "state")
+	policy := ManagedInstallationPolicy{
+		Enabled:        true,
+		StateDirectory: root,
+		EpochSeal:      &ManagedEpochSealPolicy{Enabled: true},
+	}
+	err := RunManagedInstallation(context.Background(), nil, policy, false)
+	if err == nil || err.Error() != "managed_epoch_seal_policy_invalid" {
+		t.Fatal("invalid seal policy was not rejected before installation work", err)
+	}
+	if _, statErr := os.Stat(root); !os.IsNotExist(statErr) {
+		t.Fatal("invalid seal policy created installation state")
+	}
+}
+
 func TestManagedSettingsPreserveImmutableDocument(t *testing.T) {
 	document := " {\n  \"inbounds\": []\n} "
 	bindings := json.RawMessage(`{"profile_id":7,"generation":0,"configuration_id":8,"configuration_revision":1,"counter_identity":"counter","inbound_tag":"node-8"}`)
