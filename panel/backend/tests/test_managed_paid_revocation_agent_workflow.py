@@ -70,12 +70,10 @@ class ManagedPaidRevocationAgentWorkflowTest(
                 registry = await asyncio.to_thread(
                     actual_registry, root, inputs, Path(managed_binary)
                 )
-                # Owning test policy budgets windows, admission receipts and
-                # two artifacts for the single immutable revoke operation.
+                # Retain enough journal capacity for windows, admission,
+                # revocation artifacts, and epoch-seal records.
                 windows = registry["registry"]["window_policy"]
-                windows.update(
-                    max_admission_receipts=8, max_revocations=1, max_records=18
-                )
+                windows.update(max_admission_receipts=8, max_revocations=1)
                 registry["trusted_api_policy"][
                     "window_policy_sha256"
                 ] = await asyncio.to_thread(

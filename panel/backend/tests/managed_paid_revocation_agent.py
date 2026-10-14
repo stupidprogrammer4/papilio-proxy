@@ -7,7 +7,10 @@ claim continuous successors or automatic node cancellation orchestration.
 
 import json
 import os
+import re
+import select
 import socket
+import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
@@ -91,11 +94,51 @@ def original_receipt(raw, headers, epoch, **identities):
         ), "native_paid_revoke_original_identity"
 
 
-def wait_closed(root, process, timeout):
+def wait_closed(root, process, timeout, registry):
     deadline = time.monotonic() + timeout
     path = root / "managed-agent" / "managed-installation.json"
     while time.monotonic() < deadline:
-        assert process.poll() is None, "native_paid_revoke_child_exited"
+        exit_code = process.poll()
+        if exit_code is not None:
+            log = (root / "cancel-agent.log").read_text().strip()
+            match = re.search(
+                r"managed_[a-z0-9_]+|node API status [0-9]{3}", log
+            )
+            error = match.group(0) if match else "unclassified"
+            component = "not_checked"
+            if error == "managed_child_exited":
+                checked = subprocess.run(
+                    [
+                        str(registry["binary"]),
+                        "--check",
+                        "--config",
+                        str(root / "managed-agent" / "managed-settings.json"),
+                        "--max-config-bytes",
+                        str(registry["max_settings_bytes"]),
+                        "--max-config-depth",
+                        str(registry["max_settings_depth"]),
+                    ],
+                    capture_output=True,
+                    timeout=20,
+                    check=False,
+                    env={
+                        key: value
+                        for key, value in os.environ.items()
+                        if key != "PAPILIO_NODE_KEY"
+                    },
+                )
+                component = "valid"
+                if checked.returncode != 0:
+                    try:
+                        diagnostic = json.loads(checked.stdout)
+                    except (TypeError, ValueError):
+                        diagnostic = {}
+                    code = diagnostic.get("error")
+                    safe_code = re.fullmatch(r"managed_[a-z0-9_]+", code or "")
+                    component = safe_code.group(0) if safe_code else "invalid"
+            raise AssertionError(
+                f"native_paid_revoke_child_exited:{exit_code}:{error}:{component}"
+            )
         if path.exists():
             installation = json.loads(path.read_bytes())
             if installation.get("acceptance"):
@@ -178,7 +221,7 @@ def exercise_native_paid_revocation(
         process = launch(
             command, stack, root / "cancel-agent.log", environment=environment
         )
-        installation = wait_closed(root, process, 20)
+        installation = wait_closed(root, process, 20, registry)
         issued = data(
             api.post(
                 prefix + f"/managed-installations/{installation_id}/windows",
@@ -253,8 +296,8 @@ def exercise_native_paid_revocation(
             root, stock, endpoints, profile_id, "127.0.0.1", stack
         )
         connection = client.connect(target.port)
+        stack.callback(connection.close)
         roundtrip(connection, payload)
-        connection.close()
         fail_path = (
             f"/v1/admin/subscriptions/{subscription['id']}/provision-failed"
         )
@@ -296,6 +339,17 @@ def exercise_native_paid_revocation(
             and revoked["historical_only"]
             and not revoked["api_authority"]
         ), "native_paid_revoke_original_mismatch"
+        established_session_closed = False
+        try:
+            connection.sendall(b"must-not-cross-revoked-session")
+            readable, _, _ = select.select([connection], [], [], 2)
+            if readable:
+                established_session_closed = connection.recv(1) == b""
+        except (BrokenPipeError, ConnectionResetError):
+            established_session_closed = True
+        assert established_session_closed, (
+            "native_paid_revoke_established_session_survived"
+        )
         submission = {
             "original_receipt": revoke_raw.decode(),
             "receipt": {
