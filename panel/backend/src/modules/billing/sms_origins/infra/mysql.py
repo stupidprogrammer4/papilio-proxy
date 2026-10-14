@@ -341,22 +341,16 @@ class SmsSettlementDecisionRepository(
         result = await self.uow.execute(
             select(self.table)
             .where(col(self.table.sms_event_id) == id)
+            .order_by(col(self.table.id).desc())
             .with_for_update()
             .execution_options(populate_existing=True)
         )
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     async def find(self, id: int) -> SmsSettlementDecisionModel | None:
         result = await self.uow.execute(
-            select(self.table).where(col(self.table.sms_event_id) == id)
+            select(self.table)
+            .where(col(self.table.sms_event_id) == id)
+            .order_by(col(self.table.id).desc())
         )
-        return result.scalar_one_or_none()
-
-    async def change(
-        self,
-        row: SmsSettlementDecisionModel,
-        changes: SmsSettlementDecisionModel,
-    ) -> SmsSettlementDecisionModel:
-        await self.update_row_by_id(row.id, changes)
-        await self.uow.refresh(row)
-        return row
+        return result.scalars().first()

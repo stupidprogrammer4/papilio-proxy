@@ -642,6 +642,7 @@ class SmsOriginsWorkflowTest(SmsOriginsWorkflowFixture):
         review = (await self.get(base + "/review"))["data"]
         self.assertEqual(review["status"], "ambiguous")
         self.assertTrue(review["manual_approval_available"])
+        self.assertEqual((await self.get(base + "/review"))["data"], review)
         reason = "Owner confirmed generated ambiguous credit"
         approval = {
             "topup_id": topup["id"],
@@ -687,6 +688,22 @@ class SmsOriginsWorkflowTest(SmsOriginsWorkflowFixture):
             provenance = stored.one()
         self.assertIsNotNone(provenance.created_by_staff_id)
         self.assertEqual(provenance.review_reason, reason)
+        async with self.connection.uow() as fresh:
+            history = await fresh.execute(
+                text(
+                    "SELECT status,reason_code FROM "
+                    "tbl_sms_settlement_decisions "
+                    "WHERE sms_event_id=:id ORDER BY id"
+                ),
+                {"id": sms_id},
+            )
+            decisions = history.all()
+        self.assertEqual(
+            [decision.status for decision in decisions],
+            ["ambiguous", "approved"],
+        )
+        self.assertEqual(decisions[0].reason_code, "sms_topup_ambiguous")
+        self.assertIsNone(decisions[1].reason_code)
         self.assertEqual(approved, (await self.get(base + "/review"))["data"])
         self.assertEqual(
             approved, await self.post(base + "/approve", approval)

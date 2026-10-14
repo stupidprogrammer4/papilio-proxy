@@ -35,8 +35,34 @@ from src.modules.billing.destinations.app.services import (
 from src.modules.billing.destinations.infra.mysql import (
     PaymentDestinationRepository,
 )
+from src.modules.billing.payment_identifiers.app.allocation import (
+    PaymentAmountAllocationQuery,
+)
+from src.modules.billing.payment_identifiers.app.reservations import (
+    PaymentAmountReservationService,
+)
+from src.modules.billing.payment_identifiers.infra.mysql import (
+    PaymentAmountReservationRepository,
+)
+from src.modules.billing.payment_identifiers.infra.readers import (
+    PaymentAmountReader,
+)
 from src.modules.billing.sms.app.parser import observe
 from src.modules.billing.sms.infra.mysql import SmsRepository
+from src.modules.billing.sms_origins.app.accounts import ReceivingAliasService
+from src.modules.billing.sms_origins.app.manual_guard import (
+    SmsManualPaymentGuard,
+)
+from src.modules.billing.sms_origins.app.services import (
+    ReceivingRealmService,
+    SmsOriginAdmissionService,
+)
+from src.modules.billing.sms_origins.infra.financial import SmsFinancialReader
+from src.modules.billing.sms_origins.infra.mysql import (
+    ReceivingAliasRepository,
+    ReceivingRealmRepository,
+    SmsOriginAdmissionRepository,
+)
 from src.modules.billing.wallet.app.commands import WalletCommand
 from src.modules.billing.wallet.domain.dtos import TopupCreate
 from src.modules.billing.wallet.infra.mysql import (
@@ -109,6 +135,13 @@ class SmsWebhookTest(IsolatedAsyncioTestCase):
                     ),
                 )
             )
+            receiving_realms = ReceivingRealmService(
+                ReceivingRealmRepository(unit), settings
+            )
+            sms_admission = SmsOriginAdmissionService(
+                SmsOriginAdmissionRepository(unit)
+            )
+            sms_reader = SmsFinancialReader(unit)
             topup = await WalletCommand(
                 CustomerRepository(unit),
                 WalletRepository(unit),
@@ -129,6 +162,19 @@ class SmsWebhookTest(IsolatedAsyncioTestCase):
                         ),
                         settings,
                     ),
+                ),
+                SmsManualPaymentGuard(
+                    sms_reader, sms_admission, receiving_realms
+                ),
+                ReceivingAliasService(
+                    ReceivingAliasRepository(unit), settings
+                ),
+                receiving_realms,
+                PaymentAmountAllocationQuery(
+                    PaymentAmountReader(unit), settings
+                ),
+                PaymentAmountReservationService(
+                    PaymentAmountReservationRepository(unit)
                 ),
             ).request_topup(
                 TopupCreate(

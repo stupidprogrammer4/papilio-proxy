@@ -73,7 +73,7 @@ class SmsOriginAdmissionModel(PersistenceEntity):
 
 
 class SmsSettlementDecisionModel(PersistenceEntity):
-    sms_event_id: int = ForeignKeyField("tbl_sms_events.id", unique=True)
+    sms_event_id: int = ForeignKeyField("tbl_sms_events.id", index=True)
     status: str = CharField(24)
     reason_code: str | None = CharField(64, default=None)
     checked_at: datetime = TimestampField()

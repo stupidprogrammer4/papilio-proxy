@@ -47,7 +47,7 @@ class SmsSettlementClaimService:
 
 
 class SmsSettlementDecisionService:
-    """Current settlement decisions, distinct from parser observations."""
+    """Append meaningful settlement decisions as an event history."""
 
     def __init__(self, repo: SmsSettlementDecisionRepository) -> None:
         self.repo = repo
@@ -60,18 +60,19 @@ class SmsSettlementDecisionService:
         self, data: SmsSettlementDecisionModel
     ) -> SmsSettlementDecisionModel:
         current = await self.repo.by_event(data.sms_event_id)
-        if current is None:
-            result = await self.repo.create(data)
-        else:
-            result = await self.repo.change(
-                current,
-                SmsSettlementDecisionModel.patch(
-                    status=data.status,
-                    reason_code=data.reason_code,
-                    checked_at=data.checked_at,
-                    candidate_count=data.candidate_count,
-                    topup_id=data.topup_id,
-                    settlement_id=data.settlement_id,
-                ),
-            )
+        if current is not None and (
+            current.status,
+            current.reason_code,
+            current.candidate_count,
+            current.topup_id,
+            current.settlement_id,
+        ) == (
+            data.status,
+            data.reason_code,
+            data.candidate_count,
+            data.topup_id,
+            data.settlement_id,
+        ):
+            return current
+        result = await self.repo.create(data)
         return result

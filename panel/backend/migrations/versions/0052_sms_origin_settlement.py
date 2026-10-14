@@ -333,7 +333,9 @@ def downgrade():
     )
     topup_capture = connection.scalar(
         sa.text(
-            "SELECT COUNT(*) FROM tbl_topups WHERE receiving_realm_id IS NOT NULL OR receiving_alias_id IS NOT NULL OR captured_destination_revision IS NOT NULL"
+            "SELECT COUNT(*) FROM tbl_topups WHERE "
+            "receiving_realm_id IS NOT NULL OR receiving_alias_id IS NOT NULL "
+            "OR captured_destination_revision IS NOT NULL"
         )
     )
     if (

@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import hmac
 import json
@@ -427,6 +428,111 @@ class SmsDevicesWorkflowTest(StaffAdministrationWorkflowTest):
                 for row in public_sms
             )
         )
+
+    async def test_manual_and_sms_approval_race_credits_topup_once(self):
+        destination, enrollment = await self.automatic_device()
+        customer, topup = await self.topup(
+            destination["destination_id"], "manual_sms_race"
+        )
+        bank_reference = "race_" + self.suffix[:12]
+        sent_at = datetime.now(UTC).replace(microsecond=0).isoformat()
+
+        manual, sms = await asyncio.gather(
+            self.client.post(
+                f"/v1/admin/payments/topups/{topup['id']}/approve",
+                headers=self.headers,
+                json={"bank_reference": bank_reference},
+            ),
+            self.upload(
+                enrollment["device"]["id"],
+                enrollment["api_key"],
+                event="race_" + self.suffix,
+                message=f"واریز ۱۲۰٬۰۰۰ ریال پیگیری {bank_reference}",
+                sent_at=sent_at,
+            ),
+        )
+
+        self.assertEqual(manual.status_code, 200, manual.text)
+        self.assertEqual(sms.status_code, 200, sms.text)
+        async with self.connection.uow() as fresh:
+            topup_state = (
+                await fresh.execute(
+                    text(
+                        "SELECT status,bank_reference FROM tbl_topups "
+                        "WHERE id=:id"
+                    ),
+                    {"id": topup["id"]},
+                )
+            ).one()
+            wallet_balance = (
+                await fresh.execute(
+                    text(
+                        "SELECT balance_rial FROM tbl_wallets "
+                        "WHERE customer_id=:id"
+                    ),
+                    {"id": customer["id"]},
+                )
+            ).scalar_one()
+            credit_count = (
+                await fresh.execute(
+                    text(
+                        "SELECT COUNT(*) FROM tbl_wallet_entries "
+                        "WHERE reference=:reference"
+                    ),
+                    {"reference": f"topup:{topup['id']}"},
+                )
+            ).scalar_one()
+
+        self.assertEqual(topup_state.status, "approved")
+        self.assertEqual(topup_state.bank_reference, bank_reference)
+        self.assertEqual(wallet_balance, 120000)
+        self.assertEqual(credit_count, 1)
+
+    async def test_manual_bank_reference_blocks_sms_credit_to_another_topup(
+        self,
+    ):
+        destination, enrollment = await self.automatic_device()
+        first_customer, manually_paid = await self.topup(
+            destination["destination_id"], "manual_reference_owner"
+        )
+        second_customer, sms_candidate = await self.topup(
+            destination["destination_id"], "sms_reference_candidate"
+        )
+        bank_reference = "reuse_" + self.suffix[:12]
+        manual = await self.post(
+            f"/v1/admin/payments/topups/{manually_paid['id']}/approve",
+            {"bank_reference": bank_reference},
+        )
+        self.assertEqual(manual["status"], "approved")
+
+        accepted = await self.upload(
+            enrollment["device"]["id"],
+            enrollment["api_key"],
+            event="reuse_" + self.suffix,
+            message=f"واریز ۱۲۰٬۰۰۰ ریال پیگیری {bank_reference}",
+        )
+        self.assertEqual(accepted.status_code, 200, accepted.text)
+        self.assertEqual(
+            await self.settlement_check(sms_candidate["id"]), "waiting"
+        )
+
+        first = await self.get(
+            f"/v1/admin/payments/topups/{manually_paid['id']}"
+        )
+        second = await self.get(
+            f"/v1/admin/payments/topups/{sms_candidate['id']}"
+        )
+        self.assertEqual(first["data"]["status"], "approved")
+        self.assertEqual(first["data"]["bank_reference"], bank_reference)
+        self.assertEqual(second["data"]["status"], "pending")
+        first_wallet = await self.get(
+            f"/v1/admin/payments/wallets/{first_customer['id']}"
+        )
+        second_wallet = await self.get(
+            f"/v1/admin/payments/wallets/{second_customer['id']}"
+        )
+        self.assertEqual(first_wallet["data"]["balance_rial"], 120000)
+        self.assertEqual(second_wallet["data"]["balance_rial"], 0)
 
     async def test_native_ambiguous_amount_and_uncertain_sms_remain_unapproved(
         self,
