@@ -10,6 +10,7 @@ import time
 from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from tests.managed_epoch_fault_relay import ManagedRolloverResponseDrop
 from tests.managed_installation_agent import compact, digest
@@ -53,11 +54,12 @@ class NativeWindowBatchResult:
 
 
 @dataclass(frozen=True, slots=True)
-class NativeManagedCoreLossResult:
-    core_exited: bool
+class NativeManagedCrashResult:
+    managed_child_exited: bool
     established_connection_closed: bool
     restart_refused: bool
     no_finality: bool
+    freeze_intent_durable: bool
 
 
 def wait_for_managed_batch_epoch(
@@ -648,7 +650,7 @@ def run_native_managed_window_batch(
         )
 
 
-def run_native_managed_window_core_loss(
+def run_native_managed_window_crash(
     root: Path,
     runtime_binary: Path,
     registry: dict,
@@ -657,7 +659,9 @@ def run_native_managed_window_core_loss(
     api_url: str,
     node: dict,
     binaries: Path,
-) -> NativeManagedCoreLossResult:
+    *,
+    failure_point: Literal["core_loss", "supervisor_crash"],
+) -> NativeManagedCrashResult:
     if len(profiles) != 2 or len(
         {item.profile_id for item in profiles}
     ) != len(profiles):
@@ -665,7 +669,12 @@ def run_native_managed_window_core_loss(
     ordered_profiles = tuple(
         sorted(profiles, key=lambda item: item.profile_id)
     )
+    if failure_point not in {"core_loss", "supervisor_crash"}:
+        raise AssertionError("native_managed_crash_point_invalid")
     registry_policy = registry["registry"]
+    freeze_after_ms = 45000
+    if failure_point == "supervisor_crash":
+        freeze_after_ms = 60000
     window_policy = registry_policy["window_policy"]
     window_policy.update(
         {
@@ -688,7 +697,7 @@ def run_native_managed_window_core_loss(
             "generation": item.generation,
             "request_key": f"native-core-loss-{item.profile_id}",
             "requested_bytes": item.requested_bytes,
-            "freeze_after_ms": 45000,
+            "freeze_after_ms": freeze_after_ms,
             "operation_timeout_ms": 5000,
             "retry_interval_ms": 100,
             "max_attempts": 3,
@@ -793,21 +802,63 @@ def run_native_managed_window_core_loss(
                 "native_core_loss_agent_exited_before_injection:"
                 + (root / "window-batch-agent.log").read_text().strip()
             )
-        child_pid = _managed_child_pid(
-            process, Path(registry_policy["binary"]), root
-        )
-        os.kill(child_pid, signal.SIGKILL)
+        freeze_intent_started = time.monotonic()
+        profile_paths = {
+            item.profile_id: (
+                directory
+                / "managed-window-profiles"
+                / str(item.profile_id)
+                / "managed-window-cycle.json"
+            )
+            for item in ordered_profiles
+        }
+        deadline = freeze_intent_started + 10
+        while time.monotonic() < deadline:
+            profile_states = {
+                profile_id: json.loads(path.read_bytes())
+                for profile_id, path in profile_paths.items()
+            }
+            if all(
+                state.get("freeze_intent") is True
+                for state in profile_states.values()
+            ):
+                break
+            if process.poll() is not None:
+                raise AssertionError(
+                    "native_managed_freeze_intent_agent_exited"
+                )
+            time.sleep(0.02)
+        else:
+            raise AssertionError("native_managed_freeze_intent_not_durable")
+        if failure_point == "supervisor_crash":
+            os.kill(process.pid, signal.SIGKILL)
+        else:
+            child_pid = _managed_child_pid(
+                process, Path(registry_policy["binary"]), root
+            )
+            os.kill(child_pid, signal.SIGKILL)
         exit_code = process.wait(timeout=60)
         if exit_code == 0:
             raise AssertionError("native_core_loss_agent_reported_success")
+        if (
+            failure_point == "supervisor_crash"
+            and exit_code != -signal.SIGKILL
+        ):
+            raise AssertionError("native_managed_supervisor_not_sigkilled")
+        crash_elapsed = time.monotonic() - freeze_intent_started
+        if failure_point == "supervisor_crash" and crash_elapsed >= (
+            freeze_after_ms / 1000
+        ):
+            raise AssertionError("native_managed_crash_missed_freeze_window")
         if _managed_child_pids(Path(registry_policy["binary"]), root):
             raise AssertionError("native_core_loss_child_survived")
-        diagnostic = (root / "window-batch-agent.log").read_text().strip()
-        if diagnostic != (
-            "managed_window_batch_freeze_unresolved:"
-            "managed_window_control_unavailable"
-        ):
-            raise AssertionError("native_core_loss_error_not_reported")
+        if failure_point == "core_loss":
+            diagnostic = (root / "window-batch-agent.log").read_text().strip()
+            if diagnostic != (
+                "managed_window_batch_freeze_unresolved:"
+                "managed_window_control_unavailable"
+            ):
+                raise AssertionError("native_core_loss_error_not_reported")
         connection.settimeout(3)
         try:
             established_connection_closed = connection.recv(1) == b""
@@ -829,23 +880,28 @@ def run_native_managed_window_core_loss(
             raise AssertionError("native_core_loss_listener_survived")
         profile_states = []
         for item in ordered_profiles:
-            state_path = (
-                directory
-                / "managed-window-profiles"
-                / str(item.profile_id)
-                / "managed-window-cycle.json"
-            )
+            state_path = profile_paths[item.profile_id]
             profile_state = json.loads(state_path.read_bytes())
             if profile_state.get("submission") or profile_state.get(
                 "finality"
             ):
                 raise AssertionError("native_core_loss_finality_fabricated")
+            if profile_state.get("freeze_intent") is not True:
+                raise AssertionError("native_managed_freeze_intent_lost")
             profile_states.append(profile_state)
         epoch_path = root / "control" / "epoch-active.json"
         epoch_before_restart = epoch_path.read_bytes()
         installation_before_restart = installation_path.read_bytes()
-        if json.loads(epoch_before_restart).get("state") != "open_unresolved":
+        if (
+            failure_point == "core_loss"
+            and json.loads(epoch_before_restart).get("state")
+            != "open_unresolved"
+        ):
             raise AssertionError("native_core_loss_epoch_not_unresolved")
+        profile_snapshots = {
+            profile_id: path.read_bytes()
+            for profile_id, path in profile_paths.items()
+        }
         restart = launch(
             command + ["-once"],
             stack,
@@ -859,6 +915,11 @@ def run_native_managed_window_core_loss(
             raise AssertionError("native_core_loss_epoch_restarted")
         if installation_path.read_bytes() != installation_before_restart:
             raise AssertionError("native_core_loss_installation_mutated")
+        if any(
+            path.read_bytes() != profile_snapshots[profile_id]
+            for profile_id, path in profile_paths.items()
+        ):
+            raise AssertionError("native_managed_crash_journal_mutated")
         with socket.socket() as listener:
             listener.settimeout(0.2)
             listener_closed = (
@@ -874,11 +935,12 @@ def run_native_managed_window_core_loss(
             state.get("submission") is None and state.get("finality") is None
             for state in profile_states
         )
-        return NativeManagedCoreLossResult(
-            core_exited=True,
+        return NativeManagedCrashResult(
+            managed_child_exited=True,
             established_connection_closed=established_connection_closed,
             restart_refused=listener_closed,
             no_finality=no_finality,
+            freeze_intent_durable=True,
         )
 
 

@@ -6,6 +6,7 @@ import os
 import socket
 import tempfile
 from pathlib import Path
+from typing import Literal
 
 import uvicorn
 from sqlalchemy import text
@@ -23,7 +24,7 @@ from tests.managed_installation_agent import actual_registry, compact, digest
 from tests.managed_successor_agent import (
     ManagedBatchProfileInput,
     run_native_managed_window_batch,
-    run_native_managed_window_core_loss,
+    run_native_managed_window_crash,
     run_native_successor_cycles,
 )
 from tests.real_core_runtime import RealCoreRuntime
@@ -36,6 +37,18 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
     paid_managed_fixture = True
 
     async def test_paid_open_grants_remain_unresolved_after_core_loss(self):
+        await self._assert_paid_open_grants_remain_unresolved("core_loss")
+
+    async def test_paid_open_grants_remain_unresolved_after_supervisor_crash(
+        self,
+    ):
+        await self._assert_paid_open_grants_remain_unresolved(
+            "supervisor_crash"
+        )
+
+    async def _assert_paid_open_grants_remain_unresolved(
+        self, failure_point: Literal["core_loss", "supervisor_crash"]
+    ):
         runtime_binary = os.environ.get("PAPILIO_RUNTIME_TEST_BINARY")
         managed_binary = os.environ.get("PAPILIO_MANAGED_TEST_BINARY")
         binaries = os.environ.get("PAPILIO_CORE_BIN_DIR")
@@ -48,7 +61,7 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
         self.settings.usage.policy.mode = "reserved"
         validity_ms = 60000
         with tempfile.TemporaryDirectory(
-            prefix="papilio-native-core-loss-"
+            prefix=f"papilio-native-{failure_point}-"
         ) as name:
             root = Path(name)
             root.chmod(0o700)
@@ -172,7 +185,7 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                 installation_id = issued.json()["data"]["id"]
                 api_url = f"http://127.0.0.1:{listener.getsockname()[1]}"
                 result = await asyncio.to_thread(
-                    run_native_managed_window_core_loss,
+                    run_native_managed_window_crash,
                     root,
                     Path(runtime_binary),
                     registry,
@@ -181,12 +194,14 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                     api_url,
                     node,
                     Path(binaries),
+                    failure_point=failure_point,
                 )
                 self.assertTrue(
-                    result.core_exited
+                    result.managed_child_exited
                     and result.established_connection_closed
                     and result.restart_refused
                     and result.no_finality
+                    and result.freeze_intent_durable
                 )
                 async with self.connection.uow() as fresh:
                     grants = await fresh.execute(
