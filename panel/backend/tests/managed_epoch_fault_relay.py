@@ -10,10 +10,15 @@ MAX_RELAY_BYTES = 2_097_152
 
 
 class ManagedRolloverResponseDrop:
-    def __init__(self, api_url: str) -> None:
+    def __init__(
+        self, api_url: str, *, hold_first_rollover_response: bool = False
+    ) -> None:
         self.api_url = api_url
+        self._hold_first_rollover_response = hold_first_rollover_response
         self._lock = threading.Lock()
         self._dropped = False
+        self._first_rollover_committed = threading.Event()
+        self._release_first_rollover = threading.Event()
         self._rollover_responses: list[tuple[str, int, str]] = []
         self._events: list[tuple[str, str, int]] = []
         self._client = httpx.Client(
@@ -102,6 +107,9 @@ class ManagedRolloverResponseDrop:
                         )
                         drop_response = not owner._dropped
                         owner._dropped = True
+                    if drop_response and owner._hold_first_rollover_response:
+                        owner._first_rollover_committed.set()
+                        owner._release_first_rollover.wait(timeout=30)
                 if drop_response:
                     self.close_connection = True
                     return
@@ -130,6 +138,7 @@ class ManagedRolloverResponseDrop:
         return self
 
     def __exit__(self, *_: object) -> None:
+        self._release_first_rollover.set()
         self._server.shutdown()
         self._server.server_close()
         self._thread.join(timeout=5)
@@ -138,6 +147,12 @@ class ManagedRolloverResponseDrop:
     def rollover_responses(self) -> tuple[tuple[str, int, str], ...]:
         with self._lock:
             return tuple(self._rollover_responses)
+
+    def wait_for_held_rollover(self, timeout: float) -> bool:
+        return self._first_rollover_committed.wait(timeout)
+
+    def release_held_rollover(self) -> None:
+        self._release_first_rollover.set()
 
     def events(self) -> tuple[tuple[str, str, int], ...]:
         with self._lock:

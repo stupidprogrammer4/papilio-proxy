@@ -11,6 +11,71 @@ from tests.managed_epoch_fault_relay import ManagedRolloverResponseDrop
 
 
 class ManagedEpochFaultRelayTest(unittest.TestCase):
+    def test_committed_rollover_response_can_be_held_until_parent_is_killed(
+        self,
+    ):
+        records = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                pass
+
+            def do_POST(self) -> None:
+                length = int(self.headers.get("Content-Length", "0"))
+                request_body = self.rfile.read(length)
+                records.append(request_body)
+                response_body = b'{"success":true,"data":{"id":17}}'
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(response_body)))
+                self.end_headers()
+                self.wfile.write(response_body)
+
+        upstream = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=upstream.serve_forever, daemon=True)
+        thread.start()
+        host = str(upstream.server_address[0])
+        port = upstream.server_address[1]
+        path = (
+            "/v1/nodes/fixture/managed-epochs/"
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/rollover"
+        )
+        body = b'{"request_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'
+        result = []
+        try:
+            with ManagedRolloverResponseDrop(
+                f"http://{host}:{port}", hold_first_rollover_response=True
+            ) as relay:
+                client = httpx.Client(timeout=2, trust_env=False)
+
+                def send() -> None:
+                    try:
+                        result.append(
+                            client.post(relay.url + path, content=body)
+                        )
+                    except httpx.HTTPError:
+                        result.append(None)
+
+                request = threading.Thread(target=send)
+                request.start()
+                self.assertTrue(relay.wait_for_held_rollover(2))
+                self.assertEqual(records, [body])
+                self.assertEqual(len(relay.rollover_responses()), 1)
+                relay.release_held_rollover()
+                request.join(timeout=2)
+                self.assertFalse(request.is_alive())
+                self.assertEqual(result, [None])
+                replay = client.post(relay.url + path, content=body)
+                client.close()
+                self.assertEqual(replay.status_code, 200)
+                self.assertEqual(len(records), 2)
+                self.assertEqual(records[0], records[1])
+                self.assertEqual(len(relay.rollover_responses()), 2)
+        finally:
+            upstream.shutdown()
+            upstream.server_close()
+            thread.join(timeout=5)
+
     def test_first_rollover_response_is_dropped_and_exact_replay_is_returned(
         self,
     ):

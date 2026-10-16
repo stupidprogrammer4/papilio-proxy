@@ -159,7 +159,9 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                         (status, activated), ("pending_provision", None)
                     )
                 api_url = f"http://127.0.0.1:{listener.getsockname()[1]}"
-                with ManagedRolloverResponseDrop(api_url) as relay:
+                with ManagedRolloverResponseDrop(
+                    api_url, hold_first_rollover_response=True
+                ) as relay:
                     try:
                         result = await asyncio.to_thread(
                             run_native_successor_cycles,
@@ -175,6 +177,7 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                             payloads,
                             freeze_after_ms=8000,
                             max_epochs=2,
+                            rollover_fault=relay,
                         )
                     except AssertionError as error:
                         raise AssertionError(

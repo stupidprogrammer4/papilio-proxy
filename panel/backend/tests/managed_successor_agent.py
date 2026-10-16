@@ -10,6 +10,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 
+from tests.managed_epoch_fault_relay import ManagedRolloverResponseDrop
 from tests.managed_installation_agent import compact, digest
 from tests.managed_ip_agent import (
     BoundStockClient,
@@ -759,6 +760,7 @@ def run_native_successor_cycles(
     *,
     freeze_after_ms: int,
     max_epochs: int = 1,
+    rollover_fault: ManagedRolloverResponseDrop | None = None,
 ) -> NativeSuccessorResult:
     managed = {
         **registry,
@@ -889,6 +891,33 @@ def run_native_successor_cycles(
             roundtrip(connection, payload)
             connection.close()
             baseline += len(payload)
+            if index == 2 and max_epochs > 1 and rollover_fault is not None:
+                if not rollover_fault.wait_for_held_rollover(45):
+                    raise AssertionError(
+                        "native_rollover_response_not_held_after_commit"
+                    )
+                installation_state = json.loads(
+                    (
+                        root / "managed-agent" / "managed-installation.json"
+                    ).read_bytes()
+                )
+                pending = installation_state.get("pending_rollover") or {}
+                submission = pending.get("submission")
+                if not submission:
+                    raise AssertionError(
+                        "native_rollover_submission_not_durable_before_http"
+                    )
+                process.kill()
+                process.wait(timeout=5)
+                rollover_fault.release_held_rollover()
+                recovery_log = root / "successor-agent.log"
+                recovery_log.unlink()
+                process = launch(
+                    command,
+                    stack,
+                    recovery_log,
+                    environment=environment,
+                )
         exit_code = process.wait(timeout=30)
         if exit_code:
             diagnostic = (root / "successor-agent.log").read_text().strip()
