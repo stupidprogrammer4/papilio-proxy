@@ -47,7 +47,7 @@ func successorChainTestFixture(t *testing.T) (ManagedInstallationPolicy, Managed
 	initialPolicy.ProvisionTaskID = 11
 	request.ProvisionTaskID = 11
 	finality := ManagedWindowFinality{issued.Window.WindowID, issued.Window.GrantID, ManagedPredecessorAcceptance{strings.Repeat("4", 32), issued.Window.Epoch, issued.Window.Binding.ProfileID, submission.Receipt.BarrierID, submission.Receipt.SnapshotSHA256}, 12, 18}
-	initial := managedWindowCycleJournal{NodeCode: "owned", InstallationID: 5, Policy: initialPolicy, Request: request, ManualBarrierID: strings.Repeat("3", 32), Issued: &issued, Admission: &original, Submission: &submission, Finality: &finality, PaidAcceptance: &ManagedPaidAcceptance{issued.Window.WindowID, 11, original.Receipt.ReceiptSHA256, "applied", original.Admission.ObservedAt}}
+	initial := managedWindowCycleJournal{NodeCode: "owned", InstallationID: 5, Policy: initialPolicy, Request: request, ManualBarrierID: strings.Repeat("3", 32), Issued: &issued, Admission: &original, Submission: &submission, Finality: &finality, PaidAcceptance: &ManagedPaidAcceptance{issued.Window.WindowID, 11, original.Receipt.ReceiptSHA256, "applied", original.Admission.ObservedAt.Truncate(time.Second)}}
 	p := ManagedInstallationPolicy{InstallationID: 5, MaxReceiptBytes: 65536, PollIntervalMS: 1000, WindowPolicy: windowPolicy, WindowCycle: &initialPolicy, ComponentPolicy: json.RawMessage(`{"max_barriers":8}`)}
 	policy := ManagedSuccessorCyclePolicy{Enabled: true, MaxSuccessorCycles: 2, APIMaxSuccessors: 2, Template: &ManagedSuccessorStepPolicy{"native-successor", 80, 1, 1000, 1, 1}}
 	return p, policy, initial, installation

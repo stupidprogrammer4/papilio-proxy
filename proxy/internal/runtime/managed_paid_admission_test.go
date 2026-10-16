@@ -43,7 +43,7 @@ func TestManagedPaidClientChecksLeaseIdentityAndExactOriginalProof(t *testing.T)
 		if json.NewDecoder(r.Body).Decode(&received) != nil || received.ClaimToken != issued.ProvisionClaim.ClaimToken || received.OriginalReceipt != original.OriginalReceipt || received.Receipt != original.Receipt {
 			t.Error("paid proof/lease changed")
 		}
-		result := ManagedPaidAcceptance{issued.Window.WindowID, 11, original.Receipt.ReceiptSHA256, "applied", original.Admission.ObservedAt}
+		result := ManagedPaidAcceptance{issued.Window.WindowID, 11, original.Receipt.ReceiptSHA256, "applied", original.Admission.ObservedAt.Truncate(time.Second)}
 		if badResponse {
 			result.AdmissionSHA256 = strings.Repeat("0", 64)
 		}
@@ -95,7 +95,7 @@ func TestManagedPaidClientChecksLeaseIdentityAndExactOriginalProof(t *testing.T)
 func TestManagedPaidAcceptanceRejectsBindingAndAllowsHistoricalRecovery(t *testing.T) {
 	issued, _, original := managedAdmissionTestFixture(t)
 	issued.ProvisionClaim = &ManagedProvisionClaim{11, 12, strings.Repeat("k", 32), issued.Window.ValidUntil}
-	valid := ManagedPaidAcceptance{issued.Window.WindowID, 11, original.Receipt.ReceiptSHA256, "applied", original.Admission.ObservedAt}
+	valid := ManagedPaidAcceptance{issued.Window.WindowID, 11, original.Receipt.ReceiptSHA256, "applied", original.Admission.ObservedAt.Truncate(time.Second)}
 	if validateManagedPaidAcceptance(valid, issued, original) != nil {
 		t.Fatal("valid paid acceptance rejected")
 	}
@@ -103,7 +103,7 @@ func TestManagedPaidAcceptanceRejectsBindingAndAllowsHistoricalRecovery(t *testi
 	variants[0].ProvisionTaskID++
 	variants[1].WindowID = strings.Repeat("0", 32)
 	variants[2].Outcome = "revoked"
-	variants[3].ObservedAt = valid.ObservedAt.Add(time.Microsecond)
+	variants[3].ObservedAt = valid.ObservedAt.Add(time.Second)
 	for _, variant := range variants {
 		if validateManagedPaidAcceptance(variant, issued, original) == nil {
 			t.Fatal("paid acceptance binding mismatch accepted")
@@ -115,7 +115,7 @@ func TestManagedPaidAcceptanceRejectsBindingAndAllowsHistoricalRecovery(t *testi
 	issued.Window.ValidUntil = past.Add(time.Minute)
 	issued.ProvisionClaim.ClaimUntil = past.Add(time.Second)
 	original.Admission.ObservedAt = past
-	valid.ObservedAt = past
+	valid.ObservedAt = past.Truncate(time.Second)
 	if validateManagedPaidAcceptance(valid, issued, original) != nil || validateManagedProvisionClaim(issued, 11, true) == nil {
 		t.Fatal("historical/fresh expiry checks conflated")
 	}
@@ -157,7 +157,7 @@ func TestManagedPaidCycleRecoveryRequiresDurableAcceptance(t *testing.T) {
 	if err = replayManagedWindowCycle(context.Background(), client, registry, journal, installation); err == nil || err.Error() != "managed_window_cycle_paid_recovery_unresolved" {
 		t.Fatal("missing paid ACK was bypassed", err)
 	}
-	state.PaidAcceptance = &ManagedPaidAcceptance{issued.Window.WindowID, 11, original.Receipt.ReceiptSHA256, "applied", original.Admission.ObservedAt}
+	state.PaidAcceptance = &ManagedPaidAcceptance{issued.Window.WindowID, 11, original.Receipt.ReceiptSHA256, "applied", original.Admission.ObservedAt.Truncate(time.Second)}
 	if err = saveManagedWindowCycle(journal, state); err != nil {
 		t.Fatal(err)
 	}

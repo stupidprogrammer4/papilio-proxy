@@ -73,7 +73,9 @@ func validateManagedProvisionClaim(issued ManagedIssuedWindow, taskID int64, fre
 // not require the old lease/window to remain live and never opens an old child.
 func validateManagedPaidAcceptance(value ManagedPaidAcceptance, issued ManagedIssuedWindow, original ManagedOriginalAdmission) error {
 	claim := issued.ProvisionClaim
-	if claim == nil || validateManagedProvisionClaim(issued, claim.TaskID, false) != nil || value.WindowID != issued.Window.WindowID || value.ProvisionTaskID != claim.TaskID || value.AdmissionSHA256 != original.Receipt.ReceiptSHA256 || !digestPattern.MatchString(value.AdmissionSHA256) || value.Outcome != "applied" || value.ObservedAt.IsZero() || !value.ObservedAt.Equal(original.Admission.ObservedAt) || !value.ObservedAt.Before(claim.ClaimUntil) {
+	// The API persists admission observations as UTC DATETIME(0).
+	persistedObservation := original.Admission.ObservedAt.Truncate(time.Second)
+	if claim == nil || validateManagedProvisionClaim(issued, claim.TaskID, false) != nil || value.WindowID != issued.Window.WindowID || value.ProvisionTaskID != claim.TaskID || value.AdmissionSHA256 != original.Receipt.ReceiptSHA256 || !digestPattern.MatchString(value.AdmissionSHA256) || value.Outcome != "applied" || value.ObservedAt.IsZero() || !value.ObservedAt.Equal(persistedObservation) || !value.ObservedAt.Before(claim.ClaimUntil) {
 		return errors.New("managed_paid_acceptance_invalid")
 	}
 	return nil

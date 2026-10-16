@@ -161,7 +161,7 @@ func testManagedPaidCycle(t *testing.T, requireProof, paid, failACK bool) {
 				w.WriteHeader(http.StatusConflict)
 				return
 			}
-			result := ManagedPaidAcceptance{issued.Window.WindowID, 11, proof.Receipt.ReceiptSHA256, "applied", proof.Admission.ObservedAt}
+			result := ManagedPaidAcceptance{issued.Window.WindowID, 11, proof.Receipt.ReceiptSHA256, "applied", proof.Admission.ObservedAt.Truncate(time.Second)}
 			_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "data": result})
 			return
 		}

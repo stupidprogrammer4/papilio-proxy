@@ -54,7 +54,7 @@ func managedPaidAdmissionBatchFixture(t *testing.T) ([]ManagedPaidAdmissionBatch
 			ProvisionTaskID: value.ProvisionClaim.TaskID,
 			AdmissionSHA256: original.Receipt.ReceiptSHA256,
 			Outcome:         "applied",
-			ObservedAt:      observation,
+			ObservedAt:      observation.Truncate(time.Second),
 		})
 	}
 	return items, accepted

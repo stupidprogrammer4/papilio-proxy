@@ -141,7 +141,7 @@ func TestManagedWindowBatchCycleIssuesOnceAndReplaysIndependentProfileJournals(t
 						taskID = issuedItem.Window.ProvisionClaim.TaskID
 					}
 				}
-				result := ManagedPaidAcceptance{WindowID: item.WindowID, ProvisionTaskID: taskID, AdmissionSHA256: item.Submission.Receipt.ReceiptSHA256, Outcome: "applied", ObservedAt: facts.ObservedAt}
+				result := ManagedPaidAcceptance{WindowID: item.WindowID, ProvisionTaskID: taskID, AdmissionSHA256: item.Submission.Receipt.ReceiptSHA256, Outcome: "applied", ObservedAt: facts.ObservedAt.Truncate(time.Second)}
 				results = append(results, ManagedPaidAdmissionBatchResult{WindowID: item.WindowID, Result: result})
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "data": ManagedPaidAdmissionBatchResponse{BatchRequestKey: request.BatchRequestKey, Windows: results}})
