@@ -66,6 +66,40 @@ func TestOriginalWindowSnapshotPrivateSocketExactBytesAndReplay(t *testing.T) {
 	}
 }
 
+func TestWindowControlReclaimsAStaleOwnedSocketAfterProcessExit(t *testing.T) {
+	m, gate, _ := strictFixture(t)
+	path := filepath.Join(m.snapshots.root, "control.sock")
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
+	if err != nil {
+		t.Fatal("create prior control listener", err)
+	}
+	listener.SetUnlinkOnClose(false)
+	if err = os.Chmod(path, 0600); err != nil {
+		t.Fatal("make prior control socket private", err)
+	}
+	if _, err = StartWindowControl(gate, m.snapshots, m); err == nil || err.Error() != "managed_control_path_owned" {
+		t.Fatal("active control socket was replaced", err)
+	}
+	if _, err = os.Lstat(path); err != nil {
+		t.Fatal("active control socket was removed", err)
+	}
+	if err = listener.Close(); err != nil {
+		t.Fatal("close prior control listener", err)
+	}
+
+	control, err := StartWindowControl(gate, m.snapshots, m)
+	if err != nil {
+		t.Fatal("recover stale socket after owning process exit", err)
+	}
+	t.Cleanup(func() { _ = control.Close() })
+
+	connection, err := net.DialTimeout("unix", path, time.Second)
+	if err != nil {
+		t.Fatal("new control socket is unavailable", err)
+	}
+	_ = connection.Close()
+}
+
 func TestOriginalWindowSnapshotRejectsRequestShapesAndMissingReceipt(t *testing.T) {
 	m, gate, _, store := windowFixture(t)
 	control := &Control{gate: gate, store: store, windows: m}

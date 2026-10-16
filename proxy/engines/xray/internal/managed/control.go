@@ -67,8 +67,11 @@ func startControlWithWindows(gate *Gate, store *SnapshotStore, checkpoint freeze
 		return nil, errors.New("managed_control_policy_invalid")
 	}
 	path := filepath.Join(store.root, "control.sock")
-	if _, err := os.Lstat(path); !os.IsNotExist(err) {
-		return nil, errors.New("managed_control_path_owned")
+	if err := reclaimStaleControlSocket(
+		path,
+		time.Duration(gate.policy.ControlTimeoutMS)*time.Millisecond,
+	); err != nil {
+		return nil, err
 	}
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
 	if err != nil {
@@ -87,6 +90,43 @@ func startControlWithWindows(gate *Gate, store *SnapshotStore, checkpoint freeze
 	go func() { _ = control.server.Serve(private) }()
 	return control, nil
 }
+
+func reclaimStaleControlSocket(path string, timeout time.Duration) error {
+	previous, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil || previous.Mode()&os.ModeSocket == 0 || previous.Mode().Perm() != 0600 {
+		return errors.New("managed_control_path_owned")
+	}
+	owner, validOwner := previous.Sys().(*syscall.Stat_t)
+	if !validOwner || owner.Uid != uint32(os.Geteuid()) {
+		return errors.New("managed_control_path_owned")
+	}
+	connection, dialErr := net.DialTimeout("unix", path, timeout)
+	if dialErr == nil {
+		_ = connection.Close()
+		return errors.New("managed_control_path_owned")
+	}
+	if errors.Is(dialErr, os.ErrNotExist) {
+		return nil
+	}
+	if !errors.Is(dialErr, syscall.ECONNREFUSED) {
+		return errors.New("managed_control_path_owned")
+	}
+	current, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil || !os.SameFile(previous, current) {
+		return errors.New("managed_control_path_owned")
+	}
+	if err = os.Remove(path); err != nil {
+		return errors.New("managed_control_path_owned")
+	}
+	return nil
+}
+
 func (c *Control) Close() error {
 	var result error
 	c.once.Do(func() {
