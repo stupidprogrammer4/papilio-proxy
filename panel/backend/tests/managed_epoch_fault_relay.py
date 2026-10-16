@@ -1,4 +1,4 @@
-"""Inject API outages and drop a committed epoch-rollover response."""
+"""Inject API outages and faults around managed epoch rollover."""
 
 import hashlib
 import threading
@@ -11,16 +11,25 @@ MAX_RELAY_BYTES = 2_097_152
 
 class ManagedRolloverResponseDrop:
     def __init__(
-        self, api_url: str, *, hold_first_rollover_response: bool = False
+        self,
+        api_url: str,
+        *,
+        hold_first_rollover_response: bool = False,
+        hold_first_rollover_request: bool = False,
     ) -> None:
         self.api_url = api_url
         self._hold_first_rollover_response = hold_first_rollover_response
+        self._hold_first_rollover_request = hold_first_rollover_request
         self._lock = threading.Lock()
         self._dropped = False
+        self._rollover_request_dropped = False
         self._first_rollover_committed = threading.Event()
         self._release_first_rollover = threading.Event()
+        self._first_rollover_request_held = threading.Event()
+        self._release_first_rollover_request = threading.Event()
         self._api_outage = threading.Event()
         self._outage_finality = threading.Event()
+        self._rollover_requests: list[str] = []
         self._rollover_responses: list[tuple[str, int, str]] = []
         self._events: list[tuple[str, str, int]] = []
         self._client = httpx.Client(
@@ -63,6 +72,33 @@ class ManagedRolloverResponseDrop:
                     "rollover",
                 }:
                     endpoint = "other"
+                is_rollover = (
+                    self.command == "POST"
+                    and "/managed-epochs/" in request_path
+                    and request_path.endswith("/rollover")
+                )
+                if is_rollover:
+                    with owner._lock:
+                        owner._rollover_requests.append(
+                            hashlib.sha256(body).hexdigest()
+                        )
+                        drop_request = (
+                            owner._hold_first_rollover_request
+                            and not owner._rollover_request_dropped
+                        )
+                        owner._rollover_request_dropped = (
+                            owner._rollover_request_dropped or drop_request
+                        )
+                        owner._dropped = owner._dropped or drop_request
+                    if drop_request:
+                        owner._first_rollover_request_held.set()
+                        owner._release_first_rollover_request.wait(timeout=30)
+                        with owner._lock:
+                            owner._events.append(
+                                (self.command, "rollover_request_dropped", 0)
+                            )
+                        self.close_connection = True
+                        return
                 if owner._api_outage.is_set():
                     with owner._lock:
                         owner._events.append((self.command, endpoint, 503))
@@ -108,11 +144,6 @@ class ManagedRolloverResponseDrop:
                     return
                 with owner._lock:
                     owner._events.append((self.command, endpoint, status_code))
-                is_rollover = (
-                    self.command == "POST"
-                    and "/managed-epochs/" in self.path
-                    and self.path.endswith("/rollover")
-                )
                 drop_response = False
                 if is_rollover:
                     request_digest = hashlib.sha256(body).hexdigest()
@@ -171,8 +202,18 @@ class ManagedRolloverResponseDrop:
     def wait_for_held_rollover(self, timeout: float) -> bool:
         return self._first_rollover_committed.wait(timeout)
 
+    def wait_for_held_rollover_request(self, timeout: float) -> bool:
+        return self._first_rollover_request_held.wait(timeout)
+
     def release_held_rollover(self) -> None:
         self._release_first_rollover.set()
+
+    def release_held_rollover_request(self) -> None:
+        self._release_first_rollover_request.set()
+
+    def rollover_requests(self) -> tuple[str, ...]:
+        with self._lock:
+            return tuple(self._rollover_requests)
 
     def set_api_outage(self, active: bool) -> None:
         if active:
