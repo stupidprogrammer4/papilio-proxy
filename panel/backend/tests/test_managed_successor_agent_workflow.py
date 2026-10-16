@@ -160,7 +160,7 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                     )
                 api_url = f"http://127.0.0.1:{listener.getsockname()[1]}"
                 with ManagedRolloverResponseDrop(
-                    api_url, hold_first_rollover_response=True
+                    api_url, hold_first_rollover_request=True
                 ) as relay:
                     try:
                         result = await asyncio.to_thread(
@@ -178,18 +178,25 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                             freeze_after_ms=8000,
                             max_epochs=2,
                             rollover_fault=relay,
+                            kill_before_api_request=True,
                         )
                     except AssertionError as error:
                         raise AssertionError(
                             f"{error}:relay={relay.events()}"
                         ) from error
                     rollover_responses = relay.rollover_responses()
-                self.assertEqual(len(rollover_responses), 2)
+                    rollover_requests = relay.rollover_requests()
+                    rollover_events = relay.events()
+                self.assertEqual(len(rollover_responses), 1)
+                self.assertEqual(len(rollover_requests), 2)
+                self.assertEqual(rollover_requests[0], rollover_requests[1])
                 self.assertEqual(
-                    rollover_responses[0][0], rollover_responses[1][0]
+                    rollover_responses[0][0], rollover_requests[1]
                 )
-                self.assertEqual(
-                    rollover_responses[0][1:], rollover_responses[1][1:]
+                self.assertEqual(rollover_responses[0][1], 200)
+                self.assertIn(
+                    ("POST", "rollover_request_dropped", 0),
+                    rollover_events,
                 )
                 self.assertTrue(
                     result.replay_unchanged and result.child_stopped

@@ -790,6 +790,7 @@ def run_native_successor_cycles(
     freeze_after_ms: int,
     max_epochs: int = 1,
     rollover_fault: ManagedRolloverResponseDrop | None = None,
+    kill_before_api_request: bool = False,
 ) -> NativeSuccessorResult:
     managed = {
         **registry,
@@ -921,7 +922,12 @@ def run_native_successor_cycles(
             connection.close()
             baseline += len(payload)
             if index == 2 and max_epochs > 1 and rollover_fault is not None:
-                if not rollover_fault.wait_for_held_rollover(45):
+                if kill_before_api_request:
+                    if not rollover_fault.wait_for_held_rollover_request(45):
+                        raise AssertionError(
+                            "native_rollover_request_not_held_before_api"
+                        )
+                elif not rollover_fault.wait_for_held_rollover(45):
                     raise AssertionError(
                         "native_rollover_response_not_held_after_commit"
                     )
@@ -937,49 +943,69 @@ def run_native_successor_cycles(
                         "native_rollover_submission_not_durable_before_http"
                     )
                 pending_before_outage = compact(pending, canonical=True)
+                if kill_before_api_request and (
+                    rollover_fault.rollover_responses()
+                    or any(
+                        endpoint == "rollover" and status != 0
+                        for _, endpoint, status in rollover_fault.events()
+                    )
+                ):
+                    raise AssertionError(
+                        "native_rollover_api_mutated_before_request_replay"
+                    )
                 process.kill()
                 process.wait(timeout=5)
-                rollover_fault.release_held_rollover()
+                if kill_before_api_request:
+                    rollover_fault.release_held_rollover_request()
+                else:
+                    rollover_fault.release_held_rollover()
                 recovery_log = root / "successor-agent.log"
                 recovery_log.unlink()
-                rollover_fault.set_api_outage(True)
                 process = launch(
                     command,
                     stack,
                     recovery_log,
                     environment=environment,
                 )
-                outage_exit = process.wait(timeout=25)
-                if outage_exit == 0:
-                    raise AssertionError(
-                        "native_rollover_accepted_during_api_outage"
+                if not kill_before_api_request:
+                    rollover_fault.set_api_outage(True)
+                    outage_exit = process.wait(timeout=25)
+                    if outage_exit == 0:
+                        raise AssertionError(
+                            "native_rollover_accepted_during_api_outage"
+                        )
+                    outage_state = json.loads(
+                        (
+                            root
+                            / "managed-agent"
+                            / "managed-installation.json"
+                        ).read_bytes()
                     )
-                outage_state = json.loads(
-                    (
-                        root / "managed-agent" / "managed-installation.json"
-                    ).read_bytes()
-                )
-                outage_pending = outage_state.get("pending_rollover") or {}
-                if compact(
-                    outage_pending, canonical=True
-                ) != pending_before_outage or outage_state.get(
-                    "epoch_history", []
-                ) != installation_state.get("epoch_history", []):
-                    raise AssertionError(
-                        "native_rollover_outage_changed_durable_intent"
+                    outage_pending = outage_state.get("pending_rollover") or {}
+                    if compact(
+                        outage_pending, canonical=True
+                    ) != pending_before_outage or outage_state.get(
+                        "epoch_history", []
+                    ) != installation_state.get("epoch_history", []):
+                        raise AssertionError(
+                            "native_rollover_outage_changed_durable_intent"
+                        )
+                    if (
+                        "POST",
+                        "rollover",
+                        503,
+                    ) not in rollover_fault.events():
+                        raise AssertionError(
+                            "native_rollover_api_outage_not_exercised"
+                        )
+                    rollover_fault.set_api_outage(False)
+                    recovery_log.unlink()
+                    process = launch(
+                        command,
+                        stack,
+                        recovery_log,
+                        environment=environment,
                     )
-                if ("POST", "rollover", 503) not in rollover_fault.events():
-                    raise AssertionError(
-                        "native_rollover_api_outage_not_exercised"
-                    )
-                rollover_fault.set_api_outage(False)
-                recovery_log.unlink()
-                process = launch(
-                    command,
-                    stack,
-                    recovery_log,
-                    environment=environment,
-                )
         exit_code = process.wait(timeout=30)
         if exit_code:
             diagnostic = (root / "successor-agent.log").read_text().strip()
