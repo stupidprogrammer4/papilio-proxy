@@ -90,6 +90,9 @@ class ManagedPaidAdmissionWorkflowTest(ManagedWindowWorkflowFixture):
         )
         self.assertEqual([r.status_code for r in responses], [200, 200])
         self.assertEqual(responses[0].json(), responses[1].json())
+        observed_at = responses[0].json()["data"]["observed_at"]
+        self.assertTrue(observed_at.endswith("+00:00"))
+        self.assertEqual(datetime.fromisoformat(observed_at).microsecond, 0)
         async with self.connection.uow() as fresh:
             balance = await fresh.execute(
                 text(

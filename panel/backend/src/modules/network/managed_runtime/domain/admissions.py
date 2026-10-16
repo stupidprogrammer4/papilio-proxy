@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal
 
 from papilio.schemas.inputs import BaseDTO
-from pydantic import Field, model_validator
+from pydantic import AwareDatetime, Field, model_validator
 
 from src.modules.network.managed_runtime.domain.contracts import (
     EpochIdentity,
@@ -50,7 +50,7 @@ class ManagedAdmissionOut(ImmutableContract):
     provision_task_id: int = Field(gt=0)
     admission_sha256: Sha256
     outcome: Literal["applied"] = "applied"
-    observed_at: datetime
+    observed_at: AwareDatetime
 
 
 class ManagedAdmissionBatchItemCreate(BaseDTO):

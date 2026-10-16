@@ -180,6 +180,11 @@ class ManagedAdmissionBatchWorkflowTest(ManagedWindowWorkflowFixture):
             route, headers=self.node_headers, json=body
         )
         self.assertEqual(response.status_code, 200, response.text)
+        observed_at = response.json()["data"]["windows"][0]["result"][
+            "observed_at"
+        ]
+        self.assertRegex(observed_at, r"(?:Z|\+00:00)$")
+        self.assertEqual(datetime.fromisoformat(observed_at).microsecond, 0)
         replay, concurrent = await asyncio.gather(
             self.client.post(route, headers=self.node_headers, json=body),
             self.client.post(route, headers=self.node_headers, json=body),

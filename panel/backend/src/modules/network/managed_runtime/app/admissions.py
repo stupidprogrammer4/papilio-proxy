@@ -79,6 +79,13 @@ from src.modules.sales.subscriptions.interfaces import (
 )
 
 
+def _utc_timestamp(timestamp: datetime) -> datetime:
+    """Serialize persisted UTC timestamps with an explicit UTC offset."""
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=UTC)
+    return timestamp.astimezone(UTC)
+
+
 class ManagedAdmissionCommand:
     def __init__(
         self,
@@ -253,7 +260,9 @@ class ManagedAdmissionCommand:
             window_id=window.window_id,
             provision_task_id=window.provision_task_id,
             admission_sha256=data.receipt.receipt_sha256,
-            observed_at=admission.observed_at,
+            observed_at=_utc_timestamp(admission.observed_at).replace(
+                microsecond=0
+            ),
         )
         if existing is not None:
             if (
@@ -722,9 +731,11 @@ class ManagedAdmissionCommand:
                     admission_sha256=admissions_by_window[
                         windows_by_id[item.window_id].id
                     ].receipt_sha256,
-                    observed_at=admissions_by_window[
-                        windows_by_id[item.window_id].id
-                    ].observed_at,
+                    observed_at=_utc_timestamp(
+                        admissions_by_window[
+                            windows_by_id[item.window_id].id
+                        ].observed_at
+                    ),
                 ),
             )
             for item in data.windows

@@ -15,6 +15,9 @@ from src.modules.network.managed_runtime.app.window_computation import (
 from src.modules.network.managed_runtime.app.window_encoding import (
     ManagedWindowEncoding,
 )
+from src.modules.network.managed_runtime.domain.admissions import (
+    ManagedAdmissionOut,
+)
 from src.modules.network.managed_runtime.domain.barriers import (
     ManagedWindowFinalBatchCreate,
     ManagedWindowFinalBatchItemCreate,
@@ -82,6 +85,15 @@ def finality_batch_body(windows, expected, batch_request_key):
 
 
 class ManagedInitialWindowBatchContractTest(unittest.TestCase):
+    def test_managed_admission_output_requires_timezone_aware_utc(self):
+        with self.assertRaises(ValidationError):
+            ManagedAdmissionOut(
+                window_id="a" * 32,
+                provision_task_id=41,
+                admission_sha256="b" * 64,
+                observed_at=datetime(2026, 10, 16, 12, 0),
+            )
+
     def test_batch_requires_unique_profile_identity_and_stable_key(self):
         item = ManagedInitialWindowCreate(
             profile_id=41,
