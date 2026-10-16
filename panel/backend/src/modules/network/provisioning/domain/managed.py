@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ManagedApplicationEvidence(BaseModel):
@@ -19,6 +19,24 @@ class ManagedApplicationEvidence(BaseModel):
     claim_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
     admission_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     observed_at: datetime
+
+
+class ManagedApplicationBatchItem(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    task_id: int = Field(gt=0)
+    evidence: ManagedApplicationEvidence
+
+
+class ManagedApplicationBatch(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    items: tuple[ManagedApplicationBatchItem, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def unique_tasks(self) -> "ManagedApplicationBatch":
+        task_ids = [item.task_id for item in self.items]
+        if len(task_ids) != len(set(task_ids)):
+            raise ValueError("Each provision task may appear once.")
+        return self
 
 
 class ManagedRevocationEvidence(BaseModel):

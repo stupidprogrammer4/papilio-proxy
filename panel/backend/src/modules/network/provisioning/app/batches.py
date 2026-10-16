@@ -17,6 +17,13 @@ class ProvisionRequestBatchService:
     def __init__(self, repo: ProvisionRequestRepository) -> None:
         self.repo = repo
 
+    async def locked_many(self, ids: list[int]) -> list[ProvisionRequestModel]:
+        result = await self.repo.locked_many(ids)
+        return result
+
+    async def change_many(self, rows: list[ProvisionRequestModel]) -> None:
+        await self.repo.change_many(rows)
+
     async def by_generations(
         self, keys: list[ProvisionGenerationKey]
     ) -> list[ProvisionRequestModel]:
@@ -34,3 +41,14 @@ class ProvisionTaskBatchService:
 
     async def change_many(self, rows: list[ProvisionTaskModel]) -> None:
         await self.repo.change_many(rows)
+
+    async def change_managed_many(
+        self, rows: list[ProvisionTaskModel]
+    ) -> None:
+        await self.repo.change_managed_many(rows)
+
+    async def for_requests_many(
+        self, request_ids: list[int]
+    ) -> list[ProvisionTaskModel]:
+        result = await self.repo.for_requests_many(request_ids)
+        return result

@@ -14,6 +14,9 @@ from src.modules.network.configurations.domain.models import (
     ProfileModel,
     SubscriptionLinkModel,
 )
+from src.modules.network.configurations.domain.results import (
+    ProfileAppliedUpdate,
+)
 from src.modules.network.configurations.infra.tables import (
     ConfigurationJsonRevisionTable,
     ConfigurationTable,
@@ -175,6 +178,25 @@ class ProfileRepository(MySQLPersistenceRepository[ProfileModel]):
             .values(applied_generation=generation, applied_revision=revision)
         )
 
+    async def mark_applied_many(
+        self, updates: list[ProfileAppliedUpdate]
+    ) -> None:
+        if not updates:
+            return
+        rows = [
+            ProfileModel.patch(
+                id=item.profile_id,
+                applied_generation=item.generation,
+                applied_revision=item.revision,
+            )
+            for item in updates
+        ]
+        columns = {
+            name: ProfileTable.__table__.c[name]
+            for name in ("applied_generation", "applied_revision")
+        }
+        await self.bulk_update(rows, update_columns=columns)
+
     async def invalidate_many(self, ids: list[int]) -> None:
         await self.update_by_ids(
             ids, ProfileModel.patch(applied_revision=None).to_changes()
@@ -217,6 +239,39 @@ class SubscriptionLinkRepository(
             )
         )
         return result.scalar_one_or_none()
+
+    async def by_subscriptions_many(
+        self, subscription_ids: list[int]
+    ) -> list[SubscriptionLinkModel]:
+        selected = sorted(set(subscription_ids))
+        if not selected:
+            return []
+        result = await self.uow.execute(
+            select(SubscriptionLinkTable)
+            .where(col(SubscriptionLinkTable.subscription_id).in_(selected))
+            .order_by(col(SubscriptionLinkTable.subscription_id))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return list(result.scalars().all())
+
+    async def create_many(self, rows: list[SubscriptionLinkModel]) -> None:
+        if not rows:
+            return
+        columns = {
+            name: SubscriptionLinkTable.__table__.c[name]
+            for name in ("subscription_id", "token_hash", "encrypted_token")
+        }
+        await self.bulk_insert(rows, insert_columns=columns)
+
+    async def replace_many(self, rows: list[SubscriptionLinkModel]) -> None:
+        if not rows:
+            return
+        columns = {
+            name: SubscriptionLinkTable.__table__.c[name]
+            for name in ("token_hash", "encrypted_token")
+        }
+        await self.bulk_update(rows, update_columns=columns)
 
     async def by_token(self, token_hash: str) -> SubscriptionLinkModel | None:
         result = await self.uow.execute(

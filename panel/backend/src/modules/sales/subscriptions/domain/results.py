@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 
 from src.modules.sales.loyalty.domain.results import CustomerPriceQuote
 
@@ -21,3 +22,10 @@ class SubscriptionRenewalQuote:
 class SubscriptionUsageUpdate:
     subscription_id: int
     used_bytes: int
+
+
+@dataclass(frozen=True, slots=True)
+class SubscriptionProvisioningActivation:
+    subscription_id: int
+    expires_at: datetime | None
+    activated_at: datetime

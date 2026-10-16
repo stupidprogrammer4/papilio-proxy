@@ -4,6 +4,7 @@ from papilio.errors.exceptions import NotFoundException
 
 from src.modules.sales.subscriptions.domain.models import SubscriptionModel
 from src.modules.sales.subscriptions.domain.results import (
+    SubscriptionProvisioningActivation,
     SubscriptionUsageUpdate,
 )
 from src.modules.sales.subscriptions.infra.mysql import SubscriptionRepository
@@ -12,6 +13,10 @@ from src.modules.sales.subscriptions.infra.mysql import SubscriptionRepository
 class SubscriptionBatchService:
     def __init__(self, repo: SubscriptionRepository) -> None:
         self.repo = repo
+
+    async def by_ids_many(self, ids: list[int]) -> list[SubscriptionModel]:
+        result = await self.repo.by_ids_many(ids)
+        return result
 
     async def locked_many(self, ids: list[int]) -> list[SubscriptionModel]:
         selected = sorted(set(ids))
@@ -34,3 +39,8 @@ class SubscriptionBatchService:
         self, updates: list[SubscriptionUsageUpdate]
     ) -> None:
         await self.repo.update_used_many(updates)
+
+    async def activate_provisioned_many(
+        self, updates: list[SubscriptionProvisioningActivation]
+    ) -> None:
+        await self.repo.activate_provisioned_many(updates)

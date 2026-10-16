@@ -8,6 +8,7 @@ from src.modules.network.provisioning.domain.dtos import (
     ProvisioningSearch,
 )
 from src.modules.network.provisioning.domain.managed import (
+    ManagedApplicationBatch,
     ManagedApplicationEvidence,
     ManagedRevocationEvidence,
 )
@@ -29,6 +30,9 @@ class IProvisioningCommand(Protocol):
     def apply_managed(
         self, task_id: int, data: ManagedApplicationEvidence
     ) -> Awaitable[ProvisionTaskModel]: ...
+    def apply_managed_many(
+        self, data: ManagedApplicationBatch
+    ) -> Awaitable[list[ProvisionTaskModel]]: ...
     def resume(
         self, subscription_id: int, generation: int, reason: str, staff_id: int
     ) -> Awaitable[ProvisionRequestModel]: ...
@@ -78,6 +82,12 @@ class IProvisioningQuery(Protocol):
 
 
 class IProvisionRequestBatchService(Protocol):
+    def locked_many(
+        self, ids: list[int]
+    ) -> Awaitable[list[ProvisionRequestModel]]: ...
+    def change_many(
+        self, rows: list[ProvisionRequestModel]
+    ) -> Awaitable[None]: ...
     def by_generations(
         self, keys: list[ProvisionGenerationKey]
     ) -> Awaitable[list[ProvisionRequestModel]]: ...
@@ -90,3 +100,9 @@ class IProvisionTaskBatchService(Protocol):
     def change_many(
         self, rows: list[ProvisionTaskModel]
     ) -> Awaitable[None]: ...
+    def change_managed_many(
+        self, rows: list[ProvisionTaskModel]
+    ) -> Awaitable[None]: ...
+    def for_requests_many(
+        self, request_ids: list[int]
+    ) -> Awaitable[list[ProvisionTaskModel]]: ...

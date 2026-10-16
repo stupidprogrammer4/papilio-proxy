@@ -13,6 +13,7 @@ from src.modules.sales.subscriptions.domain.models import (
     SubscriptionModel,
 )
 from src.modules.sales.subscriptions.domain.results import (
+    SubscriptionProvisioningActivation,
     SubscriptionUsageUpdate,
 )
 from src.modules.sales.subscriptions.infra.tables import (
@@ -23,6 +24,17 @@ from src.modules.sales.subscriptions.infra.tables import (
 
 class SubscriptionRepository(MySQLPersistenceRepository[SubscriptionModel]):
     table = SubscriptionTable
+
+    async def by_ids_many(self, ids: list[int]) -> list[SubscriptionModel]:
+        selected = sorted(set(ids))
+        if not selected:
+            return []
+        result = await self.uow.execute(
+            select(SubscriptionTable)
+            .where(col(SubscriptionTable.id).in_(selected))
+            .order_by(col(SubscriptionTable.id))
+        )
+        return list(result.scalars().all())
 
     async def locked_many(self, ids: list[int]) -> list[SubscriptionModel]:
         selected = sorted(set(ids))
@@ -52,6 +64,29 @@ class SubscriptionRepository(MySQLPersistenceRepository[SubscriptionModel]):
             rows,
             update_columns={
                 "used_bytes": SubscriptionTable.__table__.c.used_bytes,
+            },
+        )
+
+    async def activate_provisioned_many(
+        self, updates: list[SubscriptionProvisioningActivation]
+    ) -> None:
+        if not updates:
+            return
+        rows = [
+            SubscriptionModel.patch(
+                id=item.subscription_id,
+                status="active",
+                expires_at=item.expires_at,
+                activated_at=item.activated_at,
+            )
+            for item in updates
+        ]
+        await self.bulk_update(
+            rows,
+            update_columns={
+                "status": SubscriptionTable.__table__.c.status,
+                "expires_at": SubscriptionTable.__table__.c.expires_at,
+                "activated_at": SubscriptionTable.__table__.c.activated_at,
             },
         )
 

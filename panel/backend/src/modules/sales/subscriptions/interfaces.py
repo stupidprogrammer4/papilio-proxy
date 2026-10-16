@@ -18,6 +18,7 @@ from src.modules.sales.subscriptions.domain.models import (
     SubscriptionModel,
 )
 from src.modules.sales.subscriptions.domain.results import (
+    SubscriptionProvisioningActivation,
     SubscriptionRenewalQuote,
     SubscriptionUsageUpdate,
 )
@@ -53,11 +54,17 @@ class ISubscriptionCommand(Protocol):
 
 
 class ISubscriptionBatchService(Protocol):
+    def by_ids_many(
+        self, ids: list[int]
+    ) -> Awaitable[list[SubscriptionModel]]: ...
     def locked_many(
         self, ids: list[int]
     ) -> Awaitable[list[SubscriptionModel]]: ...
     def update_used_many(
         self, updates: list[SubscriptionUsageUpdate]
+    ) -> Awaitable[None]: ...
+    def activate_provisioned_many(
+        self, updates: list[SubscriptionProvisioningActivation]
     ) -> Awaitable[None]: ...
 
 

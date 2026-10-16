@@ -213,3 +213,55 @@ class ProvisioningFactsReader:
                 row.ConfigurationTable,
             )
         )
+
+    async def node_tasks_many(
+        self, task_ids: list[int], current: bool = False
+    ) -> list[NodeProvisionFacts]:
+        selected = sorted(set(task_ids))
+        if not selected:
+            return []
+        query = (
+            select(
+                ProvisionTaskTable,
+                ProvisionRequestTable,
+                SubscriptionTable,
+                ProfileTable,
+                ConfigurationTable,
+            )
+            .join(
+                ProvisionRequestTable,
+                col(ProvisionRequestTable.id)
+                == col(ProvisionTaskTable.request_id),
+            )
+            .join(
+                SubscriptionTable,
+                col(SubscriptionTable.id)
+                == col(ProvisionRequestTable.subscription_id),
+            )
+            .join(
+                ProfileTable,
+                col(ProfileTable.id) == col(ProvisionTaskTable.profile_id),
+            )
+            .join(
+                ConfigurationTable,
+                col(ConfigurationTable.id)
+                == col(ProvisionTaskTable.configuration_id),
+            )
+            .where(col(ProvisionTaskTable.id).in_(selected))
+            .order_by(col(ProvisionTaskTable.id))
+        )
+        if current:
+            query = query.with_for_update(read=True).execution_options(
+                populate_existing=True
+            )
+        result = await self.uow.execute(query)
+        return [
+            NodeProvisionFacts(
+                row.ProvisionTaskTable,
+                row.ProvisionRequestTable,
+                row.SubscriptionTable,
+                row.ProfileTable,
+                row.ConfigurationTable,
+            )
+            for row in result
+        ]

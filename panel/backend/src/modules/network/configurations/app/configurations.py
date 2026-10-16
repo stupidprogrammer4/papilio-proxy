@@ -95,6 +95,10 @@ class ConfigurationCommand:
         self.profiles = profiles
         self.credentials = ConfigurationCredentials()
 
+    async def locked_many(self, ids: list[int]) -> list[ConfigurationModel]:
+        rows = await self.repo.locked_many(ids)
+        return rows
+
     @handle_conflicts(message_code="inbound_port_conflict")
     @transactional
     async def create(self, data: ConfigurationCreate) -> ConfigurationModel:

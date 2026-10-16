@@ -164,6 +164,24 @@ class NotificationEvent(BaseDTO):
         return self
 
 
+class CustomerNotificationEvent(BaseDTO):
+    customer_id: int = Field(gt=0)
+    event: NotificationEvent
+
+
+class CustomerNotificationBatch(BaseDTO):
+    items: list[CustomerNotificationEvent] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def unique_event_identities(self) -> "CustomerNotificationBatch":
+        identities = [
+            (item.customer_id, item.event.event_key) for item in self.items
+        ]
+        if len(identities) != len(set(identities)):
+            raise ValueError("Each customer event identity may appear once.")
+        return self
+
+
 class ManualNotificationCreate(BaseDTO):
     request_key: str = Field(min_length=8, max_length=128)
     title: str | None = Field(default=None, min_length=1, max_length=160)

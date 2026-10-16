@@ -19,9 +19,11 @@ from src.modules.network.configurations.domain.openvpn import OpenVpnCapacity
 from src.modules.network.configurations.domain.results import (
     ConfigurationDownload,
     ConfigurationServerExport,
+    ProfileAppliedUpdate,
     PublicProfile,
     PublicSubscription,
     StoredSettings,
+    SubscriptionURL,
 )
 from src.modules.network.configurations.domain.server_json import (
     ServerJsonHistorySearch,
@@ -33,6 +35,9 @@ from src.modules.network.configurations.domain.server_json import (
 
 
 class IConfigurationCommand(Protocol):
+    def locked_many(
+        self, ids: list[int]
+    ) -> Awaitable[list[ConfigurationModel]]: ...
     def server_json(self, id: int) -> Awaitable[ServerJsonState]: ...
     def update_server_json(
         self, id: int, staff_id: int, data: ServerJsonUpdate
@@ -85,6 +90,12 @@ class IProfileCommand(Protocol):
     def subscription_url(
         self, subscription_id: int, rotate: bool
     ) -> Awaitable[str]: ...
+    def subscription_urls_many(
+        self, subscription_ids: list[int], rotate: bool
+    ) -> Awaitable[list[SubscriptionURL]]: ...
+    def mark_applied_many(
+        self, updates: list[ProfileAppliedUpdate]
+    ) -> Awaitable[None]: ...
 
 
 class ISubscriptionFeedQuery(Protocol):

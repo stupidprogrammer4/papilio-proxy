@@ -5,10 +5,13 @@ from papilio.infra.db.repositories.backends.mysql import (
 )
 from papilio.infra.db.tools.read import fetch_page
 from papilio.schemas.results import PagedType
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, tuple_
 from sqlalchemy.dialects.mysql import insert
 from sqlmodel import col
 
+from src.modules.operations.notifications.domain.dtos import (
+    CustomerNotificationEvent,
+)
 from src.modules.operations.notifications.domain.models import (
     NotificationAttemptModel,
     NotificationModel,
@@ -36,6 +39,27 @@ class NotificationRepository(MySQLPersistenceRepository[NotificationModel]):
             .execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
+
+    async def by_requests_many(
+        self, items: list[CustomerNotificationEvent]
+    ) -> list[NotificationModel]:
+        identities = sorted(
+            {(item.customer_id, item.event.event_key) for item in items}
+        )
+        if not identities:
+            return []
+        result = await self.uow.execute(
+            select(self.table)
+            .where(
+                tuple_(
+                    col(self.table.customer_id), col(self.table.event_key)
+                ).in_(identities)
+            )
+            .order_by(col(self.table.customer_id), col(self.table.event_key))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return list(result.scalars().all())
 
     async def ensure(self, initial: NotificationModel) -> NotificationModel:
         await self.uow.execute(

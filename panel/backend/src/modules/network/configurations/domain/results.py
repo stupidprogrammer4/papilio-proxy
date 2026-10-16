@@ -62,6 +62,33 @@ class NodeClientCredentials(ClientCredentialFields):
 
 
 @dataclass(frozen=True, slots=True)
+class ProfileAppliedUpdate:
+    profile_id: int
+    generation: int | None
+    revision: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class SubscriptionURL:
+    subscription_id: int
+    url: str
+
+
+@dataclass(frozen=True, slots=True)
+class SubscriptionTokenInput:
+    subscription_id: int
+    token: str
+
+
+@dataclass(frozen=True, slots=True)
+class SubscriptionLinkMaterial:
+    subscription_id: int
+    token: str
+    token_hash: str
+    encrypted_token: str
+
+
+@dataclass(frozen=True, slots=True)
 class ProfileFacts:
     customer: CustomerModel
     profile: ProfileModel

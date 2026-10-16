@@ -4,6 +4,7 @@ from typing import Protocol
 from src.config.pagination import ServicePage
 from src.modules.operations.notifications.domain.dtos import (
     AdminNotificationSearch,
+    CustomerNotificationBatch,
     ManualNotificationCreate,
     NotificationEvent,
     NotificationRecovery,
@@ -61,6 +62,12 @@ class INotificationCreateCommand(Protocol):
     def manual(
         self, customer_id: int, data: ManualNotificationCreate, staff_id: int
     ) -> Awaitable[NotificationModel]: ...
+
+
+class INotificationCreateBatchCommand(Protocol):
+    def enqueue_many(
+        self, data: CustomerNotificationBatch
+    ) -> Awaitable[None]: ...
 
 
 class INotificationInboxCommand(Protocol):
