@@ -2,6 +2,8 @@ from collections.abc import Awaitable
 from typing import Protocol
 
 from src.modules.network.managed_runtime.domain.admissions import (
+    ManagedAdmissionBatchCreate,
+    ManagedAdmissionBatchOut,
     ManagedAdmissionOut,
     ManagedAdmissionSubmission,
 )
@@ -171,6 +173,9 @@ class IManagedInstallationCommand(Protocol):
 
 
 class IManagedWindowService(Protocol):
+    def find_by_identities_many(
+        self, window_ids: list[str]
+    ) -> Awaitable[list[ManagedWindowModel]]: ...
     def by_identities_many(
         self, window_ids: list[str]
     ) -> Awaitable[list[ManagedWindowModel]]: ...
@@ -242,6 +247,12 @@ class IManagedAdmissionCommand(Protocol):
         window_id: str,
         data: ManagedAdmissionSubmission,
     ) -> Awaitable[ManagedAdmissionOut]: ...
+    def acknowledge_many(
+        self,
+        code: str,
+        key: str,
+        data: ManagedAdmissionBatchCreate,
+    ) -> Awaitable[ManagedAdmissionBatchOut]: ...
 
 
 class IManagedRevocationService(Protocol):

@@ -37,6 +37,18 @@ class ManagedInitialWindowBatchDigest:
 
 
 @dataclass(frozen=True, slots=True)
+class ManagedAdmissionWindowDigest:
+    window_id: str
+    receipt_sha256: Sha256
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedAdmissionBatchDigest:
+    request_sha256: Sha256
+    windows: tuple[ManagedAdmissionWindowDigest, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class ManagedFinalityWindowComputation:
     window_id: str
     request_key: str

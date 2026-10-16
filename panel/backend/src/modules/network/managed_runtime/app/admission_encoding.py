@@ -1,8 +1,9 @@
 """Detached validation of exact original strict admission evidence."""
 
 import json
+from dataclasses import dataclass
 
-from papilio.security.crypto import secure_compare
+from papilio.security.crypto import encrypt, hash_sha256, secure_compare
 
 from src.modules.network.managed_runtime.app.installation_encoding import (
     ManagedInstallationEncoding,
@@ -14,6 +15,7 @@ from src.modules.network.managed_runtime.app.wire_encoding import (
     ManagedWireEncoding,
 )
 from src.modules.network.managed_runtime.domain.admissions import (
+    ManagedAdmissionBatchCreate,
     ManagedAdmissionSubmission,
     ManagedStrictAdmissionWire,
 )
@@ -23,9 +25,99 @@ from src.modules.network.managed_runtime.domain.installations import (
 from src.modules.network.managed_runtime.domain.models import (
     ManagedWindowModel,
 )
+from src.modules.network.managed_runtime.domain.results import (
+    ManagedAdmissionBatchDigest,
+    ManagedAdmissionWindowDigest,
+)
+from src.modules.network.managed_runtime.domain.windows import (
+    ManagedProvisionClaim,
+)
+from src.modules.network.managed_runtime.domain.wire import (
+    ManagedWindowWire,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedAdmissionPreparedItem:
+    window_id: str
+    admission: ManagedStrictAdmissionWire
+    original_window: ManagedWindowWire
+    provision_claim: ManagedProvisionClaim
+    encrypted_receipt: str
+    claim_hash: str
 
 
 class ManagedAdmissionEncoding:
+    @staticmethod
+    def prepare_many(
+        data: ManagedAdmissionBatchCreate,
+        windows: tuple[ManagedWindowModel, ...],
+        expectation: ManagedInstallationExpectation,
+        startup_sha256: str,
+        key: str,
+    ) -> tuple[ManagedAdmissionPreparedItem, ...]:
+        rows_by_id = {window.window_id: window for window in windows}
+        prepared = []
+        for item in data.windows:
+            window = rows_by_id[item.window_id]
+            original = ManagedWindowEncoding.output(window, key)
+            admission = ManagedAdmissionEncoding.verify(
+                item.submission,
+                window,
+                expectation,
+                startup_sha256,
+                key,
+            )
+            claim = original.provision_claim
+            if (
+                claim is None
+                or claim.task_id != window.provision_task_id
+                or not secure_compare(
+                    claim.claim_token, item.submission.claim_token
+                )
+            ):
+                raise ValueError("Managed provision claim does not match")
+            prepared.append(
+                ManagedAdmissionPreparedItem(
+                    window_id=window.window_id,
+                    admission=admission,
+                    original_window=original.window,
+                    provision_claim=claim,
+                    encrypted_receipt=encrypt(
+                        item.submission.original_receipt, key
+                    ),
+                    claim_hash=hash_sha256(claim.claim_token),
+                )
+            )
+        return tuple(prepared)
+
+    @staticmethod
+    def batch_request_digest(
+        installation_id: int, data: ManagedAdmissionBatchCreate
+    ) -> ManagedAdmissionBatchDigest:
+        payload = ManagedInstallationEncoding.compact(
+            {
+                "installation_id": installation_id,
+                "batch_request_key": data.batch_request_key,
+                "windows": [
+                    item.model_dump(mode="json", exclude_none=True)
+                    for item in data.windows
+                ],
+            },
+            canonical=True,
+        )
+        windows = tuple(
+            ManagedAdmissionWindowDigest(
+                window_id=item.window_id,
+                receipt_sha256=item.submission.receipt.receipt_sha256,
+            )
+            for item in data.windows
+        )
+        return ManagedAdmissionBatchDigest(
+            request_sha256=ManagedInstallationEncoding.digest(payload),
+            windows=windows,
+        )
+
     @staticmethod
     def verify(
         data: ManagedAdmissionSubmission,

@@ -145,6 +145,12 @@ class ManagedWindowService:
     def __init__(self, repo: ManagedWindowRepository) -> None:
         self.repo = repo
 
+    async def find_by_identities_many(
+        self, window_ids: list[str]
+    ) -> list[ManagedWindowModel]:
+        result = await self.repo.find_by_identities_many(window_ids)
+        return result
+
     async def find(self, id: int) -> ManagedWindowModel | None:
         result = await self.repo.get_by_id(id)
         return result

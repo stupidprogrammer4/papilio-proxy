@@ -245,6 +245,19 @@ class ManagedWindowRepository(MySQLPersistenceRepository[ManagedWindowModel]):
         )
         return list(result.scalars().all())
 
+    async def find_by_identities_many(
+        self, window_ids: list[str]
+    ) -> list[ManagedWindowModel]:
+        selected = sorted(set(window_ids))
+        if not selected:
+            return []
+        result = await self.uow.execute(
+            select(self.table)
+            .where(col(self.table.window_id).in_(selected))
+            .order_by(col(self.table.id))
+        )
+        return list(result.scalars().all())
+
     async def by_requests_many(
         self, identities: list[ManagedWindowRequestIdentity]
     ) -> list[ManagedWindowModel]:

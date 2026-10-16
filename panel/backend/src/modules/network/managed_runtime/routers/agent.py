@@ -3,6 +3,8 @@ from fastapi import APIRouter, Header, Path, Response
 from papilio.api.responses.envelope import APIResponse
 
 from src.modules.network.managed_runtime.domain.admissions import (
+    ManagedAdmissionBatchCreate,
+    ManagedAdmissionBatchOut,
     ManagedAdmissionOut,
     ManagedAdmissionSubmission,
 )
@@ -136,6 +138,20 @@ async def admission(
     result = await command.acknowledge(
         code, x_papilio_node_key, window_id, data
     )
+    return APIResponse.from_data(result)
+
+
+@router.post("/{code}/managed-windows/admission/batch")
+async def admission_batch(
+    code: str,
+    data: ManagedAdmissionBatchCreate,
+    response: Response,
+    command: FromDishka[IManagedAdmissionCommand],
+    x_papilio_node_key: str = Header(default=""),
+) -> APIResponse[ManagedAdmissionBatchOut, None]:
+    """Accept and apply one bounded strict-admission batch atomically."""
+    response.headers["Cache-Control"] = "no-store"
+    result = await command.acknowledge_many(code, x_papilio_node_key, data)
     return APIResponse.from_data(result)
 
 
