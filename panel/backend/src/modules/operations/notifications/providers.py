@@ -4,6 +4,9 @@ import aiohttp
 from dishka import Provider, Scope, provide
 
 from src.config.settings import PapilioSettings
+from src.modules.operations.notifications.app.batches import (
+    NotificationCreateBatchCommand,
+)
 from src.modules.operations.notifications.app.commands import (
     NotificationCreateCommand,
     NotificationDeliveryCommand,
@@ -31,6 +34,7 @@ from src.modules.operations.notifications.infra.transport import (
 )
 from src.modules.operations.notifications.interfaces import (
     INotificationAttemptQuery,
+    INotificationCreateBatchCommand,
     INotificationCreateCommand,
     INotificationDeliveryCommand,
     INotificationDeliveryHandler,
@@ -51,6 +55,10 @@ class NotificationProvider(Provider):
     subscription_batch = provide(
         SubscriptionNotificationBatchCommand,
         provides=ISubscriptionNotificationBatchCommand,
+    )
+    create_batch = provide(
+        NotificationCreateBatchCommand,
+        provides=INotificationCreateBatchCommand,
     )
     scope = Scope.REQUEST
     repo = provide(NotificationRepository)
