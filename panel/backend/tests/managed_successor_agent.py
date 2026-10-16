@@ -49,6 +49,7 @@ class NativeWindowBatchResult:
     independent_traffic: bool
     quota_closed: bool
     expiry_closed: bool
+    post_expiry_outage_seconds: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -328,6 +329,7 @@ def run_native_managed_window_batch(
     *,
     freeze_after_ms: int,
     validity_ms: int,
+    post_expiry_outage_seconds: float,
     api_fault: ManagedRolloverResponseDrop,
 ) -> NativeWindowBatchResult:
     if len(profiles) != 2 or len(
@@ -342,6 +344,8 @@ def run_native_managed_window_batch(
     }
     if set(profiles_by_budget) != {64, 65536}:
         raise AssertionError("native_window_batch_budget_profiles_invalid")
+    if post_expiry_outage_seconds <= 0:
+        raise AssertionError("native_window_batch_outage_duration_invalid")
     quota_profile_id = profiles_by_budget[64].profile_id
     expiry_profile_id = profiles_by_budget[65536].profile_id
     registry_policy = registry["registry"]
@@ -371,7 +375,7 @@ def run_native_managed_window_batch(
             "freeze_after_ms": freeze_after_ms,
             "operation_timeout_ms": 15000,
             "retry_interval_ms": 100,
-            "max_attempts": 3,
+            "max_attempts": 100,
             "require_admission_receipt": item.provision_task_id > 0,
             "provision_task_id": item.provision_task_id,
         }
@@ -485,6 +489,7 @@ def run_native_managed_window_batch(
         independent_traffic = False
         quota_closed = False
         expiry_closed = False
+        outage_hold_elapsed = 0.0
         for epoch_index in range(2):
             directory = first_directory
             if epoch_index == 0:
@@ -566,6 +571,38 @@ def run_native_managed_window_batch(
                     raise AssertionError(
                         "native_window_batch_outage_issued_authority"
                     )
+                outage_hold_started = time.monotonic()
+                time.sleep(post_expiry_outage_seconds)
+                outage_hold_elapsed = time.monotonic() - outage_hold_started
+                for item in ordered_profiles:
+                    state_path = (
+                        directory
+                        / "managed-window-profiles"
+                        / str(item.profile_id)
+                        / "managed-window-cycle.json"
+                    )
+                    state = json.loads(state_path.read_bytes())
+                    if (
+                        state.get("submission") is None
+                        or state.get("finality") is not None
+                    ):
+                        raise AssertionError(
+                            "native_window_batch_outage_finality_changed"
+                        )
+                if outage_hold_elapsed < post_expiry_outage_seconds:
+                    raise AssertionError(
+                        "native_window_batch_outage_hold_incomplete"
+                    )
+                outage_events_after_expiry = api_fault.events()[
+                    outage_event_offset:
+                ]
+                if any(
+                    status == 200
+                    for _, _, status in outage_events_after_expiry
+                ):
+                    raise AssertionError(
+                        "native_window_batch_outage_reached_api"
+                    )
                 api_fault.set_api_outage(False)
             cycle_states = wait_for_managed_batch_finality(
                 root, process, directory, ordered_profiles, timeout=30
@@ -607,6 +644,7 @@ def run_native_managed_window_batch(
             independent_traffic=independent_traffic,
             quota_closed=quota_closed,
             expiry_closed=expiry_closed,
+            post_expiry_outage_seconds=outage_hold_elapsed,
         )
 
 

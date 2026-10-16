@@ -691,6 +691,7 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                         Path(binaries),
                         freeze_after_ms=freeze_after_ms,
                         validity_ms=validity_ms,
+                        post_expiry_outage_seconds=5,
                         api_fault=api_fault,
                     )
                     api_events = api_fault.events()
@@ -714,6 +715,7 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                     result.independent_traffic
                     and result.quota_closed
                     and result.expiry_closed
+                    and result.post_expiry_outage_seconds >= 5
                 )
                 self.assertEqual(len(result.entries), 4)
                 self.assertEqual(
