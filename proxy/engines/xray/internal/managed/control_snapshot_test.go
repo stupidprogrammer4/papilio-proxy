@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 	"net"
 	"net/http"
@@ -101,6 +102,41 @@ func TestOriginalWindowSnapshotRejectsRequestShapesAndMissingReceipt(t *testing.
 	control.handle(response, httptest.NewRequest(http.MethodGet, "/v1/windows/snapshots/"+id, nil))
 	if response.Code != http.StatusBadRequest {
 		t.Fatal("non-window control exposed snapshot route")
+	}
+}
+
+func TestWindowSnapshotBatchRouteIsNotCapturedAsSingleSnapshotID(t *testing.T) {
+	m, gate, _, store := windowFixture(t)
+	grant := windowGrant(1, "1")
+	if err := m.Admit(grant); err != nil {
+		t.Fatal(err)
+	}
+	barrierID := strings.Repeat("7", 32)
+	if _, _, err := m.Freeze(WindowFreezeRequest{grant.Epoch, barrierID, []WindowTarget{{1, grant.WindowID}}}); err != nil {
+		t.Fatal(err)
+	}
+	control := &Control{gate: gate, store: store, windows: m}
+	requestBody, err := json.Marshal(WindowSnapshotBatchRequest{
+		Epoch: grant.Epoch,
+		Windows: []WindowBatchTarget{{
+			ProfileID: 1,
+			WindowID:  grant.WindowID,
+			BarrierID: barrierID,
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/windows/snapshots/batch", bytes.NewReader(requestBody))
+	request.Header.Set("Content-Type", "application/json")
+	control.handle(response, request)
+	var result struct {
+		State   string                    `json:"state"`
+		Windows []WindowSnapshotBatchItem `json:"windows"`
+	}
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &result) != nil || result.State != "local_component_original_window_snapshots" || len(result.Windows) != 1 {
+		t.Fatal("batch snapshot request was dispatched as a single receipt path", response.Code)
 	}
 }
 

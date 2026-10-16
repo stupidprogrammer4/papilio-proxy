@@ -131,7 +131,7 @@ func (c *Control) handle(writer http.ResponseWriter, request *http.Request) {
 		c.handleOriginalAdmission(writer, request)
 		return
 	}
-	if strings.HasPrefix(request.URL.Path, "/v1/windows/snapshots/") {
+	if request.URL.Path != "/v1/windows/snapshots/batch" && strings.HasPrefix(request.URL.Path, "/v1/windows/snapshots/") {
 		c.handleOriginalWindowSnapshot(writer, request)
 		return
 	}
@@ -158,14 +158,14 @@ func (c *Control) handle(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	if request.Method != http.MethodPost || (request.URL.Path != "/v1/freeze" && (c.windows == nil || request.URL.Path != "/v1/epochs/seal-original" && request.URL.Path != "/v1/epochs/seal-accepted" && request.URL.Path != "/v1/windows/admit" && request.URL.Path != "/v1/windows/admit-original" && request.URL.Path != "/v1/windows/admit-original/batch" && request.URL.Path != "/v1/windows/revoke-original" && request.URL.Path != "/v1/windows/accept-predecessor" && request.URL.Path != "/v1/windows/freeze" && request.URL.Path != "/v1/windows/freeze/batch" && request.URL.Path != "/v1/windows/snapshots/batch")) || request.URL.RawQuery != "" || request.Header.Get("Content-Type") != "application/json" {
-		controlError(writer, http.StatusBadRequest, "managed_control_request_invalid")
+		controlError(writer, http.StatusBadRequest, "managed_control_route_invalid")
 		return
 	}
 	body := http.MaxBytesReader(writer, request.Body, c.gate.policy.MaxControlBytes)
 	defer body.Close()
 	payload, err := io.ReadAll(body)
 	if err != nil || CheckJSON(payload, c.gate.policy.MaxControlBytes, c.gate.policy.MaxJSONDepth) != nil {
-		controlError(writer, http.StatusBadRequest, "managed_control_request_invalid")
+		controlError(writer, http.StatusBadRequest, "managed_control_json_invalid")
 		return
 	}
 	if request.URL.Path != "/v1/freeze" {
