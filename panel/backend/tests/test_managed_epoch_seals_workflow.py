@@ -141,6 +141,53 @@ class ManagedEpochSealWorkflowFixture(
 
 
 class ManagedEpochSealsWorkflowTest(ManagedEpochSealWorkflowFixture):
+    async def test_recovery_seal_accepts_only_complete_api_finality(self):
+        subscription, node, issued, expected, _, _ = await self.setup_window()
+        self.enable_seals()
+        epoch = issued["window"]["epoch"]
+        recovery_path = (
+            f"/v1/nodes/{node['node']['code']}/managed-epochs/"
+            f"{epoch}/recovery-seal"
+        )
+        request = {"request_id": uuid4().hex}
+        before = await self.accounting(subscription["id"])
+
+        denied = await self.client.post(
+            recovery_path,
+            headers=self.node_headers,
+            json=request,
+        )
+
+        self.assertEqual(denied.status_code, 409, denied.text)
+        self.assertEqual(await self.seal_count(), 0)
+        self.assertEqual(await self.accounting(subscription["id"]), before)
+        settled, _ = await self.finalize_window(node, issued, expected)
+        finalized = await self.accounting(subscription["id"])
+
+        accepted = await self.client.post(
+            recovery_path,
+            headers=self.node_headers,
+            json=request,
+        )
+
+        self.assertEqual(accepted.status_code, 200, accepted.text)
+        self.assertEqual(await self.seal_count(), 1)
+        self.assertEqual(await self.accounting(subscription["id"]), finalized)
+        replay = await self.client.post(
+            recovery_path,
+            headers=self.node_headers,
+            json=request,
+        )
+        self.assertEqual(replay.status_code, 200, replay.text)
+        self.assertEqual(replay.json(), accepted.json())
+        conflict = await self.client.post(
+            recovery_path,
+            headers=self.node_headers,
+            json={"request_id": uuid4().hex},
+        )
+        self.assertEqual(conflict.status_code, 409, conflict.text)
+        self.assertEqual(settled["window_id"], issued["window"]["window_id"])
+
     async def test_sealed_epoch_accepts_one_replayable_successor_epoch(self):
         _, node, expected, _, _, _ = await self.setup_closed()
         prior_epoch = "e" * 32

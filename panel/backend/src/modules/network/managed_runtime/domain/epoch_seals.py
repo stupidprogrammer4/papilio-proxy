@@ -143,6 +143,29 @@ class ManagedEpochSealSubmission(BaseDTO):
     receipt: ManagedEpochSealReceipt
 
 
+class ManagedEpochSealRecoveryCreate(BaseDTO):
+    request_id: EpochIdentity
+
+
+class ManagedEpochSealRecoveryWindow(ImmutableContract):
+    window_id: EpochIdentity
+    grant_id: int = Field(gt=0)
+    window_sha256: Sha256
+    barrier_id: EpochIdentity
+    snapshot_sha256: Sha256
+    upload_bytes: int = Field(ge=0, le=2**63 - 1)
+    download_bytes: int = Field(ge=0, le=2**63 - 1)
+
+
+class ManagedEpochSealRecoveryReceipt(ImmutableContract):
+    receipt_version: Literal[1]
+    state: Literal["api_recovered_from_accepted_finality"]
+    epoch: EpochIdentity
+    request_id: EpochIdentity
+    startup_receipt_sha256: Sha256
+    windows: tuple[ManagedEpochSealRecoveryWindow, ...]
+
+
 class ManagedEpochSealOut(ImmutableContract):
     id: int
     epoch: EpochIdentity

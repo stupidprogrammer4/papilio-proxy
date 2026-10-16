@@ -31,6 +31,7 @@ from src.modules.network.managed_runtime.domain.epoch_seal_models import (
 )
 from src.modules.network.managed_runtime.domain.epoch_seals import (
     ManagedEpochSealOut,
+    ManagedEpochSealRecoveryCreate,
     ManagedEpochSealSubmission,
 )
 from src.modules.network.managed_runtime.infra.epoch_seal_mysql import (
@@ -47,6 +48,10 @@ from src.modules.network.managed_runtime.interfaces import (
     IManagedInstallationService,
 )
 from src.modules.network.nodes.interfaces import INodeService
+
+from .epoch_seal_recovery_encoding import (
+    ManagedEpochSealRecoveryEncoding,
+)
 
 
 class ManagedEpochSealCommand:
@@ -266,6 +271,185 @@ class ManagedEpochSealCommand:
                 request_id=data.receipt.request_id,
                 request_sha256=digest,
                 receipt_sha256=data.receipt.receipt_sha256,
+                acceptance_id=secrets.token_hex(16),
+                accepted_at=now.replace(tzinfo=None),
+                encrypted_receipt=encrypted,
+            )
+        )
+        return self.output(stored, process_epoch, installation_id)
+
+    @handle_conflicts
+    @transactional
+    async def recover(
+        self,
+        code: str,
+        key: str,
+        process_epoch: str,
+        data: ManagedEpochSealRecoveryCreate,
+    ) -> ManagedEpochSealOut:
+        node = await self.nodes.authenticate(code, key)
+        hint = await self.reader.epoch_hint(process_epoch)
+        if hint is None:
+            raise conflict("managed_seal_epoch_missing")
+        initial = await self.installations.find(hint.installation_id)
+        if initial is None or initial.node_id != node.id:
+            raise conflict("managed_seal_node_mismatch")
+        installation_id, core_id, node_id = (
+            initial.id,
+            initial.core_id,
+            node.id,
+        )
+        captured_manifest = initial.encrypted_manifest
+        encryption_key = self.settings.configuration_encryption_key
+        expectation = await asyncio.to_thread(
+            ManagedInstallationEncoding.decode,
+            captured_manifest,
+            encryption_key,
+        )
+        runtime = self.settings.core_runtime
+        policy = self.settings.managed_adapter
+        seal_policy = policy.epoch_seal_policy if policy is not None else None
+        if (
+            runtime is None
+            or not runtime.enabled
+            or policy is None
+            or not policy.enabled
+            or seal_policy is None
+            or seal_policy.mode != "strict"
+            or seal_policy.limits is None
+        ):
+            raise conflict("managed_seal_recovery_disabled")
+        scope = await self.scopes.initial(
+            core_id, max(len(expectation.profiles), runtime.max_profiles) + 1
+        )
+        customer_ids = sorted(
+            {
+                customer_id
+                for owner in scope.owners
+                for customer_id in (
+                    owner.customer_id,
+                    owner.payer_customer_id or owner.customer_id,
+                )
+            }
+        )
+        await self.customers.locked_many(customer_ids)
+        await self.nodes.locked(node_id)
+        node = await self.nodes.authenticate(code, key)
+        state = await self.states.locked(core_id)
+        owners = await self.scopes.lock_subscriptions(
+            sorted(owner.subscription_id for owner in scope.owners)
+        )
+        configurations = await self.scopes.lock_configurations(
+            core_id,
+            max(len(expectation.profiles), runtime.max_configurations) + 1,
+        )
+        profiles = await self.scopes.current_profiles(
+            configurations,
+            max(len(expectation.profiles), runtime.max_profiles) + 1,
+        )
+        installation = await self.installations.locked(installation_id)
+        epoch = await self.epochs.locked(hint.id)
+        if (
+            epoch is None
+            or epoch.installation_id != installation_id
+            or epoch.process_epoch != process_epoch
+            or installation.node_id != node.id
+            or installation.core_id != core_id
+            or installation.encrypted_manifest != captured_manifest
+        ):
+            raise conflict("managed_seal_scope_changed")
+        if (
+            owners != scope.owners
+            or profiles != scope.profiles
+            or len(profiles) > runtime.max_profiles
+            or len(configurations) > runtime.max_configurations
+            or tuple(row.profile_id for row in profiles)
+            != tuple(row.binding.profile_id for row in expectation.profiles)
+            or installation.state != "installed_closed"
+            or state is None
+            or expectation.runtime_state_revision != state.revision
+            or expectation.runtime_revision_id
+            != installation.runtime_revision_id
+            or expectation.adapter_revision != policy.adapter_revision
+            or expectation.source_commit != policy.source_commit
+            or expectation.installation.executable_sha256
+            != policy.executable_sha256
+            or expectation.installation.materials_sha256
+            != policy.materials_sha256
+            or expectation.enforcement_sha256 != policy.enforcement_sha256
+            or expectation.window_policy_sha256 != policy.window_policy_sha256
+            or expectation.capacity != policy.capacity
+            or expectation.claim_seconds != policy.claim_seconds
+            or expectation.observation_seconds != policy.observation_seconds
+            or expectation.clock_skew_seconds != policy.clock_skew_seconds
+        ):
+            raise conflict("managed_seal_membership_or_policy_changed")
+        if await self.commands.outstanding(core_id) is not None:
+            raise conflict("managed_seal_runtime_pending")
+        revision = await self.revisions.get(
+            installation.runtime_revision_id, core_id
+        )
+        if (
+            revision.encrypted_memberships is None
+            or revision.membership_sha256 is None
+        ):
+            raise conflict("managed_seal_membership_missing")
+        facts = await self.snapshots.facts(
+            core_id, runtime.max_configurations + 1, runtime.max_profiles + 1
+        )
+        now = datetime.now(UTC)
+        try:
+            await asyncio.to_thread(
+                ManagedAdmissionMembership.verify,
+                facts,
+                revision.encrypted_memberships,
+                revision.membership_sha256,
+                revision.snapshot_sha256,
+                now.replace(tzinfo=None),
+                encryption_key,
+            )
+            native = await self.reader.locked_epoch(
+                epoch.id,
+                process_epoch,
+                node.id,
+                seal_policy.limits.max_windows_per_epoch + 1,
+            )
+            receipt = await asyncio.to_thread(
+                ManagedEpochSealRecoveryEncoding.receipt,
+                data,
+                expectation,
+                epoch.receipt_sha256,
+                process_epoch,
+                native,
+                seal_policy.limits,
+                epoch.installed_closed_at,
+                now,
+                encryption_key,
+            )
+            original = receipt.model_dump_json()
+            digest = await asyncio.to_thread(
+                ManagedEpochSealRecoveryEncoding.request_digest, receipt
+            )
+        except (ValueError, TypeError, KeyError):
+            raise conflict(
+                "managed_seal_recovery_finality_incomplete"
+            ) from None
+        existing = await self.seals.by_epoch(epoch.id)
+        if existing is not None:
+            if (
+                existing.request_id != data.request_id
+                or existing.request_sha256 != digest
+                or existing.receipt_sha256 != digest
+            ):
+                raise conflict("managed_seal_request_reused")
+            return self.output(existing, process_epoch, installation_id)
+        encrypted = await asyncio.to_thread(encrypt, original, encryption_key)
+        stored = await self.seals.create(
+            ManagedEpochSealModel(
+                epoch_id=epoch.id,
+                request_id=data.request_id,
+                request_sha256=digest,
+                receipt_sha256=digest,
                 acceptance_id=secrets.token_hex(16),
                 accepted_at=now.replace(tzinfo=None),
                 encrypted_receipt=encrypted,

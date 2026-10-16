@@ -16,6 +16,7 @@ from src.modules.network.managed_runtime.domain.barriers import (
 )
 from src.modules.network.managed_runtime.domain.epoch_seals import (
     ManagedEpochSealOut,
+    ManagedEpochSealRecoveryCreate,
     ManagedEpochSealSubmission,
 )
 from src.modules.network.managed_runtime.domain.installations import (
@@ -87,6 +88,23 @@ async def seal_epoch(
     """Accept immutable historical finality for one completed process epoch."""
     response.headers["Cache-Control"] = "no-store"
     result = await command.accept(
+        code, x_papilio_node_key, process_epoch, data
+    )
+    return APIResponse.from_data(result)
+
+
+@router.post("/{code}/managed-epochs/{process_epoch}/recovery-seal")
+async def recover_epoch_seal(
+    code: str,
+    process_epoch: str,
+    data: ManagedEpochSealRecoveryCreate,
+    response: Response,
+    command: FromDishka[IManagedEpochSealCommand],
+    x_papilio_node_key: str = Header(default=""),
+) -> APIResponse[ManagedEpochSealOut, None]:
+    """Seal an epoch from complete finality already accepted by the API."""
+    response.headers["Cache-Control"] = "no-store"
+    result = await command.recover(
         code, x_papilio_node_key, process_epoch, data
     )
     return APIResponse.from_data(result)

@@ -21,6 +21,7 @@ from src.modules.network.managed_runtime.domain.epoch_seal_models import (
 )
 from src.modules.network.managed_runtime.domain.epoch_seals import (
     ManagedEpochSealOut,
+    ManagedEpochSealRecoveryCreate,
     ManagedEpochSealSubmission,
 )
 from src.modules.network.managed_runtime.domain.installations import (
@@ -80,6 +81,14 @@ class IManagedEpochSealCommand(Protocol):
         key: str,
         process_epoch: str,
         data: ManagedEpochSealSubmission,
+    ) -> Awaitable[ManagedEpochSealOut]: ...
+
+    def recover(
+        self,
+        code: str,
+        key: str,
+        process_epoch: str,
+        data: ManagedEpochSealRecoveryCreate,
     ) -> Awaitable[ManagedEpochSealOut]: ...
 
 
