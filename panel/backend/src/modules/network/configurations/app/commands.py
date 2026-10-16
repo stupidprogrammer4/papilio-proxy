@@ -3,6 +3,7 @@ import secrets
 from datetime import UTC, datetime
 from ipaddress import ip_interface, ip_network
 
+import anyio
 from papilio.errors.exceptions import ConflictException, NotFoundException
 from papilio.infra.db.tools.conflicts import handle_conflicts
 from papilio.infra.db.tools.decorators import transactional
@@ -35,6 +36,10 @@ from src.modules.network.configurations.domain.results import (
     ClientCredentials,
     ConfigurationDownload,
     ConnectionEndpoint,
+    ProfileAppliedUpdate,
+    SubscriptionLinkMaterial,
+    SubscriptionTokenInput,
+    SubscriptionURL,
 )
 from src.modules.network.configurations.infra.mysql import (
     ConfigurationRepository,
@@ -44,6 +49,9 @@ from src.modules.network.configurations.infra.mysql import (
 from src.modules.network.configurations.interfaces import IConfigurationCommand
 from src.modules.network.nodes.interfaces import INodeService
 from src.modules.sales.subscriptions.infra.mysql import SubscriptionRepository
+from src.modules.sales.subscriptions.interfaces import (
+    ISubscriptionBatchService,
+)
 
 
 class ProfileCommand:
@@ -56,6 +64,7 @@ class ProfileCommand:
         nodes: INodeService,
         settings: PapilioSettings,
         configuration_repo: ConfigurationRepository,
+        subscription_batches: ISubscriptionBatchService,
     ) -> None:
         self.profiles = profiles
         self.subscriptions = subscriptions
@@ -64,6 +73,7 @@ class ProfileCommand:
         self.nodes = nodes
         self.config = settings
         self.configuration_repo = configuration_repo
+        self.subscription_batches = subscription_batches
         self.credentials = ConfigurationCredentials()
         self.exporter = ProtocolExporter()
         self.allocation = ProfileAllocation(self.credentials)
@@ -320,6 +330,132 @@ class ProfileCommand:
             )
         return (
             f"{self.config.public.subscription_origin.rstrip('/')}/s/{token}"
+        )
+
+    @handle_conflicts
+    @transactional
+    async def subscription_urls_many(
+        self, subscription_ids: list[int], rotate: bool
+    ) -> list[SubscriptionURL]:
+        selected = sorted(set(subscription_ids))
+        capacity = self.config.fulfillment.max_targets
+        if (
+            not selected
+            or len(selected) != len(subscription_ids)
+            or len(selected) > capacity
+        ):
+            raise ConflictException(
+                message="درخواست پیوند اشتراک معتبر نیست.",
+                message_code="subscription_link_batch_invalid",
+                unique_dict={},
+            )
+        subscriptions = await self.subscription_batches.locked_many(selected)
+        if {item.id for item in subscriptions} != set(selected):
+            raise _missing("subscription", selected[0])
+        links = await self.links.by_subscriptions_many(selected)
+        links_by_subscription = {item.subscription_id: item for item in links}
+        token_inputs = tuple(
+            SubscriptionTokenInput(
+                subscription_id=subscription_id,
+                token=secrets.token_urlsafe(32),
+            )
+            for subscription_id in selected
+            if rotate or subscription_id not in links_by_subscription
+        )
+        materials = await anyio.to_thread.run_sync(
+            self.encode_subscription_links,
+            token_inputs,
+            self.config.configuration_encryption_key,
+        )
+        materials_by_subscription = {
+            item.subscription_id: item for item in materials
+        }
+        creates = [
+            SubscriptionLinkModel(
+                subscription_id=item.subscription_id,
+                token_hash=item.token_hash,
+                encrypted_token=item.encrypted_token,
+            )
+            for item in materials
+            if item.subscription_id not in links_by_subscription
+        ]
+        replacements = [
+            SubscriptionLinkModel.patch(
+                id=links_by_subscription[item.subscription_id].id,
+                token_hash=item.token_hash,
+                encrypted_token=item.encrypted_token,
+            )
+            for item in materials
+            if item.subscription_id in links_by_subscription
+        ]
+        await self.links.create_many(creates)
+        await self.links.replace_many(replacements)
+        reusable = tuple(
+            SubscriptionLinkMaterial(
+                subscription_id=link.subscription_id,
+                token="",
+                token_hash=link.token_hash,
+                encrypted_token=link.encrypted_token,
+            )
+            for link in links
+            if not rotate
+            and link.subscription_id not in materials_by_subscription
+        )
+        tokens = await anyio.to_thread.run_sync(
+            self.decode_subscription_links,
+            reusable,
+            self.config.configuration_encryption_key,
+        )
+        tokens_by_subscription = {
+            item.subscription_id: item.token for item in tokens
+        }
+        tokens_by_subscription.update(
+            {
+                subscription_id: material.token
+                for subscription_id, material in (
+                    materials_by_subscription.items()
+                )
+            }
+        )
+        origin = self.config.public.subscription_origin.rstrip("/")
+        result = [
+            SubscriptionURL(
+                subscription_id=subscription_id,
+                url=f"{origin}/s/{tokens_by_subscription[subscription_id]}",
+            )
+            for subscription_id in selected
+        ]
+        return result
+
+    async def mark_applied_many(
+        self, updates: list[ProfileAppliedUpdate]
+    ) -> None:
+        await self.profiles.mark_applied_many(updates)
+
+    @staticmethod
+    def encode_subscription_links(
+        tokens: tuple[SubscriptionTokenInput, ...], key: str
+    ) -> tuple[SubscriptionLinkMaterial, ...]:
+        return tuple(
+            SubscriptionLinkMaterial(
+                subscription_id=item.subscription_id,
+                token=item.token,
+                token_hash=hash_sha256(item.token),
+                encrypted_token=encrypt(item.token, key),
+            )
+            for item in tokens
+        )
+
+    @staticmethod
+    def decode_subscription_links(
+        links: tuple[SubscriptionLinkMaterial, ...], key: str
+    ) -> tuple[SubscriptionTokenInput, ...]:
+        return tuple(
+            SubscriptionTokenInput(
+                subscription_id=item.subscription_id,
+                token=decrypt(item.encrypted_token, key),
+            )
+            for item in links
         )
 
 
