@@ -3,8 +3,10 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -191,6 +193,55 @@ func TestManagedWindowBatchClientRejectsDuplicateOrMissingProfileAndFinality(t *
 		if _, err = client.FinalizeManagedWindows(context.Background(), "batch-request-001", batch, finalizations); err == nil {
 			t.Fatalf("%s response accepted", current)
 		}
+	}
+}
+
+func TestManagedWindowBatchSnapshotUsesOperationTimeout(t *testing.T) {
+	_, issued, _, submissions, _ := managedWindowBatchFixture(t)
+	root := t.TempDir()
+	listener, err := net.Listen("unix", filepath.Join(root, "control.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/windows/snapshots/batch" {
+			t.Error("managed batch snapshot request changed")
+		}
+		time.Sleep(20 * time.Millisecond)
+		windows := make([]map[string]any, 0, len(issued))
+		for index, item := range issued {
+			windows = append(windows, map[string]any{
+				"profile_id":       item.Window.Binding.ProfileID,
+				"window_id":        item.Window.WindowID,
+				"receipt":          submissions[index].Receipt,
+				"original_receipt": submissions[index].OriginalReceipt,
+			})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"state":   "local_component_original_window_snapshots",
+			"windows": windows,
+		})
+	})}
+	finished := make(chan struct{})
+	go func() { _ = server.Serve(listener); close(finished) }()
+	defer func() { _ = server.Close(); <-finished }()
+	policy := ManagedInstallationPolicy{ControlRoot: root, MaxReceiptBytes: 65536, PollIntervalMS: 1}
+	targets := make([]managedWindowFreezeTarget, 0, len(issued))
+	batchIssued := make([]ManagedBatchIssuedWindow, 0, len(issued))
+	for index, item := range issued {
+		profileID := item.Window.Binding.ProfileID
+		targets = append(targets, managedWindowFreezeTarget{
+			ProfileID: profileID,
+			WindowID:  item.Window.WindowID,
+			BarrierID: submissions[index].Receipt.BarrierID,
+		})
+		batchIssued = append(batchIssued, ManagedBatchIssuedWindow{ProfileID: profileID, Window: item})
+	}
+	actual, err := FetchManagedWindowBatchSnapshots(
+		context.Background(), policy, targets, batchIssued, 100, 65536,
+	)
+	if err != nil || len(actual) != len(issued) {
+		t.Fatal("batch snapshot ignored its operation timeout", err)
 	}
 }
 

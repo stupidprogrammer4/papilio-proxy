@@ -195,8 +195,8 @@ func FetchManagedWindowSnapshot(ctx context.Context, p ManagedInstallationPolicy
 	})
 }
 
-func FetchManagedWindowBatchSnapshots(ctx context.Context, p ManagedInstallationPolicy, targets []managedWindowFreezeTarget, issued []ManagedBatchIssuedWindow, maximum int64) (map[int64]ManagedWindowFinalSubmission, error) {
-	if len(targets) == 0 || len(targets) != len(issued) || maximum <= 0 || maximum >= math.MaxInt64 || !filepath.IsAbs(p.ControlRoot) || p.PollIntervalMS <= 0 || int64(p.PollIntervalMS) > math.MaxInt64/int64(time.Millisecond) {
+func FetchManagedWindowBatchSnapshots(ctx context.Context, p ManagedInstallationPolicy, targets []managedWindowFreezeTarget, issued []ManagedBatchIssuedWindow, timeoutMS int, maximum int64) (map[int64]ManagedWindowFinalSubmission, error) {
+	if len(targets) == 0 || len(targets) != len(issued) || timeoutMS <= 0 || int64(timeoutMS) > math.MaxInt64/int64(time.Millisecond) || maximum <= 0 || maximum >= math.MaxInt64 || !filepath.IsAbs(p.ControlRoot) {
 		return nil, errors.New("managed_snapshot_batch_request_invalid")
 	}
 	requestPayload, marshalErr := json.Marshal(struct {
@@ -206,23 +206,49 @@ func FetchManagedWindowBatchSnapshots(ctx context.Context, p ManagedInstallation
 	if marshalErr != nil {
 		return nil, errors.New("managed_snapshot_batch_request_invalid")
 	}
+	timeout := time.Duration(timeoutMS) * time.Millisecond
 	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "unix", filepath.Join(p.ControlRoot, "control.sock"))
-	}, MaxResponseHeaderBytes: p.MaxReceiptBytes, ResponseHeaderTimeout: time.Duration(p.PollIntervalMS) * time.Millisecond}
+	}, MaxResponseHeaderBytes: p.MaxReceiptBytes, ResponseHeaderTimeout: timeout}
 	defer transport.CloseIdleConnections()
-	client := &http.Client{Transport: transport, Timeout: time.Duration(p.PollIntervalMS) * time.Millisecond, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	client := &http.Client{Transport: transport, Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	request, requestErr := http.NewRequestWithContext(ctx, http.MethodPost, "http://private/v1/windows/snapshots/batch", bytes.NewReader(requestPayload))
 	if requestErr != nil {
-		return nil, requestErr
+		return nil, errors.New("managed_snapshot_batch_request_invalid")
 	}
 	request.Header.Set("Accept-Encoding", "identity")
 	request.Header.Set("Content-Type", "application/json")
 	response, requestErr := client.Do(request)
 	if requestErr != nil {
-		return nil, requestErr
+		return nil, errors.New("managed_snapshot_batch_connection_unavailable")
 	}
 	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK || response.ContentLength > maximum || response.Header.Get("Content-Encoding") != "" && response.Header.Get("Content-Encoding") != "identity" {
+	if response.StatusCode != http.StatusOK {
+		payload, readErr := io.ReadAll(io.LimitReader(response.Body, 4097))
+		if readErr == nil && len(payload) <= 4096 {
+			var controlError struct {
+				Error string `json:"error"`
+			}
+			if json.Unmarshal(payload, &controlError) == nil {
+				switch controlError.Error {
+				case "managed_control_request_invalid":
+					return nil, errors.New("managed_snapshot_batch_control_request_invalid")
+				case "managed_control_route_invalid":
+					return nil, errors.New("managed_snapshot_batch_control_route_invalid")
+				case "managed_control_json_invalid":
+					return nil, errors.New("managed_snapshot_batch_control_json_invalid")
+				case "managed_window_snapshot_batch_invalid":
+					return nil, errors.New("managed_snapshot_batch_request_invalid")
+				case "managed_window_snapshot_batch_unavailable":
+					return nil, errors.New("managed_snapshot_batch_unavailable")
+				case "managed_window_response_capacity":
+					return nil, errors.New("managed_snapshot_batch_response_capacity")
+				}
+			}
+		}
+		return nil, errors.New("managed_snapshot_batch_http_status_" + strconv.Itoa(response.StatusCode))
+	}
+	if response.ContentLength > maximum || response.Header.Get("Content-Encoding") != "" && response.Header.Get("Content-Encoding") != "identity" {
 		return nil, errors.New("managed_snapshot_batch_response_invalid")
 	}
 	payload, readErr := io.ReadAll(io.LimitReader(response.Body, maximum+1))

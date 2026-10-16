@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"time"
 )
 
@@ -112,7 +113,28 @@ func managedPrivateWindowPost(ctx context.Context, p ManagedInstallationPolicy, 
 		return nil, errors.New("managed_window_control_unavailable")
 	}
 	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK || response.ContentLength > p.MaxReceiptBytes || (response.Header.Get("Content-Encoding") != "" && response.Header.Get("Content-Encoding") != "identity") {
+	if response.StatusCode != http.StatusOK {
+		payload, readErr := io.ReadAll(io.LimitReader(response.Body, 4097))
+		if readErr == nil && len(payload) <= 4096 {
+			var controlError struct {
+				Error string `json:"error"`
+			}
+			if json.Unmarshal(payload, &controlError) == nil {
+				switch controlError.Error {
+				case "managed_control_request_invalid":
+					return nil, errors.New("managed_window_control_request_invalid")
+				case "managed_window_freeze_batch_invalid":
+					return nil, errors.New("managed_window_freeze_batch_invalid")
+				case "managed_window_freeze_batch_unresolved":
+					return nil, errors.New("managed_window_freeze_batch_unresolved")
+				case "managed_window_response_capacity":
+					return nil, errors.New("managed_window_control_response_capacity")
+				}
+			}
+		}
+		return nil, errors.New("managed_window_control_http_status_" + strconv.Itoa(response.StatusCode))
+	}
+	if response.ContentLength > p.MaxReceiptBytes || (response.Header.Get("Content-Encoding") != "" && response.Header.Get("Content-Encoding") != "identity") {
 		return nil, errors.New("managed_window_control_unavailable")
 	}
 	result, err := io.ReadAll(io.LimitReader(response.Body, p.MaxReceiptBytes+1))

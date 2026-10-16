@@ -510,7 +510,7 @@ func freezeManagedWindowBatch(ctx context.Context, client *Client, policy Manage
 		return nil
 	})
 	if err != nil {
-		return errors.New("managed_window_batch_freeze_unresolved")
+		return errors.New("managed_window_batch_freeze_unresolved:" + err.Error())
 	}
 	stateByProfile := make(map[int64]*managedWindowCycleJournal, len(states))
 	issuedByProfile := make(map[int64]ManagedBatchIssuedWindow, len(issued))
@@ -537,9 +537,15 @@ func freezeManagedWindowBatch(ctx context.Context, client *Client, policy Manage
 	if len(seenProfiles) != len(freezeTargets) {
 		return errors.New("managed_window_batch_freeze_mapping_incomplete")
 	}
-	submissions, fetchErr := FetchManagedWindowBatchSnapshots(ctx, policy, actualTargets, issued, client.config.MaxResponseBytes)
+	snapshotTimeoutMS := 0
+	for _, state := range states {
+		if state.Policy.OperationTimeoutMS > snapshotTimeoutMS {
+			snapshotTimeoutMS = state.Policy.OperationTimeoutMS
+		}
+	}
+	submissions, fetchErr := FetchManagedWindowBatchSnapshots(ctx, policy, actualTargets, issued, snapshotTimeoutMS, client.config.MaxResponseBytes)
 	if fetchErr != nil {
-		return errors.New("managed_window_batch_snapshot_unresolved")
+		return errors.New("managed_window_batch_snapshot_unresolved:" + fetchErr.Error())
 	}
 	for index := range states {
 		state := &states[index]
