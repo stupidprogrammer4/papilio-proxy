@@ -1,4 +1,4 @@
-"""Drop the first committed epoch-rollover response in a local API relay."""
+"""Inject API outages and drop a committed epoch-rollover response."""
 
 import hashlib
 import threading
@@ -20,6 +20,7 @@ class ManagedRolloverResponseDrop:
         self._first_rollover_committed = threading.Event()
         self._release_first_rollover = threading.Event()
         self._api_outage = threading.Event()
+        self._outage_finality = threading.Event()
         self._rollover_responses: list[tuple[str, int, str]] = []
         self._events: list[tuple[str, str, int]] = []
         self._client = httpx.Client(
@@ -46,13 +47,17 @@ class ManagedRolloverResponseDrop:
                     self.send_error(413)
                     return
                 body = self.rfile.read(length)
-                endpoint = self.path.split("?", 1)[0].rsplit("/", 1)[-1]
+                request_path = self.path.split("?", 1)[0]
+                endpoint = "finalize_batch"
+                if not request_path.endswith("/finalize/batch"):
+                    endpoint = request_path.rsplit("/", 1)[-1]
                 if endpoint not in {
                     "claim",
                     "acknowledge",
                     "windows",
                     "admission",
                     "finalize",
+                    "finalize_batch",
                     "successor",
                     "seal",
                     "rollover",
@@ -61,6 +66,11 @@ class ManagedRolloverResponseDrop:
                 if owner._api_outage.is_set():
                     with owner._lock:
                         owner._events.append((self.command, endpoint, 503))
+                    if self.command == "POST" and endpoint in {
+                        "finalize",
+                        "finalize_batch",
+                    }:
+                        owner._outage_finality.set()
                     self.send_response(503)
                     self.send_header("Content-Length", "0")
                     self.send_header("Connection", "close")
@@ -169,6 +179,9 @@ class ManagedRolloverResponseDrop:
             self._api_outage.set()
         else:
             self._api_outage.clear()
+
+    def wait_for_outage_finality(self, timeout: float) -> bool:
+        return self._outage_finality.wait(timeout)
 
     def events(self) -> tuple[tuple[str, str, int], ...]:
         with self._lock:

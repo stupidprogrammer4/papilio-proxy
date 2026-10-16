@@ -56,6 +56,22 @@ class ManagedEpochFaultRelayTest(unittest.TestCase):
             upstream.server_close()
             thread.join(timeout=5)
 
+    def test_api_outage_finality_attempt_has_a_bounded_wait_signal(self):
+        with ManagedRolloverResponseDrop("http://127.0.0.1:1") as relay:
+            relay.set_api_outage(True)
+            self.assertFalse(relay.wait_for_outage_finality(0))
+            with httpx.Client(timeout=2, trust_env=False) as client:
+                response = client.post(
+                    relay.url
+                    + "/v1/nodes/fixture/managed-windows/finalize/batch",
+                    content=b"{}",
+                )
+            self.assertEqual(response.status_code, 503)
+            self.assertTrue(relay.wait_for_outage_finality(1))
+            self.assertEqual(
+                relay.events(), (("POST", "finalize_batch", 503),)
+            )
+
     def test_committed_rollover_response_can_be_held_until_parent_is_killed(
         self,
     ):
