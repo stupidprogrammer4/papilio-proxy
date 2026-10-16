@@ -187,7 +187,12 @@ func managedEpochSealApplied(
 		journal.maxBytes,
 	)
 	if os.IsNotExist(err) {
-		return false, nil
+		return managedEpochRecoverySealApplied(
+			journal,
+			client,
+			installationID,
+			epoch,
+		)
 	}
 	var state managedEpochSealJournal
 	if err != nil || json.Unmarshal(raw, &state) != nil ||
@@ -207,6 +212,38 @@ func managedEpochSealApplied(
 			installationID,
 		) != nil {
 		return false, errors.New("managed_epoch_seal_journal_unresolved")
+	}
+	return true, nil
+}
+
+func managedEpochRecoverySealApplied(
+	journal *Journal,
+	client *Client,
+	installationID int64,
+	epoch string,
+) (bool, error) {
+	raw, err := managedReadPrivate(
+		filepath.Join(journal.root, managedEpochRecoverySealJournalName),
+		journal.maxBytes,
+	)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	var recovery managedEpochRecoverySealJournal
+	if err != nil || json.Unmarshal(raw, &recovery) != nil ||
+		recovery.Version != 1 || recovery.APIURL != client.config.APIURL ||
+		recovery.NodeCode != client.config.NodeCode ||
+		recovery.InstallationID != installationID || recovery.Epoch != epoch ||
+		!epochPattern.MatchString(recovery.RequestID) ||
+		recovery.Acceptance == nil || recovery.Acceptance.ID <= 0 ||
+		recovery.Acceptance.Epoch != epoch ||
+		recovery.Acceptance.InstallationID != installationID ||
+		recovery.Acceptance.RequestID != recovery.RequestID ||
+		!digestPattern.MatchString(recovery.Acceptance.ReceiptSHA256) ||
+		!epochPattern.MatchString(recovery.Acceptance.AcceptanceID) ||
+		recovery.Acceptance.AcceptedAt.IsZero() ||
+		recovery.Acceptance.AdmissionAvailable {
+		return false, errors.New("managed_epoch_recovery_seal_journal_unresolved")
 	}
 	return true, nil
 }
@@ -467,6 +504,53 @@ func runManagedEpochSupervisor(
 		if sealErr != nil {
 			return sealErr
 		}
+		recoveryApplied, recoveryErr := managedEpochRecoverySealApplied(
+			currentJournal,
+			client,
+			state.InstallationID,
+			current.ProcessEpoch,
+		)
+		if recoveryErr != nil {
+			return recoveryErr
+		}
+		epochPolicy, policyErr := managedEpochPolicy(
+			policy,
+			state.InitialProcessEpoch,
+			current.ProcessEpoch,
+		)
+		if policyErr != nil || validateManagedSuccessorPolicyBeforeLaunch(policy, policy.SuccessorCycles) != nil {
+			return errors.New("managed_epoch_policy_binding_invalid")
+		}
+		if !sealApplied && child == nil {
+			recoveryReady, recoveryReadyErr := managedWindowBatchRecoveryReady(
+				currentJournal,
+				client,
+				epochPolicy,
+				state,
+			)
+			if recoveryReadyErr != nil {
+				return recoveryReadyErr
+			}
+			if recoveryReady {
+				if err = runManagedWindowBatchCycle(
+					ctx, client, epochPolicy, currentJournal, state,
+				); err != nil {
+					return err
+				}
+				recoveryApplied, err = recoverManagedEpochSealCycle(
+					ctx,
+					client,
+					policy,
+					sealPolicy,
+					currentJournal,
+					state,
+				)
+				if err != nil {
+					return err
+				}
+				sealApplied = recoveryApplied
+			}
+		}
 		if !sealApplied && child == nil {
 			child, err = startManagedChild(
 				binary,
@@ -484,18 +568,12 @@ func runManagedEpochSupervisor(
 				return errors.New("managed_epoch_resume_receipt_unresolved")
 			}
 		}
-		epochPolicy, policyErr := managedEpochPolicy(
-			policy,
-			state.InitialProcessEpoch,
-			current.ProcessEpoch,
-		)
-		if policyErr != nil || validateManagedSuccessorPolicyBeforeLaunch(policy, policy.SuccessorCycles) != nil {
-			return errors.New("managed_epoch_policy_binding_invalid")
-		}
-		if err = runManagedEpochPhases(
-			ctx, client, epochPolicy, currentJournal, state,
-		); err != nil {
-			return err
+		if !recoveryApplied {
+			if err = runManagedEpochPhases(
+				ctx, client, epochPolicy, currentJournal, state,
+			); err != nil {
+				return err
+			}
 		}
 		if once || len(state.EpochHistory)+1 >= sealPolicy.maxEpochs() {
 			return nil

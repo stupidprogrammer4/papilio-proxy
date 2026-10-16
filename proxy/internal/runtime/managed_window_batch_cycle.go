@@ -186,6 +186,76 @@ func loadManagedWindowProfileCycle(journal *Journal, client *Client, policy Mana
 	return state, nil
 }
 
+func managedWindowBatchRecoveryReady(
+	journal *Journal,
+	client *Client,
+	policy ManagedInstallationPolicy,
+	installation managedInstallationJournal,
+) (bool, error) {
+	if policy.WindowBatch == nil || !policy.WindowBatch.Enabled || installation.Acceptance == nil {
+		return false, nil
+	}
+	key := managedWindowBatchRequestKey(
+		policy.WindowBatch.BatchRequestKey,
+		installation.Acceptance.ProcessEpoch,
+	)
+	name := managedWindowBatchJournalName(installation.Acceptance.ProcessEpoch)
+	raw, err := managedReadPrivate(filepath.Join(journal.root, name), journal.maxBytes)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	var batch managedWindowBatchJournal
+	requests := managedWindowBatchRequests(*policy.WindowBatch, installation.Acceptance.ProcessEpoch)
+	if err != nil || name == "" || json.Unmarshal(raw, &batch) != nil || batch.Version != 1 || batch.APIURL != client.config.APIURL || batch.NodeCode != client.config.NodeCode || batch.InstallationID != policy.InstallationID || batch.BatchRequestKey != key || !reflect.DeepEqual(batch.Requests, requests) || len(batch.Windows) != len(requests) {
+		return false, errors.New("managed_window_batch_recovery_binding_invalid")
+	}
+	windowsByProfile := make(map[int64]ManagedIssuedWindow, len(batch.Windows))
+	for _, item := range batch.Windows {
+		request, exists := managedWindowRequestByProfile(requests, item.ProfileID)
+		if !exists || item.ProfileID != item.Window.Window.Binding.ProfileID || validateManagedBatchIssuedWindow(item.Window, request, installation.Claim.Expectation, policy.MaxReceiptBytes, false) != nil {
+			return false, errors.New("managed_window_batch_recovery_window_invalid")
+		}
+		if _, duplicate := windowsByProfile[item.ProfileID]; duplicate {
+			return false, errors.New("managed_window_batch_recovery_duplicate_profile")
+		}
+		windowsByProfile[item.ProfileID] = item.Window
+	}
+	for _, request := range requests {
+		issued, exists := windowsByProfile[request.ProfileID]
+		if !exists {
+			return false, errors.New("managed_window_batch_recovery_profile_missing")
+		}
+		name := filepath.Join(
+			journal.root,
+			"managed-window-profiles",
+			strconv.FormatInt(request.ProfileID, 10),
+			"managed-window-cycle.json",
+		)
+		raw, readErr := managedReadPrivate(name, journal.maxBytes)
+		if os.IsNotExist(readErr) {
+			return false, nil
+		}
+		var state managedWindowCycleJournal
+		profileKey := managedWindowBatchFinalRequestKey(key, issued.Window)
+		if readErr != nil || json.Unmarshal(raw, &state) != nil || state.APIURL != client.config.APIURL || state.NodeCode != client.config.NodeCode || state.InstallationID != policy.InstallationID || state.BatchRequestKey != profileKey || state.Request != request || state.Issued == nil || !reflect.DeepEqual(*state.Issued, issued) || state.Submission == nil || validateManagedBatchProfileState(state, installation, policy.MaxReceiptBytes) != nil {
+			return false, errors.New("managed_window_batch_recovery_profile_unresolved")
+		}
+	}
+	return true, nil
+}
+
+func managedWindowRequestByProfile(
+	requests []ManagedWindowRequest,
+	profileID int64,
+) (ManagedWindowRequest, bool) {
+	for _, request := range requests {
+		if request.ProfileID == profileID {
+			return request, true
+		}
+	}
+	return ManagedWindowRequest{}, false
+}
+
 func validateManagedBatchProfileState(state managedWindowCycleJournal, installation managedInstallationJournal, maximum int64) error {
 	if state.Issued == nil || state.Policy.validate() != nil || !epochPattern.MatchString(state.ManualBarrierID) || state.Submission != nil && !state.FreezeIntent || state.LocalAdmitted && (!state.AdmissionIntent || state.Policy.RequireAdmissionReceipt) {
 		return errors.New("managed_window_batch_profile_state_invalid")

@@ -2,6 +2,8 @@ package runtime
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"math"
@@ -9,6 +11,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -81,6 +85,105 @@ type managedEpochSealJournal struct {
 }
 
 const managedEpochSealJournalName = "managed-epoch-seal.json"
+const managedEpochRecoverySealJournalName = "managed-epoch-recovery-seal.json"
+
+type managedEpochRecoverySealJournal struct {
+	Version        int                         `json:"version"`
+	APIURL         string                      `json:"api_url"`
+	NodeCode       string                      `json:"node_code"`
+	InstallationID int64                       `json:"installation_id"`
+	Epoch          string                      `json:"epoch"`
+	RequestID      string                      `json:"request_id"`
+	Acceptance     *ManagedEpochSealAcceptance `json:"acceptance,omitempty"`
+}
+
+func managedEpochRecoverySealRequestID(
+	seed string,
+	installationID int64,
+	acceptance ManagedClosedAcceptance,
+) string {
+	material := strings.Join(
+		[]string{
+			"papilio-managed-epoch-recovery-seal-v1",
+			seed,
+			strconv.FormatInt(installationID, 10),
+			strconv.FormatInt(acceptance.EpochID, 10),
+			acceptance.ProcessEpoch,
+		},
+		":",
+	)
+	digest := sha256.Sum256([]byte(material))
+	return hex.EncodeToString(digest[:16])
+}
+
+func saveManagedEpochRecoverySeal(
+	journal *Journal,
+	state managedEpochRecoverySealJournal,
+) error {
+	raw, err := json.Marshal(state)
+	if err != nil || int64(len(raw)) > journal.maxBytes {
+		return errors.New("managed_epoch_recovery_seal_journal_capacity")
+	}
+	return atomicPrivate(journal.root, managedEpochRecoverySealJournalName, raw)
+}
+
+func recoverManagedEpochSealCycle(
+	ctx context.Context,
+	client *Client,
+	policy ManagedInstallationPolicy,
+	sealPolicy ManagedEpochSealPolicy,
+	journal *Journal,
+	installation managedInstallationJournal,
+) (bool, error) {
+	if installation.Acceptance == nil {
+		return false, errors.New("managed_epoch_recovery_seal_context_invalid")
+	}
+	requestID := managedEpochRecoverySealRequestID(
+		sealPolicy.RequestID,
+		policy.InstallationID,
+		*installation.Acceptance,
+	)
+	path := filepath.Join(journal.root, managedEpochRecoverySealJournalName)
+	raw, err := managedReadPrivate(path, journal.maxBytes)
+	state := managedEpochRecoverySealJournal{
+		Version: 1, APIURL: client.config.APIURL, NodeCode: client.config.NodeCode,
+		InstallationID: policy.InstallationID,
+		Epoch:          installation.Acceptance.ProcessEpoch, RequestID: requestID,
+	}
+	if err == nil {
+		if json.Unmarshal(raw, &state) != nil || state.Version != 1 || state.APIURL != client.config.APIURL || state.NodeCode != client.config.NodeCode || state.InstallationID != policy.InstallationID || state.Epoch != installation.Acceptance.ProcessEpoch || state.RequestID != requestID || state.Acceptance != nil && (state.Acceptance.Epoch != state.Epoch || state.Acceptance.InstallationID != state.InstallationID || state.Acceptance.RequestID != state.RequestID || state.Acceptance.ID <= 0 || !digestPattern.MatchString(state.Acceptance.ReceiptSHA256) || !epochPattern.MatchString(state.Acceptance.AcceptanceID) || state.Acceptance.AcceptedAt.IsZero() || state.Acceptance.AdmissionAvailable) {
+			return false, errors.New("managed_epoch_recovery_seal_journal_invalid")
+		}
+	} else if !os.IsNotExist(err) {
+		return false, errors.New("managed_epoch_recovery_seal_journal_unavailable")
+	} else if err = saveManagedEpochRecoverySeal(journal, state); err != nil {
+		return false, err
+	}
+	var accepted ManagedEpochSealAcceptance
+	err = managedCycleRetry(ctx, sealPolicy.retryPolicy(), func(operation context.Context) error {
+		result, callErr := client.RecoverManagedEpochSeal(
+			operation,
+			policy.InstallationID,
+			state.Epoch,
+			ManagedEpochSealRecoveryCreate{RequestID: state.RequestID},
+		)
+		if callErr == nil {
+			accepted = result
+		}
+		return callErr
+	})
+	if err != nil {
+		return false, errors.New("managed_epoch_recovery_seal_api_unresolved")
+	}
+	if state.Acceptance != nil && !sameManagedEpochSealAcceptance(*state.Acceptance, accepted) {
+		return false, errors.New("managed_epoch_recovery_seal_acceptance_changed")
+	}
+	state.Acceptance = &accepted
+	if err = saveManagedEpochRecoverySeal(journal, state); err != nil {
+		return false, errors.New("managed_epoch_recovery_seal_journal_unresolved")
+	}
+	return true, nil
+}
 
 func saveManagedEpochSeal(journal *Journal, state managedEpochSealJournal) error {
 	raw, err := json.Marshal(state)

@@ -707,6 +707,7 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                         freeze_after_ms=freeze_after_ms,
                         validity_ms=validity_ms,
                         post_expiry_outage_seconds=5,
+                        crash_after_finality_submission=True,
                         api_fault=api_fault,
                     )
                     api_events = api_fault.events()
@@ -731,6 +732,7 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                     and result.quota_closed
                     and result.expiry_closed
                     and result.post_expiry_outage_seconds >= 5
+                    and result.finality_replayed_after_crash
                 )
                 self.assertEqual(len(result.entries), 4)
                 self.assertEqual(

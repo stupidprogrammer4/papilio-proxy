@@ -51,6 +51,7 @@ class NativeWindowBatchResult:
     quota_closed: bool
     expiry_closed: bool
     post_expiry_outage_seconds: float
+    finality_replayed_after_crash: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -332,6 +333,7 @@ def run_native_managed_window_batch(
     freeze_after_ms: int,
     validity_ms: int,
     post_expiry_outage_seconds: float,
+    crash_after_finality_submission: bool,
     api_fault: ManagedRolloverResponseDrop,
 ) -> NativeWindowBatchResult:
     if len(profiles) != 2 or len(
@@ -492,6 +494,8 @@ def run_native_managed_window_batch(
         quota_closed = False
         expiry_closed = False
         outage_hold_elapsed = 0.0
+        finality_replayed_after_crash = False
+        pending_submissions = {}
         for epoch_index in range(2):
             directory = first_directory
             if epoch_index == 0:
@@ -544,6 +548,8 @@ def run_native_managed_window_batch(
             quota_closed = True
             roundtrip(second_connection, b"independent-user-still-active")
             independent_traffic = True
+            if epoch_index == 1 and crash_after_finality_submission:
+                api_fault.set_api_outage(True)
             wait_managed_window_expiry(
                 second_connection,
                 seconds=validity_ms // 1000 + 3,
@@ -606,11 +612,77 @@ def run_native_managed_window_batch(
                         "native_window_batch_outage_reached_api"
                     )
                 api_fault.set_api_outage(False)
+            elif crash_after_finality_submission:
+                deadline = time.monotonic() + 20
+                outage_events = []
+                while time.monotonic() < deadline:
+                    outage_events = api_fault.events()[outage_event_offset:]
+                    if any(
+                        method == "POST"
+                        and endpoint in {"finalize", "finalize_batch"}
+                        and status == 503
+                        for method, endpoint, status in outage_events
+                    ):
+                        break
+                    if process.poll() is not None:
+                        raise AssertionError(
+                            "native_window_batch_crash_agent_exited"
+                        )
+                    time.sleep(0.02)
+                else:
+                    raise AssertionError(
+                        "native_window_batch_crash_finality_not_attempted"
+                    )
+                pending_submissions = {}
+                for item in ordered_profiles:
+                    state_path = (
+                        directory
+                        / "managed-window-profiles"
+                        / str(item.profile_id)
+                        / "managed-window-cycle.json"
+                    )
+                    state = json.loads(state_path.read_bytes())
+                    if (
+                        state.get("submission") is None
+                        or state.get("finality") is not None
+                    ):
+                        raise AssertionError(
+                            "native_window_batch_crash_submission_invalid"
+                        )
+                    pending_submissions[item.profile_id] = state["submission"]
+                os.kill(process.pid, signal.SIGKILL)
+                crash_exit = process.wait(timeout=30)
+                if crash_exit != -signal.SIGKILL:
+                    raise AssertionError(
+                        "native_window_batch_agent_not_sigkilled"
+                    )
+                if _managed_child_pids(Path(registry_policy["binary"]), root):
+                    raise AssertionError(
+                        "native_window_batch_child_survived_crash"
+                    )
+                api_fault.set_api_outage(False)
+                recovery_log = root / "window-batch-agent.log"
+                recovery_log.unlink(missing_ok=True)
+                process = launch(
+                    command,
+                    stack,
+                    recovery_log,
+                    environment=environment,
+                )
+                finality_replayed_after_crash = True
             cycle_states = wait_for_managed_batch_finality(
                 root, process, directory, ordered_profiles, timeout=30
             )
             for item in ordered_profiles:
                 state = cycle_states[item.profile_id]
+                if epoch_index == 1 and crash_after_finality_submission:
+                    if (
+                        state.get("submission")
+                        != pending_submissions[item.profile_id]
+                    ):
+                        raise AssertionError(
+                            "native_window_batch_crash_submission_changed"
+                        )
                 original = json.loads(state["submission"]["original_receipt"])
                 enforcement = original["enforcement"]
                 if len(enforcement) != 1:
@@ -647,6 +719,7 @@ def run_native_managed_window_batch(
             quota_closed=quota_closed,
             expiry_closed=expiry_closed,
             post_expiry_outage_seconds=outage_hold_elapsed,
+            finality_replayed_after_crash=finality_replayed_after_crash,
         )
 
 

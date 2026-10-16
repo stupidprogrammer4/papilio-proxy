@@ -190,6 +190,10 @@ type ManagedEpochSealAcceptance struct {
 	AdmissionAvailable bool      `json:"admission_available"`
 }
 
+type ManagedEpochSealRecoveryCreate struct {
+	RequestID string `json:"request_id"`
+}
+
 func sameManagedEpochSealAcceptance(left, right ManagedEpochSealAcceptance) bool {
 	return left.ID == right.ID && left.Epoch == right.Epoch && left.InstallationID == right.InstallationID && left.RequestID == right.RequestID && left.ReceiptSHA256 == right.ReceiptSHA256 && left.AcceptanceID == right.AcceptanceID && left.AcceptedAt.Equal(right.AcceptedAt) && !left.AdmissionAvailable && !right.AdmissionAvailable
 }
@@ -269,4 +273,24 @@ func (c *Client) AcceptManagedEpochSeal(ctx context.Context, installationID int6
 		return ManagedEpochSealAcceptance{}, errors.New("managed_epoch_seal_acceptance_invalid")
 	}
 	return response.Data, nil
+}
+
+// RecoverManagedEpochSeal closes an epoch from finality already accepted by
+// the API, without restarting the crashed epoch's Xray process.
+func (c *Client) RecoverManagedEpochSeal(ctx context.Context, installationID int64, epoch string, input ManagedEpochSealRecoveryCreate) (ManagedEpochSealAcceptance, error) {
+	if installationID <= 0 || !epochPattern.MatchString(epoch) || !epochPattern.MatchString(input.RequestID) {
+		return ManagedEpochSealAcceptance{}, errors.New("managed_epoch_recovery_seal_request_invalid")
+	}
+	var response struct {
+		Success bool                       `json:"success"`
+		Data    ManagedEpochSealAcceptance `json:"data"`
+	}
+	if err := c.request(ctx, http.MethodPost, "/managed-epochs/"+epoch+"/recovery-seal", input, &response); err != nil {
+		return ManagedEpochSealAcceptance{}, err
+	}
+	result := response.Data
+	if !response.Success || result.ID <= 0 || result.Epoch != epoch || result.InstallationID != installationID || result.RequestID != input.RequestID || !digestPattern.MatchString(result.ReceiptSHA256) || !epochPattern.MatchString(result.AcceptanceID) || result.AcceptedAt.IsZero() || result.AdmissionAvailable {
+		return ManagedEpochSealAcceptance{}, errors.New("managed_epoch_recovery_seal_acceptance_invalid")
+	}
+	return result, nil
 }
