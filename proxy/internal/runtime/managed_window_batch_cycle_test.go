@@ -22,9 +22,15 @@ func TestManagedWindowBatchCycleIssuesOnceAndReplaysIndependentProfileJournals(t
 	installation := ManagedBuildInstallation{strings.Repeat("a", 64), strings.Repeat("b", 64), strings.Repeat("c", 64), strings.Repeat("d", 64)}
 	epoch := strings.Repeat("2", 32)
 	expectation := ManagedExpectation{Installation: installation, MembershipSHA256: strings.Repeat("e", 64), EnforcementSHA256: strings.Repeat("f", 64)}
+	expectation.AdapterRevision = 1
+	expectation.SourceCommit = "d2758a023cd7f4174a5a5fa4ff66e487d4342ba0"
+	expectation.WindowPolicySHA256 = strings.Repeat("9", 64)
+	startupReceipt := "fixture original CLOSED receipt"
+	startupReceiptSHA := checksum([]byte(startupReceipt))
 	requests := make([]ManagedWindowRequest, 0, 2)
 	issued := make([]ManagedBatchIssuedWindow, 0, 2)
 	profiles := make(map[int64]ManagedWindowWire, 2)
+	originalAdmissions := make(map[int64]ManagedOriginalAdmission, 2)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	cyclePolicies := make([]ManagedWindowCyclePolicy, 0, 2)
 	for profileID := int64(1); profileID <= 2; profileID++ {
@@ -40,10 +46,12 @@ func TestManagedWindowBatchCycleIssuesOnceAndReplaysIndependentProfileJournals(t
 		if err != nil {
 			t.Fatal(err)
 		}
-		requests = append(requests, ManagedWindowRequest{ProfileID: profileID, Generation: 0, ProcessEpoch: epoch, RequestKey: fmt.Sprintf("window-request-%d", profileID), RequestedBytes: 100})
-		issued = append(issued, ManagedBatchIssuedWindow{ProfileID: profileID, Window: ManagedIssuedWindow{ID: profileID + 200, OriginalWindow: string(original), WindowSHA256: checksum(original), Window: wire}})
+		taskID := profileID + 500
+		requests = append(requests, ManagedWindowRequest{ProfileID: profileID, Generation: 0, ProcessEpoch: epoch, RequestKey: fmt.Sprintf("window-request-%d", profileID), RequestedBytes: 100, ProvisionTaskID: taskID})
+		issuedWindow := ManagedIssuedWindow{ID: profileID + 200, OriginalWindow: string(original), WindowSHA256: checksum(original), Window: wire, ProvisionClaim: &ManagedProvisionClaim{TaskID: taskID, RequestID: profileID + 700, ClaimToken: strings.Repeat(string(rune('k'+profileID)), 32), ClaimUntil: wire.ValidUntil}}
+		issued = append(issued, ManagedBatchIssuedWindow{ProfileID: profileID, Window: issuedWindow})
 		profiles[profileID] = wire
-		cyclePolicies = append(cyclePolicies, ManagedWindowCyclePolicy{Enabled: true, ProfileID: profileID, RequestKey: fmt.Sprintf("window-request-%d", profileID), RequestedBytes: 100, FreezeAfterMS: 1, OperationTimeoutMS: 1000, RetryIntervalMS: 1, MaxAttempts: 2})
+		cyclePolicies = append(cyclePolicies, ManagedWindowCyclePolicy{Enabled: true, ProfileID: profileID, RequestKey: fmt.Sprintf("window-request-%d", profileID), RequestedBytes: 100, FreezeAfterMS: 1, OperationTimeoutMS: 1000, RetryIntervalMS: 1, MaxAttempts: 2, RequireAdmissionReceipt: true, ProvisionTaskID: taskID})
 	}
 
 	var apiMu sync.Mutex
@@ -53,6 +61,12 @@ func TestManagedWindowBatchCycleIssuesOnceAndReplaysIndependentProfileJournals(t
 	issueCalls := 0
 	issueRequests := make([]ManagedWindowBatchRequest, 0, 2)
 	dropFirstIssueResponse := true
+	originalAdmissionCalls := 0
+	originalAdmissionRequests := make([]managedOriginalAdmissionBatchRequest, 0, 2)
+	dropFirstOriginalAdmissionResponse := true
+	paidAdmissionCalls := 0
+	paidAdmissionRequests := make([]ManagedPaidAdmissionBatchRequest, 0, 2)
+	dropFirstPaidAdmissionResponse := true
 	finalCalls := 0
 	finalByKey := make(map[string][]ManagedBatchFinality)
 	finalRequests := make(map[string]string)
@@ -89,6 +103,48 @@ func TestManagedWindowBatchCycleIssuesOnceAndReplaysIndependentProfileJournals(t
 				return
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "data": map[string]any{"batch_request_key": request.BatchRequestKey, "windows": issued}})
+		case "/v1/nodes/owned/managed-windows/admission/batch":
+			body, readErr := io.ReadAll(r.Body)
+			var request ManagedPaidAdmissionBatchRequest
+			if readErr != nil || json.Unmarshal(body, &request) != nil || len(request.Windows) != 2 {
+				t.Error("paid admission batch did not contain both profiles")
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			apiMu.Lock()
+			paidAdmissionCalls++
+			paidAdmissionRequests = append(paidAdmissionRequests, request)
+			dropResponse := dropFirstPaidAdmissionResponse
+			if dropResponse {
+				dropFirstPaidAdmissionResponse = false
+			}
+			apiMu.Unlock()
+			if dropResponse {
+				connection, _, hijackErr := w.(http.Hijacker).Hijack()
+				if hijackErr == nil {
+					_ = connection.Close()
+				}
+				return
+			}
+			results := make([]ManagedPaidAdmissionBatchResult, 0, len(request.Windows))
+			for index := len(request.Windows) - 1; index >= 0; index-- {
+				item := request.Windows[index]
+				var facts ManagedStrictAdmission
+				if json.Unmarshal([]byte(item.Submission.OriginalReceipt), &facts) != nil {
+					t.Error("paid batch original receipt was not valid strict admission evidence")
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				var taskID int64
+				for _, issuedItem := range issued {
+					if issuedItem.Window.Window.WindowID == item.WindowID && issuedItem.Window.ProvisionClaim != nil {
+						taskID = issuedItem.Window.ProvisionClaim.TaskID
+					}
+				}
+				result := ManagedPaidAcceptance{WindowID: item.WindowID, ProvisionTaskID: taskID, AdmissionSHA256: item.Submission.Receipt.ReceiptSHA256, Outcome: "applied", ObservedAt: facts.ObservedAt}
+				results = append(results, ManagedPaidAdmissionBatchResult{WindowID: item.WindowID, Result: result})
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "data": ManagedPaidAdmissionBatchResponse{BatchRequestKey: request.BatchRequestKey, Windows: results}})
 		case "/v1/nodes/owned/managed-windows/finalize/batch":
 			body, readErr := io.ReadAll(r.Body)
 			var request ManagedWindowBatchFinalRequest
@@ -164,12 +220,61 @@ func TestManagedWindowBatchCycleIssuesOnceAndReplaysIndependentProfileJournals(t
 	}
 	control := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.URL.Path == "/v1/windows/admit" && r.Method == http.MethodPost:
-			var wire ManagedWindowWire
-			if json.NewDecoder(r.Body).Decode(&wire) != nil || profiles[wire.Binding.ProfileID] != wire {
-				t.Error("profile admission did not match the issued window")
+		case r.URL.Path == "/v1/windows/admit-original/batch" && r.Method == http.MethodPost:
+			var request managedOriginalAdmissionBatchRequest
+			if json.NewDecoder(r.Body).Decode(&request) != nil || request.BatchRequestKey == "" || len(request.Windows) != 2 {
+				t.Error("original admission did not use the component batch endpoint")
+				w.WriteHeader(http.StatusBadRequest)
+				return
 			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"state": "local_component_window_admitted", "window": wire})
+			controlMu.Lock()
+			originalAdmissionCalls++
+			originalAdmissionRequests = append(originalAdmissionRequests, request)
+			controlMu.Unlock()
+			results := make([]managedOriginalAdmissionBatchResult, 0, len(request.Windows))
+			for _, item := range request.Windows {
+				window := profiles[item.ProfileID]
+				if window.WindowID == "" || string(item.OriginalWindow) != issuedOriginalForProfile(issued, item.ProfileID) {
+					t.Error("original admission batch changed the issued window")
+					w.WriteHeader(http.StatusConflict)
+					return
+				}
+				original, exists := originalAdmissions[item.ProfileID]
+				if !exists {
+					facts := ManagedStrictAdmission{
+						ReceiptVersion: 1, State: "historical_strict_window_admission", Window: window,
+						WindowSHA256: checksum([]byte(issuedOriginalForProfile(issued, item.ProfileID))), AdapterRevision: expectation.AdapterRevision,
+						SourceCommit: expectation.SourceCommit, Module: "github.com/xtls/xray-core@v1.260327.0",
+						AccountingScope: "decoded_managed_tcp_payload_admission", WindowPolicySHA256: expectation.WindowPolicySHA256,
+						StartupReceiptSHA256: startupReceiptSHA, ObservedAt: window.IssuedAt.Add(time.Second),
+						BudgetEnforced: true, DeadlineEnforced: true, HistoricalOnly: true,
+					}
+					raw, marshalErr := json.Marshal(facts)
+					if marshalErr != nil {
+						t.Fatal(marshalErr)
+					}
+					original = ManagedOriginalAdmission{OriginalReceipt: string(raw), Receipt: ManagedAdmissionReceipt{Epoch: epoch, WindowID: window.WindowID, ReceiptSHA256: checksum(raw), Bytes: int64(len(raw))}, Admission: facts}
+					originalAdmissions[item.ProfileID] = original
+				}
+				results = append(results, managedOriginalAdmissionBatchResult{WindowID: window.WindowID, OriginalReceipt: original.OriginalReceipt, Receipt: managedOriginalAdmissionBatchReceipt{Epoch: original.Receipt.Epoch, WindowID: original.Receipt.WindowID, SHA256: original.Receipt.ReceiptSHA256, Bytes: original.Receipt.Bytes}})
+			}
+			controlMu.Lock()
+			dropResponse := dropFirstOriginalAdmissionResponse
+			if dropResponse {
+				dropFirstOriginalAdmissionResponse = false
+			}
+			controlMu.Unlock()
+			if dropResponse {
+				connection, _, hijackErr := w.(http.Hijacker).Hijack()
+				if hijackErr == nil {
+					_ = connection.Close()
+				}
+				return
+			}
+			_ = json.NewEncoder(w).Encode(managedOriginalAdmissionBatchResponse{State: "local_component_original_admissions", BatchRequestKey: request.BatchRequestKey, Windows: results})
+		case r.URL.Path == "/v1/windows/admit" && r.Method == http.MethodPost:
+			t.Error("strict paid profile bypassed original batch admission")
+			w.WriteHeader(http.StatusConflict)
 		case r.URL.Path == "/v1/windows/freeze/batch" && r.Method == http.MethodPost:
 			var request struct {
 				Epoch   string                      `json:"epoch"`
@@ -245,7 +350,15 @@ func TestManagedWindowBatchCycleIssuesOnceAndReplaysIndependentProfileJournals(t
 			t.Error("close recovered journal", closeErr)
 		}
 	}()
-	installationState := managedInstallationJournal{InstallationID: 5, Claim: ManagedClaim{InstallationID: 5, Expectation: expectation}, Acceptance: &ManagedClosedAcceptance{InstallationID: 5, ProcessEpoch: epoch}}
+	installationState := managedInstallationJournal{
+		InstallationID: 5,
+		Claim:          ManagedClaim{InstallationID: 5, Expectation: expectation},
+		Acceptance:     &ManagedClosedAcceptance{InstallationID: 5, ProcessEpoch: epoch},
+		Acknowledgement: &ManagedAcknowledgement{
+			Receipt:         ManagedClosedReceipt{Epoch: epoch, SHA256: startupReceiptSHA, Bytes: int64(len(startupReceipt))},
+			OriginalReceipt: startupReceipt,
+		},
+	}
 	batchPolicy := ManagedWindowBatchPolicy{Enabled: true, BatchRequestKey: "shared-batch-request", MaxProfiles: 2, Profiles: cyclePolicies}
 	policy := ManagedInstallationPolicy{InstallationID: 5, ControlRoot: controlRoot, MaxReceiptBytes: 65536, MaxJournalBytes: 1 << 20, PollIntervalMS: 1000, WindowBatch: &batchPolicy}
 	if err = runManagedWindowBatchCycle(context.Background(), client, policy, journal, installationState); err == nil {
@@ -266,15 +379,20 @@ func TestManagedWindowBatchCycleIssuesOnceAndReplaysIndependentProfileJournals(t
 	}
 	apiMu.Lock()
 	defer apiMu.Unlock()
-	if issueCalls != 2 || len(issueRequests) != 2 || !reflect.DeepEqual(issueRequests[0], issueRequests[1]) || finalCalls != 3 || len(finalRequests) != 1 {
-		t.Fatalf("batch replay changed or repeated operation identities: issue-attempts=%d final-attempts=%d unique-final-requests=%d", issueCalls, finalCalls, len(finalRequests))
+	if issueCalls != 2 || len(issueRequests) != 2 || !reflect.DeepEqual(issueRequests[0], issueRequests[1]) || paidAdmissionCalls != 2 || len(paidAdmissionRequests) != 2 || !reflect.DeepEqual(paidAdmissionRequests[0], paidAdmissionRequests[1]) || finalCalls != 3 || len(finalRequests) != 1 {
+		t.Fatalf("batch replay changed or repeated operation identities: issue=%d paid-admission=%d finality=%d", issueCalls, paidAdmissionCalls, finalCalls)
 	}
+	controlMu.Lock()
+	if originalAdmissionCalls != 2 || len(originalAdmissionRequests) != 2 || !reflect.DeepEqual(originalAdmissionRequests[0], originalAdmissionRequests[1]) {
+		t.Fatalf("original admission replay changed its stable batch request: calls=%d", originalAdmissionCalls)
+	}
+	controlMu.Unlock()
 	seenBarriers := make(map[string]struct{}, 2)
 	for profileID := int64(1); profileID <= 2; profileID++ {
 		profilePath := filepath.Join(journal.root, "managed-window-profiles", strconv.FormatInt(profileID, 10), "managed-window-cycle.json")
 		stateRaw, readErr := managedReadPrivate(profilePath, journal.maxBytes)
 		var state managedWindowCycleJournal
-		if readErr != nil || json.Unmarshal(stateRaw, &state) != nil || state.Finality == nil || state.Submission == nil || state.LocalAdmitted != true {
+		if readErr != nil || json.Unmarshal(stateRaw, &state) != nil || state.Finality == nil || state.Submission == nil || state.Admission == nil || state.PaidAcceptance == nil || state.LocalAdmitted {
 			t.Fatalf("profile %d lacks independent durable admission/finality evidence", profileID)
 		}
 		if state.BatchRequestKey != managedWindowBatchFinalRequestKey(managedWindowBatchRequestKey(batchPolicy.BatchRequestKey, epoch), state.Issued.Window) {
@@ -303,6 +421,20 @@ func TestManagedWindowBatchCycleIssuesOnceAndReplaysIndependentProfileJournals(t
 	if _, err = os.Stat(filepath.Join(journal.root, managedWindowBatchJournalName(epoch))); err != nil {
 		t.Fatal("shared issue coordinator journal missing", err)
 	}
+	batchRaw, err := managedReadPrivate(filepath.Join(journal.root, managedWindowBatchJournalName(epoch)), journal.maxBytes)
+	var batch managedWindowBatchJournal
+	if err != nil || json.Unmarshal(batchRaw, &batch) != nil || batch.OriginalAdmissionBatchKey == "" || batch.PaidAdmissionBatchKey == "" || !batch.PaidAdmissionBatchIntent {
+		t.Fatal("coordinator journal omitted durable batch operation identities")
+	}
+}
+
+func issuedOriginalForProfile(issued []ManagedBatchIssuedWindow, profileID int64) string {
+	for _, item := range issued {
+		if item.ProfileID == profileID {
+			return item.Window.OriginalWindow
+		}
+	}
+	return ""
 }
 
 func managedBatchCycleSnapshot(windows []ManagedWindowWire, barrierID string) (ManagedSnapshotReceipt, string) {

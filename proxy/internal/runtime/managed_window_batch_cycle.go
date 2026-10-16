@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strconv"
 	"time"
 )
@@ -23,13 +24,17 @@ type ManagedWindowBatchPolicy struct {
 }
 
 type managedWindowBatchJournal struct {
-	Version         int                        `json:"version"`
-	APIURL          string                     `json:"api_url"`
-	NodeCode        string                     `json:"node_code"`
-	InstallationID  int64                      `json:"installation_id"`
-	BatchRequestKey string                     `json:"batch_request_key"`
-	Requests        []ManagedWindowRequest     `json:"requests"`
-	Windows         []ManagedBatchIssuedWindow `json:"windows,omitempty"`
+	Version                   int                        `json:"version"`
+	APIURL                    string                     `json:"api_url"`
+	NodeCode                  string                     `json:"node_code"`
+	InstallationID            int64                      `json:"installation_id"`
+	BatchRequestKey           string                     `json:"batch_request_key"`
+	OriginalAdmissionBatchKey string                     `json:"original_admission_batch_key,omitempty"`
+	PaidAdmissionBatchKey     string                     `json:"paid_admission_batch_key,omitempty"`
+	PaidAdmissionBatchIntent  bool                       `json:"paid_admission_batch_intent,omitempty"`
+	PaidAdmissionBatchWindows []string                   `json:"paid_admission_batch_windows,omitempty"`
+	Requests                  []ManagedWindowRequest     `json:"requests"`
+	Windows                   []ManagedBatchIssuedWindow `json:"windows,omitempty"`
 }
 
 type managedWindowFreezeTarget struct {
@@ -99,6 +104,12 @@ func (p ManagedWindowBatchPolicy) validateShape(registry ManagedInstallationPoli
 
 func managedWindowBatchRequestKey(key, epoch string) string {
 	return managedEpochRequestKey(key, epoch)
+}
+
+func managedWindowBatchOperationKey(operation, key string) string {
+	material := "papilio-managed-window-batch-" + operation + "-v1:" + key
+	digest := sha256.Sum256([]byte(material))
+	return operation + "-" + hex.EncodeToString(digest[:])
 }
 
 func managedWindowBatchFinalRequestKey(key string, window ManagedWindowWire) string {
@@ -227,21 +238,7 @@ func prepareManagedWindowBatchProfile(ctx context.Context, client *Client, polic
 	cycle := state.Policy
 	if cycle.RequireAdmissionReceipt {
 		if state.Admission == nil {
-			state.AdmissionIntent = true
-			if err := saveManagedWindowCycle(journal, *state); err != nil {
-				return err
-			}
-			err := managedCycleRetry(ctx, cycle, func(operation context.Context) error {
-				admission, requestErr := requestManagedOriginalAdmission(operation, policy, *state.Issued, installation)
-				if requestErr != nil {
-					return requestErr
-				}
-				state.Admission = &admission
-				return saveManagedWindowCycle(journal, *state)
-			})
-			if err != nil {
-				return errors.New("managed_window_batch_admission_unresolved")
-			}
+			return errors.New("managed_window_batch_admission_batch_missing")
 		}
 		if validateManagedAdmission(*state.Admission, *state.Issued, installation, policy.MaxReceiptBytes) != nil {
 			return errors.New("managed_window_batch_admission_invalid")
@@ -286,16 +283,178 @@ func prepareManagedWindowBatchProfile(ctx context.Context, client *Client, polic
 	if state.PaidAcceptance != nil {
 		return validateManagedPaidAcceptance(*state.PaidAcceptance, *state.Issued, *state.Admission)
 	}
-	err := managedCycleRetry(ctx, cycle, func(operation context.Context) error {
-		accepted, callErr := client.AcknowledgeManagedPaidAdmission(operation, *state.Issued, *state.Admission)
-		if callErr != nil {
-			return callErr
+	return nil
+}
+
+func prepareManagedWindowBatchOriginalAdmissions(
+	ctx context.Context,
+	policy ManagedInstallationPolicy,
+	retryPolicy ManagedWindowCyclePolicy,
+	installation managedInstallationJournal,
+	journal *Journal,
+	batch managedWindowBatchJournal,
+	journals []*Journal,
+	states []managedWindowCycleJournal,
+) error {
+	issued := make([]ManagedBatchIssuedWindow, 0, len(states))
+	needsRequest := false
+	for index := range states {
+		state := &states[index]
+		if !state.Policy.RequireAdmissionReceipt {
+			continue
 		}
-		state.PaidAcceptance = &accepted
-		return saveManagedWindowCycle(journal, *state)
+		issued = append(issued, ManagedBatchIssuedWindow{ProfileID: state.Request.ProfileID, Window: *state.Issued})
+		if state.Admission == nil {
+			needsRequest = true
+		}
+		if !state.AdmissionIntent {
+			state.AdmissionIntent = true
+			if err := saveManagedWindowCycle(journals[index], *state); err != nil {
+				return errors.New("managed_window_batch_admission_intent_unavailable")
+			}
+		}
+	}
+	if len(issued) == 0 || !needsRequest {
+		return nil
+	}
+	if len(batch.OriginalAdmissionBatchKey) < 8 {
+		return errors.New("managed_window_batch_original_admission_key_invalid")
+	}
+	var originals map[int64]ManagedOriginalAdmission
+	err := managedCycleRetry(ctx, retryPolicy, func(operation context.Context) error {
+		result, requestErr := requestManagedOriginalAdmissions(operation, policy, batch.OriginalAdmissionBatchKey, issued, installation)
+		if requestErr != nil {
+			return requestErr
+		}
+		originals = result
+		return nil
+	})
+	if err != nil {
+		return errors.New("managed_window_batch_admission_unresolved")
+	}
+	for index := range states {
+		state := &states[index]
+		if !state.Policy.RequireAdmissionReceipt {
+			continue
+		}
+		original, exists := originals[state.Request.ProfileID]
+		if !exists {
+			return errors.New("managed_window_batch_admission_response_incomplete")
+		}
+		if state.Admission != nil && !reflect.DeepEqual(*state.Admission, original) {
+			return errors.New("managed_window_batch_admission_replay_conflict")
+		}
+		state.Admission = &original
+		if err := saveManagedWindowCycle(journals[index], *state); err != nil {
+			return errors.New("managed_window_batch_admission_journal_unavailable")
+		}
+	}
+	return nil
+}
+
+func acknowledgeManagedWindowBatchAdmissions(
+	ctx context.Context,
+	client *Client,
+	retryPolicy ManagedWindowCyclePolicy,
+	journal *Journal,
+	batch *managedWindowBatchJournal,
+	journals []*Journal,
+	states []managedWindowCycleJournal,
+) error {
+	itemsByWindow := make(map[string]ManagedPaidAdmissionBatchItem, len(states))
+	indexesByWindow := make(map[string]int, len(states))
+	for index := range states {
+		state := &states[index]
+		if state.Policy.ProvisionTaskID == 0 {
+			continue
+		}
+		if state.Admission == nil || state.Issued == nil {
+			return errors.New("managed_window_batch_paid_admission_unresolved")
+		}
+		if state.PaidAcceptance != nil && validateManagedPaidAcceptance(*state.PaidAcceptance, *state.Issued, *state.Admission) != nil {
+			return errors.New("managed_window_batch_paid_acceptance_invalid")
+		}
+		windowID := state.Issued.Window.WindowID
+		if _, exists := itemsByWindow[windowID]; exists {
+			return errors.New("managed_window_batch_paid_window_duplicate")
+		}
+		itemsByWindow[windowID] = ManagedPaidAdmissionBatchItem{Issued: *state.Issued, Original: *state.Admission}
+		indexesByWindow[windowID] = index
+	}
+	if len(itemsByWindow) == 0 {
+		return nil
+	}
+	if len(batch.PaidAdmissionBatchKey) < 8 {
+		return errors.New("managed_window_batch_paid_admission_key_invalid")
+	}
+	if !batch.PaidAdmissionBatchIntent {
+		if len(batch.PaidAdmissionBatchWindows) != 0 {
+			return errors.New("managed_window_batch_paid_admission_membership_invalid")
+		}
+		for windowID, index := range indexesByWindow {
+			if states[index].PaidAcceptance == nil {
+				batch.PaidAdmissionBatchWindows = append(batch.PaidAdmissionBatchWindows, windowID)
+			}
+		}
+		sort.Strings(batch.PaidAdmissionBatchWindows)
+		if len(batch.PaidAdmissionBatchWindows) == 0 {
+			return nil
+		}
+		batch.PaidAdmissionBatchIntent = true
+		if err := saveManagedWindowBatch(journal, *batch); err != nil {
+			return errors.New("managed_window_batch_paid_admission_intent_unavailable")
+		}
+	}
+	if len(batch.PaidAdmissionBatchWindows) == 0 {
+		return errors.New("managed_window_batch_paid_admission_membership_missing")
+	}
+	items := make([]ManagedPaidAdmissionBatchItem, 0, len(batch.PaidAdmissionBatchWindows))
+	stateIndexes := make([]int, 0, len(batch.PaidAdmissionBatchWindows))
+	needsRequest := false
+	seen := make(map[string]struct{}, len(batch.PaidAdmissionBatchWindows))
+	for _, windowID := range batch.PaidAdmissionBatchWindows {
+		item, exists := itemsByWindow[windowID]
+		index, indexExists := indexesByWindow[windowID]
+		if !exists || !indexExists {
+			return errors.New("managed_window_batch_paid_admission_membership_changed")
+		}
+		if _, duplicate := seen[windowID]; duplicate {
+			return errors.New("managed_window_batch_paid_admission_duplicate_window")
+		}
+		seen[windowID] = struct{}{}
+		items = append(items, item)
+		stateIndexes = append(stateIndexes, index)
+		if states[index].PaidAcceptance == nil {
+			needsRequest = true
+		}
+	}
+	if !needsRequest {
+		return nil
+	}
+	var accepted []ManagedPaidAcceptance
+	err := managedCycleRetry(ctx, retryPolicy, func(operation context.Context) error {
+		result, requestErr := client.AcknowledgeManagedPaidAdmissions(operation, batch.PaidAdmissionBatchKey, items)
+		if requestErr != nil {
+			return requestErr
+		}
+		accepted = result
+		return nil
 	})
 	if err != nil {
 		return errors.New("managed_window_batch_paid_ack_unresolved")
+	}
+	if len(accepted) != len(items) {
+		return errors.New("managed_window_batch_paid_response_incomplete")
+	}
+	for position, index := range stateIndexes {
+		state := &states[index]
+		if state.PaidAcceptance != nil && !reflect.DeepEqual(*state.PaidAcceptance, accepted[position]) {
+			return errors.New("managed_window_batch_paid_replay_conflict")
+		}
+		state.PaidAcceptance = &accepted[position]
+		if err := saveManagedWindowCycle(journals[index], *state); err != nil {
+			return errors.New("managed_window_batch_paid_journal_unavailable")
+		}
 	}
 	return nil
 }
@@ -520,12 +679,40 @@ func runManagedWindowBatchCycle(ctx context.Context, client *Client, policy Mana
 			return errors.New("managed_window_batch_recovery_binding_invalid")
 		}
 	} else if os.IsNotExist(err) {
-		batch = managedWindowBatchJournal{Version: 1, APIURL: client.config.APIURL, NodeCode: client.config.NodeCode, InstallationID: policy.InstallationID, BatchRequestKey: key, Requests: requests}
+		batch = managedWindowBatchJournal{
+			Version:                   1,
+			APIURL:                    client.config.APIURL,
+			NodeCode:                  client.config.NodeCode,
+			InstallationID:            policy.InstallationID,
+			BatchRequestKey:           key,
+			OriginalAdmissionBatchKey: managedWindowBatchOperationKey("original-admission", key),
+			PaidAdmissionBatchKey:     managedWindowBatchOperationKey("paid-admission", key),
+			Requests:                  requests,
+		}
 		if err = saveManagedWindowBatch(journal, batch); err != nil {
 			return err
 		}
 	} else {
 		return errors.New("managed_window_batch_journal_unavailable")
+	}
+	keysChanged := false
+	originalAdmissionKey := managedWindowBatchOperationKey("original-admission", key)
+	paidAdmissionKey := managedWindowBatchOperationKey("paid-admission", key)
+	if batch.OriginalAdmissionBatchKey == "" {
+		batch.OriginalAdmissionBatchKey = originalAdmissionKey
+		keysChanged = true
+	}
+	if batch.PaidAdmissionBatchKey == "" {
+		batch.PaidAdmissionBatchKey = paidAdmissionKey
+		keysChanged = true
+	}
+	if batch.OriginalAdmissionBatchKey != originalAdmissionKey || batch.PaidAdmissionBatchKey != paidAdmissionKey {
+		return errors.New("managed_window_batch_operation_key_conflict")
+	}
+	if keysChanged {
+		if err = saveManagedWindowBatch(journal, batch); err != nil {
+			return errors.New("managed_window_batch_operation_key_unavailable")
+		}
 	}
 	if len(batch.Windows) == 0 {
 		err = managedCycleRetry(ctx, batchPolicy.Profiles[0], func(operation context.Context) error {
@@ -584,6 +771,9 @@ func runManagedWindowBatchCycle(ctx context.Context, client *Client, policy Mana
 	if err = validateManagedWindowBatchStates(states, client.config.MaxResponseBytes); err != nil {
 		return errors.New("managed_window_batch_state_invalid")
 	}
+	if err = prepareManagedWindowBatchOriginalAdmissions(ctx, policy, batchPolicy.Profiles[0], installation, journal, batch, journals, states); err != nil {
+		return err
+	}
 	for index := range states {
 		if states[index].Submission == nil && states[index].Finality == nil {
 			err = prepareManagedWindowBatchProfile(ctx, client, policy, journals[index], installation, &states[index])
@@ -591,6 +781,9 @@ func runManagedWindowBatchCycle(ctx context.Context, client *Client, policy Mana
 		if err != nil {
 			return err
 		}
+	}
+	if err = acknowledgeManagedWindowBatchAdmissions(ctx, client, batchPolicy.Profiles[0], journal, &batch, journals, states); err != nil {
+		return err
 	}
 	if err = freezeManagedWindowBatch(ctx, client, policy, journals, states); err != nil {
 		return err

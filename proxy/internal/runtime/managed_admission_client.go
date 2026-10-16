@@ -44,6 +44,35 @@ type ManagedOriginalAdmission struct {
 	Admission       ManagedStrictAdmission  `json:"admission"`
 }
 
+type managedOriginalAdmissionBatchItem struct {
+	ProfileID      int64           `json:"profile_id"`
+	OriginalWindow json.RawMessage `json:"original_window"`
+}
+
+type managedOriginalAdmissionBatchRequest struct {
+	BatchRequestKey string                              `json:"batch_request_key"`
+	Windows         []managedOriginalAdmissionBatchItem `json:"windows"`
+}
+
+type managedOriginalAdmissionBatchReceipt struct {
+	Epoch    string `json:"epoch"`
+	WindowID string `json:"window_id"`
+	SHA256   string `json:"receipt_sha256"`
+	Bytes    int64  `json:"bytes"`
+}
+
+type managedOriginalAdmissionBatchResult struct {
+	WindowID        string                               `json:"window_id"`
+	OriginalReceipt string                               `json:"original_receipt"`
+	Receipt         managedOriginalAdmissionBatchReceipt `json:"receipt"`
+}
+
+type managedOriginalAdmissionBatchResponse struct {
+	State           string                                `json:"state"`
+	BatchRequestKey string                                `json:"batch_request_key"`
+	Windows         []managedOriginalAdmissionBatchResult `json:"windows"`
+}
+
 func validateManagedAdmission(original ManagedOriginalAdmission, issued ManagedIssuedWindow, installation managedInstallationJournal, maximum int64) error {
 	receipt := original.Receipt
 	if maximum <= 0 || maximum >= math.MaxInt64 || receipt.Bytes <= 0 || receipt.Bytes > maximum || receipt.Bytes != int64(len(original.OriginalReceipt)) || receipt.Epoch != issued.Window.Epoch || receipt.WindowID != issued.Window.WindowID || !digestPattern.MatchString(receipt.ReceiptSHA256) || checksum([]byte(original.OriginalReceipt)) != receipt.ReceiptSHA256 || installation.Acknowledgement == nil {
@@ -98,4 +127,72 @@ func requestManagedOriginalAdmission(ctx context.Context, p ManagedInstallationP
 		return ManagedOriginalAdmission{}, err
 	}
 	return original, nil
+}
+
+func requestManagedOriginalAdmissions(ctx context.Context, p ManagedInstallationPolicy, batchKey string, issued []ManagedBatchIssuedWindow, installation managedInstallationJournal) (map[int64]ManagedOriginalAdmission, error) {
+	if len(batchKey) < 8 || len(batchKey) > 128 || len(issued) == 0 || !filepath.IsAbs(p.ControlRoot) || p.MaxReceiptBytes <= 0 {
+		return nil, errors.New("managed_admission_batch_request_invalid")
+	}
+	request := managedOriginalAdmissionBatchRequest{BatchRequestKey: batchKey, Windows: make([]managedOriginalAdmissionBatchItem, 0, len(issued))}
+	issuedByProfile := make(map[int64]ManagedIssuedWindow, len(issued))
+	profileByWindow := make(map[string]int64, len(issued))
+	for _, item := range issued {
+		if item.ProfileID <= 0 || item.Window.Window.Binding.ProfileID != item.ProfileID || len(item.Window.OriginalWindow) == 0 {
+			return nil, errors.New("managed_admission_batch_member_invalid")
+		}
+		if _, exists := issuedByProfile[item.ProfileID]; exists {
+			return nil, errors.New("managed_admission_batch_duplicate_profile")
+		}
+		if _, exists := profileByWindow[item.Window.Window.WindowID]; exists {
+			return nil, errors.New("managed_admission_batch_duplicate_window")
+		}
+		if !json.Valid([]byte(item.Window.OriginalWindow)) {
+			return nil, errors.New("managed_admission_batch_member_invalid")
+		}
+		issuedByProfile[item.ProfileID] = item.Window
+		profileByWindow[item.Window.Window.WindowID] = item.ProfileID
+		request.Windows = append(request.Windows, managedOriginalAdmissionBatchItem{ProfileID: item.ProfileID, OriginalWindow: json.RawMessage(item.Window.OriginalWindow)})
+	}
+	payload, err := json.Marshal(request)
+	if err != nil || int64(len(payload)) > p.MaxReceiptBytes {
+		return nil, errors.New("managed_admission_batch_request_capacity")
+	}
+	result, err := managedPrivateWindowPost(ctx, p, "/v1/windows/admit-original/batch", payload)
+	if err != nil {
+		return nil, errors.New("managed_admission_batch_control_unavailable")
+	}
+	var response managedOriginalAdmissionBatchResponse
+	decoder := json.NewDecoder(bytes.NewReader(result))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&response) != nil || decoder.Decode(new(any)) != io.EOF || response.State != "local_component_original_admissions" || response.BatchRequestKey != batchKey || len(response.Windows) != len(issued) {
+		return nil, errors.New("managed_admission_batch_response_invalid")
+	}
+	byProfile := make(map[int64]ManagedOriginalAdmission, len(issued))
+	seenWindows := make(map[string]struct{}, len(issued))
+	for _, item := range response.Windows {
+		profileID, exists := profileByWindow[item.WindowID]
+		if !exists {
+			return nil, errors.New("managed_admission_batch_response_binding_invalid")
+		}
+		issuedWindow, exists := issuedByProfile[profileID]
+		if !exists || item.Receipt.WindowID != item.WindowID {
+			return nil, errors.New("managed_admission_batch_response_binding_invalid")
+		}
+		if _, duplicate := seenWindows[item.WindowID]; duplicate {
+			return nil, errors.New("managed_admission_batch_response_duplicate_window")
+		}
+		seenWindows[item.WindowID] = struct{}{}
+		original := ManagedOriginalAdmission{
+			OriginalReceipt: item.OriginalReceipt,
+			Receipt:         ManagedAdmissionReceipt{Epoch: item.Receipt.Epoch, WindowID: item.Receipt.WindowID, ReceiptSHA256: item.Receipt.SHA256, Bytes: item.Receipt.Bytes},
+		}
+		if json.Unmarshal([]byte(item.OriginalReceipt), &original.Admission) != nil || validateManagedAdmission(original, issuedWindow, installation, p.MaxReceiptBytes) != nil {
+			return nil, errors.New("managed_admission_batch_response_invalid")
+		}
+		byProfile[profileID] = original
+	}
+	if len(byProfile) != len(issued) {
+		return nil, errors.New("managed_admission_batch_response_incomplete")
+	}
+	return byProfile, nil
 }
