@@ -17,11 +17,18 @@ from src.modules.accounts.customers.interfaces import ICustomerService
 from src.modules.billing.wallet.app.ledger import ledger_entry
 from src.modules.billing.wallet.domain.models import WalletModel
 from src.modules.billing.wallet.infra.mysql import WalletRepository
+from src.modules.network.configurations.domain.models import ConfigurationModel
+from src.modules.network.configurations.domain.results import (
+    ProfileAppliedUpdate,
+)
 from src.modules.network.configurations.infra.mysql import (
     ConfigurationRepository,
     ProfileRepository,
 )
-from src.modules.network.configurations.interfaces import IProfileCommand
+from src.modules.network.configurations.interfaces import (
+    IConfigurationCommand,
+    IProfileCommand,
+)
 from src.modules.network.core_runtime.app.memberships import (
     InstalledProfileEncoding,
 )
@@ -42,6 +49,7 @@ from src.modules.network.provisioning.domain.dtos import (
     ProvisioningRetry,
 )
 from src.modules.network.provisioning.domain.managed import (
+    ManagedApplicationBatch,
     ManagedApplicationEvidence,
     ManagedRevocationEvidence,
 )
@@ -51,6 +59,7 @@ from src.modules.network.provisioning.domain.models import (
 )
 from src.modules.network.provisioning.domain.results import (
     NodeClaim,
+    NodeProvisionFacts,
 )
 from src.modules.network.provisioning.infra.mysql import (
     ProvisionRequestRepository,
@@ -61,10 +70,13 @@ from src.modules.network.provisioning.infra.readers import (
 )
 from src.modules.network.usage.interfaces import IUsageQuery
 from src.modules.operations.notifications.domain.dtos import (
+    CustomerNotificationBatch,
+    CustomerNotificationEvent,
     NotificationEvent,
     NotificationKind,
 )
 from src.modules.operations.notifications.interfaces import (
+    INotificationCreateBatchCommand,
     INotificationCreateCommand,
 )
 from src.modules.sales.catalog.domain.policies import (
@@ -73,7 +85,13 @@ from src.modules.sales.catalog.domain.policies import (
 )
 from src.modules.sales.loyalty.interfaces import IPurchaseVolumeCommand
 from src.modules.sales.subscriptions.domain.models import SubscriptionModel
+from src.modules.sales.subscriptions.domain.results import (
+    SubscriptionProvisioningActivation,
+)
 from src.modules.sales.subscriptions.infra.mysql import SubscriptionRepository
+from src.modules.sales.subscriptions.interfaces import (
+    ISubscriptionBatchService,
+)
 
 
 class ProvisioningCommand:
@@ -90,9 +108,12 @@ class ProvisioningCommand:
         wallets: WalletRepository,
         settings: PapilioSettings,
         configurations: ConfigurationRepository,
+        configuration_commands: IConfigurationCommand,
         usage: IUsageQuery,
         customers: ICustomerService,
         notifications: INotificationCreateCommand,
+        notification_batches: INotificationCreateBatchCommand,
+        subscription_batches: ISubscriptionBatchService,
         volumes: IPurchaseVolumeCommand,
         installed: IInstalledProfileQuery,
         runtime_states: IRuntimeStateService,
@@ -108,9 +129,12 @@ class ProvisioningCommand:
         self.wallets = wallets
         self.settings = settings
         self.configurations = configurations
+        self.configuration_commands = configuration_commands
         self.usage = usage
         self.customers = customers
         self.notifications = notifications
+        self.notification_batches = notification_batches
+        self.subscription_batches = subscription_batches
         self.volumes = volumes
         self.installed = installed
         self.runtime_states = runtime_states
@@ -942,6 +966,378 @@ class ProvisioningCommand:
         tasks = await self._tasks(request.id)
         await self._advance(subscription, request, tasks, now)
         return task
+
+    @handle_conflicts
+    @transactional
+    async def apply_managed_many(
+        self, data: ManagedApplicationBatch
+    ) -> list[ProvisionTaskModel]:
+        task_ids = [item.task_id for item in data.items]
+        initial_facts = await self.facts.node_tasks_many(task_ids)
+        if len(initial_facts) != len(task_ids):
+            raise _conflict(
+                "managed_provision_assignment_changed", task_ids[0]
+            )
+        initial_by_task = {row.task.id: row for row in initial_facts}
+        node_ids = {row.task.node_id for row in initial_facts}
+        core_ids = {row.configuration.core_id for row in initial_facts}
+        if len(node_ids) != 1 or len(core_ids) != 1:
+            raise _conflict(
+                "managed_provision_batch_scope_mismatch", task_ids[0]
+            )
+        node_id = next(iter(node_ids))
+        core_id = next(iter(core_ids))
+        if any(
+            initial_by_task[item.task_id].task.node_id != item.evidence.node_id
+            or initial_by_task[item.task_id].configuration.core_id
+            != item.evidence.core_id
+            or initial_by_task[item.task_id].subscription.id
+            != item.evidence.subscription_id
+            for item in data.items
+        ):
+            raise _conflict(
+                "managed_provision_assignment_changed", task_ids[0]
+            )
+        now = datetime.now(UTC).replace(tzinfo=None, microsecond=0)
+        runtime = self.settings.core_runtime
+        if runtime is None or len(data.items) > runtime.max_profiles:
+            raise _conflict("managed_runtime_snapshot_capacity", task_ids[0])
+        owner_ids = {
+            owner_id
+            for fact in initial_facts
+            for owner_id in (
+                fact.subscription.customer_id,
+                fact.subscription.payer_customer_id
+                or fact.subscription.customer_id,
+            )
+        }
+        customers = await self.customers.locked_many(sorted(owner_ids))
+        customer_by_id = {customer.id: customer for customer in customers}
+        await self.nodes.locked(node_id)
+        await self.runtime_states.lock_core(core_id)
+        subscription_ids = sorted(
+            {row.subscription.id for row in initial_facts}
+        )
+        subscriptions = await self.subscription_batches.locked_many(
+            subscription_ids
+        )
+        subscription_by_id = {row.id: row for row in subscriptions}
+        request_ids = sorted({row.request.id for row in initial_facts})
+        requests = await self.requests.locked_many(request_ids)
+        request_by_id = {row.id: row for row in requests}
+        tasks = await self.tasks.locked_many(task_ids)
+        task_by_id = {row.id: row for row in tasks}
+        configuration_ids = sorted(
+            {row.configuration.id for row in initial_facts}
+        )
+        configurations = await self.configuration_commands.locked_many(
+            configuration_ids
+        )
+        configuration_by_id = {row.id: row for row in configurations}
+        current_facts = await self.facts.node_tasks_many(
+            task_ids, current=True
+        )
+        current_by_task = {row.task.id: row for row in current_facts}
+        if (
+            len(customer_by_id) != len(owner_ids)
+            or len(subscription_by_id) != len(subscription_ids)
+            or len(request_by_id) != len(request_ids)
+            or len(task_by_id) != len(task_ids)
+            or len(configuration_by_id) != len(configuration_ids)
+            or len(current_by_task) != len(task_ids)
+        ):
+            raise _conflict(
+                "managed_provision_assignment_changed", task_ids[0]
+            )
+        for item in data.items:
+            fact = current_by_task[item.task_id]
+            if not self._managed_application_matches(
+                fact,
+                item.evidence,
+                subscription_by_id,
+                request_by_id,
+                task_by_id,
+                configuration_by_id,
+                now,
+            ):
+                raise _conflict(
+                    "managed_provision_application_conflict", item.task_id
+                )
+        if any(
+            not CustomerAccessPolicy.services_available(
+                customer_by_id[row.subscription.customer_id]
+            )
+            for row in current_facts
+        ):
+            raise _conflict("customer_services_disabled", subscription_ids[0])
+        applied_by_task = {item.task_id: item.evidence for item in data.items}
+        task_updates = [
+            ProvisionTaskModel.patch(
+                id=task.id,
+                installed_revision_id=task.installed_revision_id,
+                membership_sha256=task.membership_sha256,
+                ack_sha256=applied_by_task[task.id].admission_sha256,
+                state="applied",
+                attempts=task.attempts,
+                claim_hash=task.claim_hash,
+                claim_until=task.claim_until,
+                last_outcome="applied",
+                acknowledged_at=now,
+                error_code=None,
+                action=task.action,
+                available_at=task.available_at,
+            )
+            for task in tasks
+        ]
+        await self.tasks.change_managed_many(task_updates)
+        await self.profile_command.mark_applied_many(
+            [
+                ProfileAppliedUpdate(
+                    profile_id=item.evidence.profile_id,
+                    generation=item.evidence.generation,
+                    revision=item.evidence.configuration_revision,
+                )
+                for item in data.items
+            ]
+        )
+        all_request_tasks = await self.tasks.for_requests_many(request_ids)
+        request_updates, activations, activation_events, revoke_updates = (
+            self._managed_batch_transitions(
+                requests,
+                subscriptions,
+                all_request_tasks,
+                now,
+            )
+        )
+        await self.tasks.change_managed_many(revoke_updates)
+        await self.requests.change_many(request_updates)
+        await self.subscription_batches.activate_provisioned_many(activations)
+        activated_ids = [item.subscription_id for item in activations]
+        if activated_ids:
+            await self.profile_command.subscription_urls_many(
+                activated_ids, rotate=False
+            )
+        if activation_events:
+            await self.notification_batches.enqueue_many(
+                CustomerNotificationBatch(items=activation_events)
+            )
+        updated = await self.tasks.locked_many(task_ids)
+        return updated
+
+    @staticmethod
+    def _managed_application_matches(
+        fact: NodeProvisionFacts,
+        data: ManagedApplicationEvidence,
+        subscriptions: dict[int, SubscriptionModel],
+        requests: dict[int, ProvisionRequestModel],
+        tasks: dict[int, ProvisionTaskModel],
+        configurations: dict[int, ConfigurationModel],
+        now: datetime,
+    ) -> bool:
+        task = tasks[fact.task.id]
+        request = requests[fact.request.id]
+        subscription = subscriptions[data.subscription_id]
+        configuration = configurations[data.configuration_id]
+        if data.observed_at.tzinfo is None:
+            return False
+        observed = data.observed_at.astimezone(UTC).replace(tzinfo=None)
+        return (
+            task.id == fact.task.id
+            and task.request_id == fact.request.id
+            and task.node_id == data.node_id
+            and task.profile_id == data.profile_id
+            and task.configuration_id == data.configuration_id
+            and task.configuration_revision == data.configuration_revision
+            and task.action == "apply"
+            and task.state == "leased"
+            and task.claim_hash is not None
+            and secure_compare(task.claim_hash, data.claim_hash)
+            and task.claim_until is not None
+            and task.claim_until > now
+            and observed < task.claim_until
+            and task.installed_revision_id == data.installed_revision_id
+            and task.membership_sha256 == data.membership_sha256
+            and request.id == fact.request.id
+            and request.subscription_id == data.subscription_id
+            and request.generation == data.generation
+            and request.state in {"dispatching", "active"}
+            and request.deadline_at > now
+            and subscription.id == data.subscription_id
+            and subscription.id == fact.subscription.id
+            and subscription.customer_id == fact.subscription.customer_id
+            and subscription.payer_customer_id
+            == fact.subscription.payer_customer_id
+            and subscription.renewal_count == data.generation
+            and subscription.status in {"pending_provision", "active"}
+            and fact.profile.subscription_id == data.subscription_id
+            and fact.profile.configuration_id == data.configuration_id
+            and configuration.id == data.configuration_id
+            and configuration.core_id == data.core_id
+            and configuration.node_id == data.node_id
+            and configuration.revision == data.configuration_revision
+        )
+
+    @staticmethod
+    def _managed_batch_transitions(
+        requests: list[ProvisionRequestModel],
+        subscriptions: list[SubscriptionModel],
+        tasks: list[ProvisionTaskModel],
+        now: datetime,
+    ) -> tuple[
+        list[ProvisionRequestModel],
+        list[SubscriptionProvisioningActivation],
+        list[CustomerNotificationEvent],
+        list[ProvisionTaskModel],
+    ]:
+        subscriptions_by_id = {row.id: row for row in subscriptions}
+        tasks_by_request: dict[int, list[ProvisionTaskModel]] = {}
+        for task in tasks:
+            tasks_by_request.setdefault(task.request_id, []).append(task)
+        request_updates = []
+        activations = []
+        events = []
+        revoke_updates = []
+        for request in requests:
+            subscription = subscriptions_by_id[request.subscription_id]
+            request_tasks = tasks_by_request[request.id]
+            policy = FulfillmentPolicy.model_validate_json(request.policy_json)
+            successes = sum(task.state == "applied" for task in request_tasks)
+            needed = (
+                len(request_tasks)
+                if policy.activation == "all"
+                else policy.minimum_successes
+                if policy.activation == "quorum"
+                else 1
+            )
+            if (
+                request_tasks
+                and successes >= needed
+                and request.activated_at is None
+            ):
+                expiry = (
+                    now + timedelta(days=subscription.duration_days)
+                    if subscription.duration_days is not None
+                    and policy.expiry_start == "activation"
+                    else subscription.expires_at
+                )
+                if expiry is not None and expiry <= now:
+                    request_updates.append(
+                        ProvisionRequestModel.patch(
+                            id=request.id,
+                            completion=request.completion,
+                            state="attention",
+                            reason_code="expired_before_activation",
+                            checked_at=now,
+                            activated_at=request.activated_at,
+                            cancellation_reason=request.cancellation_reason,
+                            cancelled_by_staff_id=request.cancelled_by_staff_id,
+                        )
+                    )
+                    continue
+                activations.append(
+                    SubscriptionProvisioningActivation(
+                        subscription_id=subscription.id,
+                        expires_at=expiry,
+                        activated_at=subscription.activated_at or now,
+                    )
+                )
+                events.append(
+                    CustomerNotificationEvent(
+                        customer_id=subscription.customer_id,
+                        event=NotificationEvent(
+                            event_key=f"activation:{request.id}",
+                            kind=NotificationKind.SUBSCRIPTION_ACTIVE,
+                            status="فعال",
+                            record_id=subscription.id,
+                        ),
+                    )
+                )
+                request_updates.append(
+                    ProvisionRequestModel.patch(
+                        id=request.id,
+                        completion=request.completion,
+                        state="active",
+                        activated_at=now,
+                        reason_code=None,
+                        checked_at=now,
+                        cancellation_reason=request.cancellation_reason,
+                        cancelled_by_staff_id=request.cancelled_by_staff_id,
+                    )
+                )
+                continue
+            outstanding = [
+                task for task in request_tasks if task.state != "applied"
+            ]
+            exhausted = bool(outstanding) and all(
+                task.attempts >= policy.max_attempts
+                and (
+                    task.claim_until is None
+                    or task.claim_until <= now
+                    or task.last_outcome is not None
+                )
+                for task in outstanding
+            )
+            if exhausted and request.activated_at is None:
+                if policy.failure_action == "refund_wallet":
+                    request_updates.append(
+                        ProvisionRequestModel.patch(
+                            id=request.id,
+                            completion="refund",
+                            state="revoking",
+                            reason_code="provision_timeout",
+                            cancellation_reason=(
+                                "مهلت راه‌اندازی پایان یافته است."
+                            ),
+                            checked_at=now,
+                            activated_at=request.activated_at,
+                            cancelled_by_staff_id=request.cancelled_by_staff_id,
+                        )
+                    )
+                    revoke_updates.extend(
+                        ProvisionTaskModel.patch(
+                            id=task.id,
+                            installed_revision_id=task.installed_revision_id,
+                            membership_sha256=task.membership_sha256,
+                            ack_sha256=None,
+                            action="revoke",
+                            state="queued",
+                            attempts=0,
+                            claim_hash=None,
+                            claim_until=None,
+                            acknowledged_at=None,
+                            last_outcome=None,
+                            error_code=None,
+                            available_at=now,
+                        )
+                        for task in request_tasks
+                    )
+                else:
+                    request_updates.append(
+                        ProvisionRequestModel.patch(
+                            id=request.id,
+                            completion=request.completion,
+                            state="attention",
+                            reason_code="provision_timeout",
+                            checked_at=now,
+                            activated_at=request.activated_at,
+                            cancellation_reason=request.cancellation_reason,
+                            cancelled_by_staff_id=request.cancelled_by_staff_id,
+                        )
+                    )
+                continue
+            request_updates.append(
+                ProvisionRequestModel.patch(
+                    id=request.id,
+                    completion=request.completion,
+                    state=request.state,
+                    reason_code=request.reason_code,
+                    checked_at=now,
+                    activated_at=request.activated_at,
+                    cancellation_reason=request.cancellation_reason,
+                    cancelled_by_staff_id=request.cancelled_by_staff_id,
+                )
+            )
+        return request_updates, activations, events, revoke_updates
 
     @transactional
     async def revoke_managed(
