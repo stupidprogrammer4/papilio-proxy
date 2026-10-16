@@ -432,10 +432,10 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                 registry["registry"]["window_policy"].update(
                     {
                         "max_windows": 4,
-                        "max_records": 8,
+                        "max_records": 12,
                         "max_admission_receipts": 4,
                         "max_validity_ms": validity_ms,
-                        "max_epoch_seals": 1,
+                        "max_epoch_seals": 2,
                     }
                 )
                 registry["registry"]["component_policy"]["max_barriers"] = 8

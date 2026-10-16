@@ -4,6 +4,7 @@ import json
 import os
 import re
 import socket
+import subprocess
 import time
 from contextlib import ExitStack
 from dataclasses import dataclass
@@ -54,13 +55,60 @@ def wait_for_managed_batch_epoch(
     profiles: tuple[ManagedBatchProfileInput, ...],
     epoch_index: int,
     timeout: float,
+    managed_binary: Path,
 ) -> tuple[Path, dict[int, dict]]:
     deadline = time.monotonic() + timeout
     result_directory = None
     result_states: dict[int, dict] = {}
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            raise AssertionError("native_window_batch_exited_before_admit")
+            diagnostic = (root / "window-batch-agent.log").read_text().strip()
+            try:
+                structured = json.loads(diagnostic)
+                diagnostic = structured.get("error", diagnostic)
+            except (ValueError, AttributeError):
+                pass
+            tokens = re.findall(
+                r"managed_[a-z0-9_]+|node API status [0-9]{3}", diagnostic
+            )
+            safe = tokens[-1] if tokens else "unclassified"
+            settings_path = root / "managed-agent" / "managed-settings.json"
+            if safe == "managed_child_exited" and settings_path.is_file():
+                config = json.loads(
+                    (root / "window-batch-agent-config.json").read_bytes()
+                )["managed_installation"]
+                checked = subprocess.run(
+                    [
+                        str(managed_binary),
+                        "--check",
+                        "--config",
+                        str(settings_path),
+                        "--max-config-bytes",
+                        str(config["max_settings_bytes"]),
+                        "--max-config-depth",
+                        str(config["max_settings_depth"]),
+                    ],
+                    capture_output=True,
+                    timeout=20,
+                    env={
+                        key: value
+                        for key, value in os.environ.items()
+                        if key != "PAPILIO_NODE_KEY"
+                    },
+                )
+                try:
+                    checked_result = json.loads(checked.stdout)
+                    checked_error = checked_result.get("error", "")
+                except (ValueError, AttributeError):
+                    checked_error = ""
+                checked_tokens = re.findall(
+                    r"managed_[a-z0-9_]+", checked_error
+                )
+                if checked.returncode and checked_tokens:
+                    safe = checked_tokens[0]
+            raise AssertionError(
+                "native_window_batch_exited_before_admit:" + safe
+            )
         directory = epoch_journal(root, epoch_index)
         try:
             if directory is None:
@@ -145,10 +193,10 @@ def run_native_managed_window_batch(
     registry_policy["window_policy"].update(
         {
             "max_windows": len(ordered_profiles) * 2,
-            "max_records": len(ordered_profiles) * 4,
+            "max_records": len(ordered_profiles) * 6,
             "max_admission_receipts": len(ordered_profiles) * 2,
             "max_validity_ms": validity_ms,
-            "max_epoch_seals": 1,
+            "max_epoch_seals": 2,
         }
     )
     registry_policy["component_policy"]["max_barriers"] = (
@@ -228,7 +276,12 @@ def run_native_managed_window_batch(
             root / "managed-agent" / "managed-installation.json"
         )
         first_directory, first_entries = wait_for_managed_batch_epoch(
-            root, process, ordered_profiles, 0, 30
+            root,
+            process,
+            ordered_profiles,
+            0,
+            30,
+            Path(registry_policy["binary"]),
         )
         first_batch_path = first_directory / (
             "managed-window-batch-"
@@ -283,7 +336,12 @@ def run_native_managed_window_batch(
                 active_entries = first_entries
             else:
                 directory, active_entries = wait_for_managed_batch_epoch(
-                    root, process, ordered_profiles, epoch_index, 45
+                    root,
+                    process,
+                    ordered_profiles,
+                    epoch_index,
+                    45,
+                    Path(registry_policy["binary"]),
                 )
                 batch_path = directory / (
                     "managed-window-batch-"
