@@ -11,6 +11,51 @@ from tests.managed_epoch_fault_relay import ManagedRolloverResponseDrop
 
 
 class ManagedEpochFaultRelayTest(unittest.TestCase):
+    def test_api_outage_blocks_forwarding_and_can_be_recovered(self):
+        records = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:
+                pass
+
+            def do_POST(self) -> None:
+                length = int(self.headers.get("Content-Length", "0"))
+                request_body = self.rfile.read(length)
+                records.append(request_body)
+                response_body = b'{"success":true,"data":{"id":17}}'
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(response_body)))
+                self.end_headers()
+                self.wfile.write(response_body)
+
+        upstream = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=upstream.serve_forever, daemon=True)
+        thread.start()
+        host = str(upstream.server_address[0])
+        port = upstream.server_address[1]
+        path = "/v1/test-api-health"
+        body = b'{"request_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'
+        try:
+            with ManagedRolloverResponseDrop(f"http://{host}:{port}") as relay:
+                with httpx.Client(timeout=2, trust_env=False) as client:
+                    relay.set_api_outage(True)
+                    unavailable = client.post(relay.url + path, content=body)
+                    self.assertEqual(unavailable.status_code, 503)
+                    self.assertEqual(records, [])
+                    relay.set_api_outage(False)
+                    recovered = client.post(relay.url + path, content=body)
+                self.assertEqual(recovered.status_code, 200)
+                self.assertEqual(records, [body])
+                self.assertEqual(
+                    relay.events(),
+                    (("POST", "other", 503), ("POST", "other", 200)),
+                )
+        finally:
+            upstream.shutdown()
+            upstream.server_close()
+            thread.join(timeout=5)
+
     def test_committed_rollover_response_can_be_held_until_parent_is_killed(
         self,
     ):

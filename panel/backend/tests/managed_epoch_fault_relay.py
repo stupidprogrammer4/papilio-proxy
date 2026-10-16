@@ -19,6 +19,7 @@ class ManagedRolloverResponseDrop:
         self._dropped = False
         self._first_rollover_committed = threading.Event()
         self._release_first_rollover = threading.Event()
+        self._api_outage = threading.Event()
         self._rollover_responses: list[tuple[str, int, str]] = []
         self._events: list[tuple[str, str, int]] = []
         self._client = httpx.Client(
@@ -45,6 +46,27 @@ class ManagedRolloverResponseDrop:
                     self.send_error(413)
                     return
                 body = self.rfile.read(length)
+                endpoint = self.path.split("?", 1)[0].rsplit("/", 1)[-1]
+                if endpoint not in {
+                    "claim",
+                    "acknowledge",
+                    "windows",
+                    "admission",
+                    "finalize",
+                    "successor",
+                    "seal",
+                    "rollover",
+                }:
+                    endpoint = "other"
+                if owner._api_outage.is_set():
+                    with owner._lock:
+                        owner._events.append((self.command, endpoint, 503))
+                    self.send_response(503)
+                    self.send_header("Content-Length", "0")
+                    self.send_header("Connection", "close")
+                    self.end_headers()
+                    self.close_connection = True
+                    return
                 headers = {
                     name: self.headers[name]
                     for name in ("Content-Type", "X-Papilio-Node-Key")
@@ -74,18 +96,6 @@ class ManagedRolloverResponseDrop:
                         )
                     self.send_error(502)
                     return
-                endpoint = self.path.split("?", 1)[0].rsplit("/", 1)[-1]
-                if endpoint not in {
-                    "claim",
-                    "acknowledge",
-                    "windows",
-                    "admission",
-                    "finalize",
-                    "successor",
-                    "seal",
-                    "rollover",
-                }:
-                    endpoint = "other"
                 with owner._lock:
                     owner._events.append((self.command, endpoint, status_code))
                 is_rollover = (
@@ -153,6 +163,12 @@ class ManagedRolloverResponseDrop:
 
     def release_held_rollover(self) -> None:
         self._release_first_rollover.set()
+
+    def set_api_outage(self, active: bool) -> None:
+        if active:
+            self._api_outage.set()
+        else:
+            self._api_outage.clear()
 
     def events(self) -> tuple[tuple[str, str, int], ...]:
         with self._lock:

@@ -907,10 +907,43 @@ def run_native_successor_cycles(
                     raise AssertionError(
                         "native_rollover_submission_not_durable_before_http"
                     )
+                pending_before_outage = compact(pending, canonical=True)
                 process.kill()
                 process.wait(timeout=5)
                 rollover_fault.release_held_rollover()
                 recovery_log = root / "successor-agent.log"
+                recovery_log.unlink()
+                rollover_fault.set_api_outage(True)
+                process = launch(
+                    command,
+                    stack,
+                    recovery_log,
+                    environment=environment,
+                )
+                outage_exit = process.wait(timeout=25)
+                if outage_exit == 0:
+                    raise AssertionError(
+                        "native_rollover_accepted_during_api_outage"
+                    )
+                outage_state = json.loads(
+                    (
+                        root / "managed-agent" / "managed-installation.json"
+                    ).read_bytes()
+                )
+                outage_pending = outage_state.get("pending_rollover") or {}
+                if compact(
+                    outage_pending, canonical=True
+                ) != pending_before_outage or outage_state.get(
+                    "epoch_history", []
+                ) != installation_state.get("epoch_history", []):
+                    raise AssertionError(
+                        "native_rollover_outage_changed_durable_intent"
+                    )
+                if ("POST", "rollover", 503) not in rollover_fault.events():
+                    raise AssertionError(
+                        "native_rollover_api_outage_not_exercised"
+                    )
+                rollover_fault.set_api_outage(False)
                 recovery_log.unlink()
                 process = launch(
                     command,
