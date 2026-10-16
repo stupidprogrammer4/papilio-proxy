@@ -478,19 +478,38 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                 self.assertEqual(issued.status_code, 200, issued.text)
                 installation_id = issued.json()["data"]["id"]
                 api_url = f"http://127.0.0.1:{listener.getsockname()[1]}"
-                result = await asyncio.to_thread(
-                    run_native_managed_window_batch,
-                    root,
-                    Path(runtime_binary),
-                    registry,
-                    installation_id,
-                    profiles,
-                    api_url,
-                    node,
-                    Path(binaries),
-                    freeze_after_ms=freeze_after_ms,
-                    validity_ms=validity_ms,
-                )
+                with ManagedRolloverResponseDrop(api_url) as api_fault:
+                    result = await asyncio.to_thread(
+                        run_native_managed_window_batch,
+                        root,
+                        Path(runtime_binary),
+                        registry,
+                        installation_id,
+                        profiles,
+                        api_fault.url,
+                        node,
+                        Path(binaries),
+                        freeze_after_ms=freeze_after_ms,
+                        validity_ms=validity_ms,
+                        api_fault=api_fault,
+                    )
+                    api_events = api_fault.events()
+                    self.assertTrue(
+                        any(
+                            method == "POST"
+                            and endpoint in {"finalize", "finalize_batch"}
+                            and status == 503
+                            for method, endpoint, status in api_events
+                        )
+                    )
+                    self.assertTrue(
+                        any(
+                            method == "POST"
+                            and endpoint in {"finalize", "finalize_batch"}
+                            and status == 200
+                            for method, endpoint, status in api_events
+                        )
+                    )
                 self.assertTrue(
                     result.independent_traffic
                     and result.quota_closed

@@ -319,6 +319,7 @@ def run_native_managed_window_batch(
     *,
     freeze_after_ms: int,
     validity_ms: int,
+    api_fault: ManagedRolloverResponseDrop,
 ) -> NativeWindowBatchResult:
     if len(profiles) != 2 or len(
         {item.profile_id for item in profiles}
@@ -513,6 +514,9 @@ def run_native_managed_window_batch(
             second_connection = second_client.connect(target.port)
             stack.callback(first_connection.close)
             stack.callback(second_connection.close)
+            outage_event_offset = len(api_fault.events())
+            if epoch_index == 0:
+                api_fault.set_api_outage(True)
             try:
                 roundtrip(first_connection, b"q" * 32)
             except (OSError, EOFError) as error:
@@ -529,6 +533,31 @@ def run_native_managed_window_batch(
                 seconds=validity_ms // 1000 + 3,
             )
             expiry_closed = True
+            if epoch_index == 0:
+                if not api_fault.wait_for_outage_finality(20):
+                    raise AssertionError(
+                        "native_window_batch_outage_finality_not_attempted"
+                    )
+                outage_events = api_fault.events()[outage_event_offset:]
+                if not any(
+                    method == "POST"
+                    and endpoint in {"finalize", "finalize_batch"}
+                    and status == 503
+                    for method, endpoint, status in outage_events
+                ):
+                    raise AssertionError(
+                        "native_window_batch_outage_finality_not_rejected"
+                    )
+                if any(
+                    status == 200
+                    and endpoint
+                    in {"windows", "admission", "successor", "rollover"}
+                    for _, endpoint, status in outage_events
+                ):
+                    raise AssertionError(
+                        "native_window_batch_outage_issued_authority"
+                    )
+                api_fault.set_api_outage(False)
             cycle_states = wait_for_managed_batch_finality(
                 root, process, directory, ordered_profiles, timeout=30
             )
