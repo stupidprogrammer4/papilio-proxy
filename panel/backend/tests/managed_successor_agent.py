@@ -60,6 +60,7 @@ def wait_for_managed_batch_epoch(
     deadline = time.monotonic() + timeout
     result_directory = None
     result_states: dict[int, dict] = {}
+    state_summary: dict[int, dict] = {}
     while time.monotonic() < deadline:
         if process.poll() is not None:
             diagnostic = (root / "window-batch-agent.log").read_text().strip()
@@ -118,6 +119,7 @@ def wait_for_managed_batch_epoch(
                 time.sleep(0.02)
                 continue
             states = {}
+            state_summary = {}
             for item in profiles:
                 state_path = (
                     directory
@@ -126,6 +128,15 @@ def wait_for_managed_batch_epoch(
                     / "managed-window-cycle.json"
                 )
                 state = json.loads(state_path.read_bytes())
+                state_summary[item.profile_id] = {
+                    "issued": state.get("issued") is not None,
+                    "admission": state.get("admission") is not None,
+                    "paid_acceptance": state.get("paid_acceptance")
+                    is not None,
+                    "local_admitted": state.get("local_admitted") is True,
+                    "submission": state.get("submission") is not None,
+                    "finality": state.get("finality") is not None,
+                }
                 admitted = (
                     state.get("admission") is not None
                     and state.get("paid_acceptance") is not None
@@ -161,7 +172,25 @@ def wait_for_managed_batch_epoch(
             pass
         time.sleep(0.02)
     if result_directory is None:
-        raise AssertionError("native_window_batch_open_timeout")
+        try:
+            observation = observe_managed_batch_profiles(root)
+        except (OSError, ValueError, KeyError, TypeError):
+            observation = {}
+        process_state = process.poll()
+        agent_error = "running" if process_state is None else "unclassified"
+        if process_state is not None:
+            try:
+                diagnostic = json.loads(
+                    (root / "window-batch-agent.log").read_text()
+                ).get("error", "")
+            except (OSError, ValueError, AttributeError):
+                diagnostic = ""
+            tokens = re.findall(r"managed_[a-z0-9_]+", diagnostic)
+            agent_error = tokens[-1] if tokens else "unclassified"
+        raise AssertionError(
+            f"native_window_batch_open_timeout:{state_summary}:"
+            f"{observation}:{agent_error}"
+        )
     return result_directory, result_states
 
 
@@ -188,6 +217,95 @@ def observe_managed_batch_profiles(root: Path) -> dict[int, dict]:
     return summary
 
 
+def wait_managed_window_expiry(
+    connection: socket.socket, seconds: float
+) -> None:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        try:
+            roundtrip(connection, b"x")
+        except (OSError, EOFError):
+            return
+        time.sleep(min(0.5, deadline - time.monotonic()))
+    raise AssertionError("native_window_expiry_did_not_close")
+
+
+def wait_for_managed_batch_finality(
+    root: Path,
+    process,
+    directory: Path,
+    profiles: tuple[ManagedBatchProfileInput, ...],
+    timeout: float,
+) -> dict[int, dict]:
+    deadline = time.monotonic() + timeout
+    result = {}
+    while time.monotonic() < deadline:
+        result = {}
+        for item in profiles:
+            state_path = (
+                directory
+                / "managed-window-profiles"
+                / str(item.profile_id)
+                / "managed-window-cycle.json"
+            )
+            try:
+                result[item.profile_id] = json.loads(state_path.read_bytes())
+            except (OSError, ValueError):
+                pass
+        complete = all(
+            result.get(item.profile_id, {}).get("submission") is not None
+            and result[item.profile_id].get("finality") is not None
+            for item in profiles
+        )
+        if complete:
+            return result
+        if process.poll() is not None:
+            break
+        time.sleep(0.02)
+    missing = {
+        item.profile_id: {
+            "issued": result.get(item.profile_id, {}).get("issued")
+            is not None,
+            "submission": result.get(item.profile_id, {}).get("submission")
+            is not None,
+            "finality": result.get(item.profile_id, {}).get("finality")
+            is not None,
+        }
+        for item in profiles
+    }
+    agent_error = "still_running"
+    if process.poll() is None:
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+    if process.poll() is not None:
+        try:
+            diagnostic = (root / "window-batch-agent.log").read_text().strip()
+        except OSError:
+            diagnostic = ""
+        try:
+            structured = json.loads(diagnostic)
+            diagnostic = structured.get("error", diagnostic)
+        except (ValueError, AttributeError):
+            pass
+        tokens = re.findall(
+            r"managed_[a-z0-9_]+|node API status [0-9]{3}|"
+            r"runtime API (?:unavailable|response invalid|"
+            r"response capacity or encoding rejected)",
+            diagnostic,
+        )
+        agent_error = tokens[-1] if tokens else "unclassified"
+    try:
+        observations = observe_managed_batch_profiles(root)
+    except (OSError, ValueError, KeyError, TypeError):
+        observations = {}
+    raise AssertionError(
+        f"native_window_batch_finality_unresolved:{missing}:"
+        f"{agent_error}:{observations}"
+    )
+
+
 def run_native_managed_window_batch(
     root: Path,
     runtime_binary: Path,
@@ -211,10 +329,10 @@ def run_native_managed_window_batch(
     profiles_by_budget = {
         item.requested_bytes: item for item in ordered_profiles
     }
-    if set(profiles_by_budget) != {64, 4096}:
+    if set(profiles_by_budget) != {64, 65536}:
         raise AssertionError("native_window_batch_budget_profiles_invalid")
     quota_profile_id = profiles_by_budget[64].profile_id
-    expiry_profile_id = profiles_by_budget[4096].profile_id
+    expiry_profile_id = profiles_by_budget[65536].profile_id
     registry_policy = registry["registry"]
     registry_policy["window_policy"].update(
         {
@@ -361,10 +479,19 @@ def run_native_managed_window_batch(
             if epoch_index == 0:
                 active_entries = first_entries
             else:
+                rollover_profiles = tuple(
+                    ManagedBatchProfileInput(
+                        profile_id=item.profile_id,
+                        generation=item.generation,
+                        provision_task_id=0,
+                        requested_bytes=item.requested_bytes,
+                    )
+                    for item in ordered_profiles
+                )
                 directory, active_entries = wait_for_managed_batch_epoch(
                     root,
                     process,
-                    ordered_profiles,
+                    rollover_profiles,
                     epoch_index,
                     45,
                     Path(registry_policy["binary"]),
@@ -396,26 +523,16 @@ def run_native_managed_window_batch(
             quota_closed = True
             roundtrip(second_connection, b"independent-user-still-active")
             independent_traffic = True
-            wait_closed(
+            wait_managed_window_expiry(
                 second_connection,
                 seconds=validity_ms // 1000 + 3,
             )
             expiry_closed = True
+            cycle_states = wait_for_managed_batch_finality(
+                root, process, directory, ordered_profiles, timeout=30
+            )
             for item in ordered_profiles:
-                state_path = (
-                    directory
-                    / "managed-window-profiles"
-                    / str(item.profile_id)
-                    / "managed-window-cycle.json"
-                )
-                state = json.loads(state_path.read_bytes())
-                if (
-                    state.get("submission") is None
-                    or state.get("finality") is None
-                ):
-                    raise AssertionError(
-                        "native_window_batch_finality_missing"
-                    )
+                state = cycle_states[item.profile_id]
                 original = json.loads(state["submission"]["original_receipt"])
                 enforcement = original["enforcement"]
                 if len(enforcement) != 1:
@@ -430,7 +547,9 @@ def run_native_managed_window_batch(
                 )
                 if window_evidence["closure_reason"] != expected_reason:
                     raise AssertionError(
-                        "native_window_batch_closure_reason_invalid"
+                        "native_window_batch_closure_reason_invalid:"
+                        f"{item.profile_id}:"
+                        f"{window_evidence['closure_reason']}"
                     )
                 final_entries.append({**state, "snapshot": original})
         exit_code = process.wait(timeout=50)

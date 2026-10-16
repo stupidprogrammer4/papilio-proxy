@@ -349,8 +349,8 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
         assert runtime_binary and managed_binary and binaries
         self.add_second_managed_profile = True
         self.settings.usage.policy.mode = "reserved"
-        validity_ms = 20000
-        freeze_after_ms = 25000
+        validity_ms = 60000
+        freeze_after_ms = 65000
         with tempfile.TemporaryDirectory(
             prefix="papilio-native-window-batch-"
         ) as name:
@@ -418,7 +418,7 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                             64
                             if row.subscription_id
                             == purchased_subscription["id"]
-                            else 4096
+                            else 65536
                         ),
                     )
                     for row in profile_rows
@@ -450,7 +450,10 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                 policy = self.settings.managed_adapter
                 assert policy is not None and policy.capacity is not None
                 capacity = policy.capacity.model_copy(
-                    update={"max_validity_ms": validity_ms}
+                    update={
+                        "max_validity_ms": validity_ms,
+                        "max_window_bytes": 131072,
+                    }
                 )
                 self.settings.managed_adapter = policy.model_copy(
                     update={
