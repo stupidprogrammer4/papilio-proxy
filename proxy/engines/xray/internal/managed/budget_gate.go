@@ -143,6 +143,51 @@ func (g *Gate) ReadReserved(id uint64, read func(int64) (int64, error)) error {
 	return readErr
 }
 
+// ReadBuffered keeps a decoded read inside the session barrier while it waits
+// for source bytes, then reserves only the bytes that are ready to be exposed.
+// The buffered bytes remain private until admit is called.
+func (g *Gate) ReadBuffered(
+	id uint64,
+	read func() (int64, error),
+	admit func(int64) (int64, error),
+) error {
+	policy, strict := g.StrictPolicy()
+	if !strict {
+		return errors.New("managed_strict_unavailable")
+	}
+	p, err := g.begin(id, DecodedRead)
+	if err != nil {
+		return err
+	}
+	available, readErr := read()
+	if available < 0 || available > policy.MaxReadReservationBytes {
+		_ = g.end(p, id, 0, true, DecodedRead)
+		g.requestBudgetFreeze(p.totals.Binding.ProfileID, p.budget, InvalidReservation)
+		return errors.New("managed_read_buffer_invalid")
+	}
+	if available == 0 {
+		endErr := g.end(p, id, 0, true, DecodedRead)
+		if endErr != nil {
+			return endErr
+		}
+		return readErr
+	}
+	ledger, token, reserveErr := g.reserveDecoded(id, available)
+	if reserveErr != nil {
+		_ = g.end(p, id, 0, true, DecodedRead)
+		return reserveErr
+	}
+	admitted, admitErr := admit(token.bytes)
+	reason, settleErr := g.settleBudget(ledger, token, admitted)
+	endErr := g.end(p, id, admitted, true, DecodedRead)
+	if settleErr != nil || endErr != nil || admitted != token.bytes {
+		g.requestBudgetFreeze(p.totals.Binding.ProfileID, ledger, InvalidReservation)
+		return errors.New("managed_budget_accounting_unknown")
+	}
+	g.requestBudgetFreeze(p.totals.Binding.ProfileID, ledger, reason)
+	return admitErr
+}
+
 // WriteReserved supplies the exact admitted prefix length to the native writer.
 // The adapter must separately retain/count unadmitted remainder evidence.
 func (g *Gate) WriteReserved(id uint64, bytes int64, kind OperationKind, write func(int64) error) error {

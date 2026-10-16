@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common/buf"
+	"papilio-proxy/engines/xray/internal/managed"
 )
 
 // boundedDecodedReader owns the pinned empty-flow VLESS reader's prefetch.
@@ -25,6 +26,7 @@ type boundedDecodedReader struct {
 	lease      time.Duration
 	closed     bool
 	discarded  int64
+	pendingErr error
 }
 
 func newBoundedDecodedReader(source buf.Reader, connection net.Conn, limit int64, lease time.Duration) (*boundedDecodedReader, error) {
@@ -85,6 +87,83 @@ func (r *boundedDecodedReader) ReadReserved(reserved int64) (buf.MultiBuffer, er
 		return result, errors.New("managed_reader_deadline_unavailable")
 	}
 	return result, readErr
+}
+
+// ReadManaged holds reader ownership across bounded prefetch, quota admission
+// and delivery so connection cleanup cannot discard bytes between those steps.
+func (r *boundedDecodedReader) ReadManaged(gate *managed.Gate, id uint64) (buf.MultiBuffer, error) {
+	policy, strict := gate.StrictPolicy()
+	if !strict {
+		return nil, errors.New("managed_strict_unavailable")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var result buf.MultiBuffer
+	err := gate.ReadBuffered(
+		id,
+		func() (int64, error) {
+			return r.readAvailableLocked(policy.MaxReadReservationBytes)
+		},
+		func(capacity int64) (int64, error) {
+			var admitErr error
+			result, admitErr = r.takeLocked(capacity)
+			return int64(result.Len()), admitErr
+		},
+	)
+	return result, err
+}
+
+func (r *boundedDecodedReader) readAvailableLocked(maximum int64) (int64, error) {
+	if r.closed {
+		return 0, errors.New("managed_reader_closed")
+	}
+	if maximum <= 0 || maximum > r.limit || maximum > math.MaxInt32 {
+		return 0, errors.New("managed_reader_reservation_invalid")
+	}
+	if r.residual.IsEmpty() {
+		if err := r.connection.SetReadDeadline(time.Now().Add(r.lease)); err != nil {
+			return 0, errors.New("managed_reader_deadline_unavailable")
+		}
+		payload := make([]byte, int(maximum))
+		count, readErr := r.source.Read(payload)
+		resetErr := r.connection.SetReadDeadline(time.Time{})
+		if count < 0 || count > len(payload) {
+			return 0, errors.New("managed_reader_callback_invalid")
+		}
+		if count > 0 {
+			r.residual = buf.MergeBytes(r.residual, payload[:count])
+		}
+		if readErr != nil {
+			r.pendingErr = readErr
+		}
+		if resetErr != nil {
+			r.pendingErr = errors.New("managed_reader_deadline_unavailable")
+		}
+		if count == 0 {
+			readErr = r.pendingErr
+			r.pendingErr = nil
+			return 0, readErr
+		}
+	}
+	available := r.residual.Len()
+	if available > int32(maximum) {
+		available = int32(maximum)
+	}
+	return int64(available), nil
+}
+
+func (r *boundedDecodedReader) takeLocked(admitted int64) (buf.MultiBuffer, error) {
+	if r.closed || admitted <= 0 || admitted > int64(r.residual.Len()) || admitted > math.MaxInt32 {
+		return nil, errors.New("managed_reader_reservation_invalid")
+	}
+	remainder, result := buf.SplitSize(r.residual, int32(admitted))
+	r.residual = remainder
+	var err error
+	if r.residual.IsEmpty() {
+		err = r.pendingErr
+		r.pendingErr = nil
+	}
+	return result, err
 }
 
 // ReleaseResidual must follow cancellation/closure of the owning connection so

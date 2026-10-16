@@ -159,3 +159,51 @@ func TestStrictReservationContentionFreezesWithoutClaimingExhaustion(t *testing.
 		t.Fatal("read not joined")
 	}
 }
+
+func TestStrictReadWaitDoesNotHoldQuotaNeededByOppositeDirection(t *testing.T) {
+	m, g, policy := strictFixture(t)
+	if err := m.Admit(strictGrant(policy, 1, "1", 8)); err != nil {
+		t.Fatal(err)
+	}
+	resources := &testResources{cancel: make(chan struct{})}
+	readerID, _ := g.Register(1, resources)
+	writerID, _ := g.Register(1, &testResources{cancel: make(chan struct{})})
+	if err := g.ReadReserved(readerID, func(capacity int64) (int64, error) {
+		return capacity, nil
+	}); err != nil {
+		t.Fatal("initial payload was not admitted", err)
+	}
+	started := make(chan struct{})
+	finished := make(chan error, 1)
+	go func() {
+		finished <- g.ReadBuffered(readerID, func() (int64, error) {
+			close(started)
+			<-resources.cancel
+			return 0, io.EOF
+		}, func(int64) (int64, error) {
+			t.Error("cancelled read exposed bytes")
+			return 0, nil
+		})
+	}()
+	<-started
+	if err := g.WriteReserved(writerID, 4, DecodedWrite, func(capacity int64) error {
+		if capacity != 4 {
+			t.Fatal("response reservation changed")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal("idle read reservation blocked response", err)
+	}
+	select {
+	case err := <-finished:
+		if err != io.EOF {
+			t.Fatal("read was not cancelled by joined quota freeze", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("idle read did not join quota freeze")
+	}
+	snapshot := waitStrictFrozen(t, g, 1)
+	if snapshot.Profiles[0].UploadBytes != 4 || snapshot.Profiles[0].DownloadBytes != 4 || snapshot.Enforcement[0].ClosureReason != BudgetExhausted {
+		t.Fatal("full-duplex quota receipt is inconsistent")
+	}
+}

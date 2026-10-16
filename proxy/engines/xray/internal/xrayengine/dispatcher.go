@@ -240,15 +240,10 @@ type reader struct {
 }
 
 func (r *reader) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	var result buf.MultiBuffer
 	if r.bounded != nil {
-		err := r.gate.ReadReserved(r.id, func(capacity int64) (int64, error) {
-			var err error
-			result, err = r.bounded.ReadReserved(capacity)
-			return int64(result.Len()), err
-		})
-		return result, err
+		return r.bounded.ReadManaged(r.gate, r.id)
 	}
+	var result buf.MultiBuffer
 	err := r.gate.Read(r.id, func() (int64, error) {
 		var err error
 		result, err = r.source.ReadMultiBuffer()

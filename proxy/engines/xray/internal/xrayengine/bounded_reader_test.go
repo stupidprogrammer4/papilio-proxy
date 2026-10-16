@@ -55,6 +55,42 @@ func TestBoundedDecodedReaderRetainsEOFAndExactRequestedCapacity(t *testing.T) {
 	buf.ReleaseMulti(last)
 }
 
+func TestBoundedDecodedReaderStagesOnlyConfiguredBytesBeforeAdmission(t *testing.T) {
+	connection := &decodedTestConnection{remaining: []byte("hello"), eof: true}
+	source := &buf.BufferedReader{Reader: &buf.SingleReader{Reader: connection}}
+	reader, err := newBoundedDecodedReader(source, connection, 32, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	available, err := reader.readAvailableLocked(4)
+	if err != nil || available != 4 || connection.maxRead != 4 {
+		t.Fatal("prefetch exceeded configured admission chunk", available, err)
+	}
+	first, err := reader.takeLocked(2)
+	if err != nil || first.Len() != 2 {
+		t.Fatal("bounded admission did not return exact prefix", err)
+	}
+	buf.ReleaseMulti(first)
+	available, err = reader.readAvailableLocked(4)
+	if err != nil || available != 2 || connection.reads != 1 {
+		t.Fatal("unadmitted prefetch was not retained", available, err)
+	}
+	remainder, err := reader.takeLocked(2)
+	if err != nil || string(remainder[0].Bytes()) != "ll" {
+		t.Fatal("retained prefix changed", err)
+	}
+	buf.ReleaseMulti(remainder)
+	available, err = reader.readAvailableLocked(4)
+	if err != nil || available != 1 {
+		t.Fatal("payload accompanying EOF was lost", available, err)
+	}
+	last, err := reader.takeLocked(1)
+	if err != io.EOF || string(last[0].Bytes()) != "o" {
+		t.Fatal("EOF was not returned with the final admitted bytes", err)
+	}
+	buf.ReleaseMulti(last)
+}
+
 func TestBoundedDecodedReaderOwnsPrefetchWithoutReadingOrChargingRemainder(t *testing.T) {
 	connection := &decodedTestConnection{remaining: []byte("later")}
 	source := &buf.BufferedReader{Reader: &buf.SingleReader{Reader: connection}, Buffer: buf.MergeBytes(nil, []byte("prefetch"))}
