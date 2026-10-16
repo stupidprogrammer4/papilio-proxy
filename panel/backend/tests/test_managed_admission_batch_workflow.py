@@ -3,8 +3,10 @@
 import asyncio
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
+import httpx
+from papilio.infra.db.transaction import transaction
 from sqlalchemy import text
 
 from tests.test_managed_windows_workflow import ManagedWindowWorkflowFixture
@@ -80,6 +82,19 @@ class ManagedAdmissionBatchWorkflowTest(ManagedWindowWorkflowFixture):
         self.assertEqual(issued.status_code, 200, issued.text)
         windows = issued.json()["data"]["windows"]
         async with self.connection.uow() as fresh:
+            validity_rows = await fresh.execute(
+                text(
+                    "SELECT w.valid_until,t.claim_until FROM "
+                    "tbl_managed_windows w JOIN tbl_provision_tasks t "
+                    "ON t.id=w.provision_task_id "
+                    "WHERE w.id IN (:first,:second)"
+                ),
+                {
+                    "first": windows[0]["window"]["id"],
+                    "second": windows[1]["window"]["id"],
+                },
+            )
+            validities = list(validity_rows)
             startup_rows = await fresh.execute(
                 text(
                     "SELECT e.receipt_sha256 FROM tbl_managed_epoches e "
@@ -89,6 +104,17 @@ class ManagedAdmissionBatchWorkflowTest(ManagedWindowWorkflowFixture):
                 {"id": windows[0]["window"]["id"]},
             )
             startup_sha256 = startup_rows.scalar_one()
+        minimum_validity = datetime.now(UTC).replace(tzinfo=None) + timedelta(
+            seconds=20
+        )
+        self.assertTrue(
+            all(
+                valid_until > minimum_validity
+                and claim_until > minimum_validity
+                for valid_until, claim_until in validities
+            ),
+            f"Batch test fixture returned short-lived claims: {validities}",
+        )
         submissions = [
             {
                 "window_id": item["window"]["window"]["window_id"],
@@ -105,6 +131,51 @@ class ManagedAdmissionBatchWorkflowTest(ManagedWindowWorkflowFixture):
             "batch_request_key": "admission_batch_" + self.suffix,
             "windows": submissions,
         }
+        async with self.connection.uow() as setup:
+            async with transaction(setup):
+                await setup.execute(
+                    text(
+                        "CREATE TRIGGER fail_managed_batch_task_update "
+                        "BEFORE UPDATE ON tbl_provision_tasks FOR EACH ROW "
+                        "SIGNAL SQLSTATE '45000' "
+                        "SET MESSAGE_TEXT='controlled batch rollback'"
+                    )
+                )
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(
+                app=self.app, raise_app_exceptions=False
+            ),
+            base_url="https://admin.example.com",
+        ) as fault_client:
+            rejected = await fault_client.post(
+                route, headers=self.node_headers, json=body
+            )
+        self.assertEqual(rejected.status_code, 500, rejected.text)
+        async with self.connection.uow() as restore:
+            async with transaction(restore):
+                await restore.execute(
+                    text("DROP TRIGGER fail_managed_batch_task_update")
+                )
+        async with self.connection.uow() as fresh:
+            admission_count = await fresh.execute(
+                text(
+                    "SELECT COUNT(*) FROM tbl_managed_admissions "
+                    "WHERE window_id IN (:first,:second)"
+                ),
+                {
+                    "first": windows[0]["window"]["id"],
+                    "second": windows[1]["window"]["id"],
+                },
+            )
+            operation_count = await fresh.execute(
+                text(
+                    "SELECT COUNT(*) FROM tbl_managed_operation_batches "
+                    "WHERE request_key=:request_key"
+                ),
+                {"request_key": body["batch_request_key"]},
+            )
+            self.assertEqual(admission_count.scalar_one(), 0)
+            self.assertEqual(operation_count.scalar_one(), 0)
         response = await self.client.post(
             route, headers=self.node_headers, json=body
         )
@@ -149,6 +220,31 @@ class ManagedAdmissionBatchWorkflowTest(ManagedWindowWorkflowFixture):
                 },
             )
             self.assertEqual(count.scalar_one(), 2)
+            links = await fresh.execute(
+                text(
+                    "SELECT COUNT(*) FROM tbl_subscription_links "
+                    "WHERE subscription_id IN (:first,:second)"
+                ),
+                {
+                    "first": subscription["id"],
+                    "second": second_subscription_id,
+                },
+            )
+            self.assertEqual(links.scalar_one(), 2)
+            notifications = await fresh.execute(
+                text(
+                    "SELECT COUNT(*) FROM tbl_notifications "
+                    "WHERE event_key IN ("
+                    "SELECT CONCAT('activation:',id) "
+                    "FROM tbl_provision_requests "
+                    "WHERE subscription_id IN (:first,:second))"
+                ),
+                {
+                    "first": subscription["id"],
+                    "second": second_subscription_id,
+                },
+            )
+            self.assertEqual(notifications.scalar_one(), 2)
 
     @staticmethod
     def _submission(issued, expected, startup_sha256):
