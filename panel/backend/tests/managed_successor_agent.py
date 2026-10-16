@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import signal
 import socket
 import subprocess
 import time
@@ -48,6 +49,14 @@ class NativeWindowBatchResult:
     independent_traffic: bool
     quota_closed: bool
     expiry_closed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class NativeManagedCoreLossResult:
+    core_exited: bool
+    established_connection_closed: bool
+    restart_refused: bool
+    no_finality: bool
 
 
 def wait_for_managed_batch_epoch(
@@ -599,6 +608,280 @@ def run_native_managed_window_batch(
             quota_closed=quota_closed,
             expiry_closed=expiry_closed,
         )
+
+
+def run_native_managed_window_core_loss(
+    root: Path,
+    runtime_binary: Path,
+    registry: dict,
+    installation_id: int,
+    profiles: tuple[ManagedBatchProfileInput, ...],
+    api_url: str,
+    node: dict,
+    binaries: Path,
+) -> NativeManagedCoreLossResult:
+    if len(profiles) != 2 or len(
+        {item.profile_id for item in profiles}
+    ) != len(profiles):
+        raise AssertionError("native_core_loss_profile_set_invalid")
+    ordered_profiles = tuple(
+        sorted(profiles, key=lambda item: item.profile_id)
+    )
+    registry_policy = registry["registry"]
+    window_policy = registry_policy["window_policy"]
+    window_policy.update(
+        {
+            "max_windows": len(ordered_profiles) * 2,
+            "max_records": len(ordered_profiles) * 6,
+            "max_admission_receipts": len(ordered_profiles) * 2,
+            "max_epoch_seals": 2,
+        }
+    )
+    registry_policy["component_policy"]["max_barriers"] = (
+        len(ordered_profiles) * 4
+    )
+    registry["trusted_api_policy"]["window_policy_sha256"] = digest(
+        compact(window_policy, canonical=True)
+    )
+    profile_policies = [
+        {
+            "enabled": True,
+            "profile_id": item.profile_id,
+            "generation": item.generation,
+            "request_key": f"native-core-loss-{item.profile_id}",
+            "requested_bytes": item.requested_bytes,
+            "freeze_after_ms": 45000,
+            "operation_timeout_ms": 5000,
+            "retry_interval_ms": 100,
+            "max_attempts": 3,
+            "require_admission_receipt": item.provision_task_id > 0,
+            "provision_task_id": item.provision_task_id,
+        }
+        for item in ordered_profiles
+    ]
+    managed = {
+        **registry_policy,
+        "installation_id": installation_id,
+        "window_batch": {
+            "enabled": True,
+            "batch_request_key": f"native-core-loss-{installation_id}",
+            "max_profiles": len(ordered_profiles),
+            "profiles": profile_policies,
+        },
+        "epoch_seal": {
+            "enabled": True,
+            "request_id": f"{installation_id:032x}",
+            "operation_timeout_ms": 5000,
+            "retry_interval_ms": 100,
+            "max_attempts": 3,
+            "max_receipt_bytes": 131072,
+            "max_profiles": len(ordered_profiles),
+            "max_windows": len(ordered_profiles) * 2,
+            "max_journal_bytes": 4194304,
+            "max_epochs": 2,
+        },
+    }
+    config = {
+        "enabled": True,
+        "api_url": api_url,
+        "node_code": node["node"]["code"],
+        "state_directory": str(root / "unused-stock-state"),
+        "managed_installation": managed,
+        "poll_interval_ms": 300,
+        "http_timeout_ms": 15000,
+        "max_response_bytes": 2097152,
+        "max_idle_connections": 2,
+        "page_size": 8,
+        "max_pages_per_poll": 2,
+    }
+    config_path = root / "core-loss-agent-config.json"
+    private_write(config_path, compact(config))
+    environment = {**os.environ, "PAPILIO_NODE_KEY": node["agent_key"]}
+    command = [str(runtime_binary), "-config", str(config_path)]
+    with ExitStack() as stack:
+        stock = stage_stock(
+            root, binaries / "xray", binaries.parent / "artifacts.json"
+        )
+        process = launch(
+            command,
+            stack,
+            root / "window-batch-agent.log",
+            environment=environment,
+        )
+        directory, states = wait_for_managed_batch_epoch(
+            root,
+            process,
+            ordered_profiles,
+            0,
+            30,
+            Path(registry_policy["binary"]),
+        )
+        installation_path = (
+            root / "managed-agent" / "managed-installation.json"
+        )
+        installation = json.loads(installation_path.read_bytes())
+        artifact = json.loads(installation["claim"]["artifact_content"])
+        endpoints = {}
+        for item in ordered_profiles:
+            binding = states[item.profile_id]["issued"]["window"]["binding"]
+            inbound = next(
+                row
+                for row in artifact["inbounds"]
+                if row["tag"] == binding["inbound_tag"]
+            )
+            credential = next(
+                row
+                for row in inbound["settings"]["clients"]
+                if row["email"] == binding["counter_identity"]
+            )
+            endpoints[item.profile_id] = (inbound["port"], credential["id"])
+        purchased = next(
+            item for item in ordered_profiles if item.provision_task_id > 0
+        )
+        target = EchoTarget()
+        stack.callback(target.close)
+        tls = InstalledTlsEndpoints(
+            endpoints,
+            Path(registry_policy["certificates"][0]["path"]),
+        )
+        client = BoundStockClient(
+            root, stock, tls, purchased.profile_id, "127.0.0.2", stack
+        )
+        connection = client.connect(target.port)
+        stack.callback(connection.close)
+        roundtrip(connection, b"paid-grant-before-core-loss")
+        if process.poll() is not None:
+            raise AssertionError(
+                "native_core_loss_agent_exited_before_injection:"
+                + (root / "window-batch-agent.log").read_text().strip()
+            )
+        child_pid = _managed_child_pid(
+            process, Path(registry_policy["binary"]), root
+        )
+        os.kill(child_pid, signal.SIGKILL)
+        exit_code = process.wait(timeout=60)
+        if exit_code == 0:
+            raise AssertionError("native_core_loss_agent_reported_success")
+        if _managed_child_pids(Path(registry_policy["binary"]), root):
+            raise AssertionError("native_core_loss_child_survived")
+        diagnostic = (root / "window-batch-agent.log").read_text().strip()
+        if diagnostic != (
+            "managed_window_batch_freeze_unresolved:"
+            "managed_window_control_unavailable"
+        ):
+            raise AssertionError("native_core_loss_error_not_reported")
+        connection.settimeout(3)
+        try:
+            established_connection_closed = connection.recv(1) == b""
+        except (OSError, TimeoutError):
+            established_connection_closed = False
+        if not established_connection_closed:
+            raise AssertionError(
+                "native_core_loss_established_connection_survived"
+            )
+        with socket.socket() as listener:
+            listener.settimeout(0.2)
+            listener_closed = (
+                listener.connect_ex(
+                    ("127.0.0.1", endpoints[purchased.profile_id][0])
+                )
+                != 0
+            )
+        if not listener_closed:
+            raise AssertionError("native_core_loss_listener_survived")
+        profile_states = []
+        for item in ordered_profiles:
+            state_path = (
+                directory
+                / "managed-window-profiles"
+                / str(item.profile_id)
+                / "managed-window-cycle.json"
+            )
+            profile_state = json.loads(state_path.read_bytes())
+            if profile_state.get("submission") or profile_state.get(
+                "finality"
+            ):
+                raise AssertionError("native_core_loss_finality_fabricated")
+            profile_states.append(profile_state)
+        epoch_path = root / "control" / "epoch-active.json"
+        epoch_before_restart = epoch_path.read_bytes()
+        installation_before_restart = installation_path.read_bytes()
+        if json.loads(epoch_before_restart).get("state") != "open_unresolved":
+            raise AssertionError("native_core_loss_epoch_not_unresolved")
+        restart = launch(
+            command + ["-once"],
+            stack,
+            root / "core-loss-restart.log",
+            environment=environment,
+        )
+        restart_exit = restart.wait(timeout=20)
+        if restart_exit == 0:
+            raise AssertionError("native_core_loss_restart_not_refused")
+        if epoch_path.read_bytes() != epoch_before_restart:
+            raise AssertionError("native_core_loss_epoch_restarted")
+        if installation_path.read_bytes() != installation_before_restart:
+            raise AssertionError("native_core_loss_installation_mutated")
+        with socket.socket() as listener:
+            listener.settimeout(0.2)
+            listener_closed = (
+                listener_closed
+                and listener.connect_ex(
+                    ("127.0.0.1", endpoints[purchased.profile_id][0])
+                )
+                != 0
+            )
+        if not listener_closed:
+            raise AssertionError("native_core_loss_restart_opened_listener")
+        no_finality = all(
+            state.get("submission") is None and state.get("finality") is None
+            for state in profile_states
+        )
+        return NativeManagedCoreLossResult(
+            core_exited=True,
+            established_connection_closed=established_connection_closed,
+            restart_refused=listener_closed,
+            no_finality=no_finality,
+        )
+
+
+def _managed_child_pid(process, expected_binary: Path, root: Path) -> int:
+    matches = _managed_child_pids(expected_binary, root)
+    if len(matches) != 1:
+        diagnostic = "unavailable"
+        try:
+            raw = json.loads((root / "window-batch-agent.log").read_bytes())
+            value = raw.get("error", "")
+            tokens = re.findall(r"managed_[a-z0-9_]+", value)
+            if tokens:
+                diagnostic = tokens[-1]
+        except (OSError, ValueError, AttributeError, TypeError):
+            pass
+        raise AssertionError(
+            "native_core_loss_managed_child_not_unique:"
+            f"exit={process.poll()}:error={diagnostic}:matches={matches}"
+        )
+    return matches[0]
+
+
+def _managed_child_pids(expected_binary: Path, root: Path) -> list[int]:
+    expected = expected_binary.resolve(strict=True)
+    settings_path = str(
+        root / "managed-agent" / "managed-settings.json"
+    ).encode()
+    matches = []
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdecimal():
+            continue
+        pid = int(entry.name)
+        executable = entry / "exe"
+        try:
+            actual = executable.resolve(strict=True)
+            command_line = (entry / "cmdline").read_bytes().split(b"\0")
+        except OSError:
+            continue
+        if actual == expected and settings_path in command_line:
+            matches.append(pid)
+    return matches
 
 
 def epoch_journal(root, epoch_index):

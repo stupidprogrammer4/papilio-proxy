@@ -23,6 +23,7 @@ from tests.managed_installation_agent import actual_registry, compact, digest
 from tests.managed_successor_agent import (
     ManagedBatchProfileInput,
     run_native_managed_window_batch,
+    run_native_managed_window_core_loss,
     run_native_successor_cycles,
 )
 from tests.real_core_runtime import RealCoreRuntime
@@ -33,6 +34,198 @@ from tests.test_managed_installation_workflow import (
 
 class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
     paid_managed_fixture = True
+
+    async def test_paid_open_grants_remain_unresolved_after_core_loss(self):
+        runtime_binary = os.environ.get("PAPILIO_RUNTIME_TEST_BINARY")
+        managed_binary = os.environ.get("PAPILIO_MANAGED_TEST_BINARY")
+        binaries = os.environ.get("PAPILIO_CORE_BIN_DIR")
+        if not runtime_binary or not managed_binary or not binaries:
+            self.skipTest(
+                "Explicit owned fresh agent/managed/stock binaries required"
+            )
+        assert runtime_binary and managed_binary and binaries
+        self.add_second_managed_profile = True
+        self.settings.usage.policy.mode = "reserved"
+        validity_ms = 60000
+        with tempfile.TemporaryDirectory(
+            prefix="papilio-native-core-loss-"
+        ) as name:
+            root = Path(name)
+            root.chmod(0o700)
+            runtime = await asyncio.to_thread(
+                RealCoreRuntime(root / "targets", Path(binaries), 15).__enter__
+            )
+            listener = socket.socket()
+            listener.bind(("127.0.0.1", 0))
+            server = uvicorn.Server(
+                uvicorn.Config(
+                    self.app,
+                    lifespan="off",
+                    access_log=False,
+                    log_level="error",
+                )
+            )
+            serving = asyncio.create_task(server.serve(sockets=[listener]))
+            try:
+                inputs = root / "inputs"
+                inputs.mkdir(mode=0o700)
+                (inputs / "cert.pem").write_bytes(
+                    runtime.certificate.read_bytes()
+                )
+                (inputs / "key.pem").write_bytes(runtime.key.read_bytes())
+                (inputs / "cert.pem").chmod(0o600)
+                (inputs / "key.pem").chmod(0o600)
+                (
+                    _,
+                    purchased_subscription,
+                    node,
+                    configuration,
+                ) = await self.setup_installation(inputs, runtime.port())
+                async with self.connection.uow() as fresh:
+                    rows = await fresh.execute(
+                        text(
+                            "SELECT p.id AS profile_id, "
+                            "p.subscription_id AS subscription_id, "
+                            "t.id AS task_id "
+                            "FROM tbl_profiles p "
+                            "LEFT JOIN tbl_provision_tasks t "
+                            "ON t.profile_id=p.id AND t.action='apply' "
+                            "WHERE p.configuration_id=:configuration "
+                            "ORDER BY p.id"
+                        ),
+                        {"configuration": configuration["id"]},
+                    )
+                    profile_rows = tuple(rows.all())
+                self.assertEqual(len(profile_rows), 2)
+                purchased = [
+                    row
+                    for row in profile_rows
+                    if row.subscription_id == purchased_subscription["id"]
+                ]
+                self.assertEqual(len(purchased), 1)
+                (purchased_profile,) = purchased
+                self.assertIsNotNone(purchased_profile.task_id)
+                profiles = tuple(
+                    ManagedBatchProfileInput(
+                        profile_id=row.profile_id,
+                        generation=0,
+                        provision_task_id=int(row.task_id or 0),
+                        requested_bytes=(
+                            64
+                            if row.subscription_id
+                            == purchased_subscription["id"]
+                            else 65536
+                        ),
+                    )
+                    for row in profile_rows
+                )
+                registry = await asyncio.to_thread(
+                    actual_registry,
+                    root,
+                    inputs,
+                    Path(managed_binary),
+                )
+                registry["registry"]["window_policy"].update(
+                    {
+                        "max_windows": 4,
+                        "max_records": 12,
+                        "max_admission_receipts": 4,
+                        "max_validity_ms": validity_ms,
+                        "max_epoch_seals": 2,
+                    }
+                )
+                registry["registry"]["component_policy"]["max_barriers"] = 4
+                registry["trusted_api_policy"]["window_policy_sha256"] = (
+                    digest(
+                        compact(
+                            registry["registry"]["window_policy"],
+                            canonical=True,
+                        )
+                    )
+                )
+                policy = self.settings.managed_adapter
+                assert policy is not None and policy.capacity is not None
+                capacity = policy.capacity.model_copy(
+                    update={
+                        "max_validity_ms": validity_ms,
+                        "max_window_bytes": 131072,
+                    }
+                )
+                self.settings.managed_adapter = policy.model_copy(
+                    update={
+                        **registry["trusted_api_policy"],
+                        "capacity": capacity,
+                        "window_mode": "reserved",
+                        "paid_mode": "strict_admission",
+                        "epoch_seal_policy": ManagedEpochSealPolicy(
+                            mode="strict",
+                            limits=ManagedEpochSealLimits(
+                                max_windows_per_epoch=4,
+                                max_receipt_bytes=131072,
+                                max_epochs=2,
+                            ),
+                        ),
+                    }
+                )
+                issued = await self.issue()
+                self.assertEqual(issued.status_code, 200, issued.text)
+                installation_id = issued.json()["data"]["id"]
+                api_url = f"http://127.0.0.1:{listener.getsockname()[1]}"
+                result = await asyncio.to_thread(
+                    run_native_managed_window_core_loss,
+                    root,
+                    Path(runtime_binary),
+                    registry,
+                    installation_id,
+                    profiles,
+                    api_url,
+                    node,
+                    Path(binaries),
+                )
+                self.assertTrue(
+                    result.core_exited
+                    and result.established_connection_closed
+                    and result.restart_refused
+                    and result.no_finality
+                )
+                async with self.connection.uow() as fresh:
+                    grants = await fresh.execute(
+                        text(
+                            "SELECT g.allocated_bytes,g.upload_bytes,"
+                            "g.download_bytes,g.is_closed,g.sequence "
+                            "FROM tbl_managed_windows w "
+                            "JOIN tbl_usage_grants g ON g.id=w.grant_id "
+                            "WHERE w.subscription_id=:subscription "
+                            "ORDER BY w.id"
+                        ),
+                        {"subscription": purchased_subscription["id"]},
+                    )
+                    self.assertEqual(
+                        tuple(grants.all()), ((64, 0, 0, False, 0),)
+                    )
+                    events = await fresh.execute(
+                        text(
+                            "SELECT COUNT(*) FROM tbl_usage_events "
+                            "WHERE subscription_id=:subscription"
+                        ),
+                        {"subscription": purchased_subscription["id"]},
+                    )
+                    self.assertEqual(events.scalar_one(), 0)
+                    windows = await fresh.execute(
+                        text(
+                            "SELECT COUNT(*) FROM tbl_managed_windows "
+                            "WHERE subscription_id=:subscription"
+                        ),
+                        {"subscription": purchased_subscription["id"]},
+                    )
+                    self.assertEqual(windows.scalar_one(), 1)
+            finally:
+                server.should_exit = True
+                try:
+                    await asyncio.wait_for(serving, timeout=10)
+                finally:
+                    listener.close()
+                    await asyncio.to_thread(runtime.__exit__, None, None, None)
 
     async def test_actual_paid_windows_survive_epoch_rollover_and_replay(self):
         runtime_binary = os.environ.get("PAPILIO_RUNTIME_TEST_BINARY")
