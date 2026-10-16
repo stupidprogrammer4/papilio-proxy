@@ -84,14 +84,14 @@ func TestManagedEpochSealCycleDurableProofFinalityAndDisabledRecovery(t *testing
 		switch r.URL.Path {
 		case "/v1/nodes/owned/managed-windows/" + initial.Issued.Window.WindowID + "/finalize":
 			finalCalls.Add(1)
-			var submission ManagedWindowFinalSubmission
-			if json.NewDecoder(r.Body).Decode(&submission) != nil || submission != *initial.Submission {
-				t.Error("exact original finality changed")
-			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "data": *initial.Finality})
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": false,
+				"error":   map[string]any{"message_code": "managed_final_receipt_reused"},
+			})
 		case "/v1/nodes/owned/managed-epochs/" + accepted.Epoch + "/seal":
 			sealCalls.Add(1)
-			if finalCalls.Load() == 0 || state.Windows[0].Finality == nil {
+			if finalCalls.Load() != 0 || state.Windows[0].Finality == nil {
 				t.Error("native seal before finality")
 			}
 			if refuse.Load() {
@@ -167,6 +167,9 @@ func TestManagedEpochSealCycleDurableProofFinalityAndDisabledRecovery(t *testing
 	beforeFinal, beforeSeal := finalCalls.Load(), sealCalls.Load()
 	if err = replayManagedEpochSealCycle(context.Background(), client, p, &ManagedEpochSealPolicy{}, journal, installation); err != nil || finalCalls.Load() != beforeFinal || sealCalls.Load() != beforeSeal {
 		t.Fatal("complete replay mutated remote state", err)
+	}
+	if finalCalls.Load() != 0 {
+		t.Fatal("epoch seal repeated already accepted window finality")
 	}
 	after, err := managedReadPrivate(filepath.Join(journal.root, "managed-window-cycle.json"), journal.maxBytes)
 	if err != nil || string(after) != string(initialBefore) {

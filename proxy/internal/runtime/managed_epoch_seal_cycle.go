@@ -268,23 +268,11 @@ func settleManagedEpochSeal(ctx context.Context, client *Client, p ManagedInstal
 	if validateManagedEpochSealSnapshots(*state) != nil {
 		return errors.New("managed_epoch_seal_snapshots_unresolved")
 	}
-	for index := range state.Windows {
-		entry := &state.Windows[index]
+	for _, entry := range state.Windows {
 		if entry.Finality != nil && validateManagedChainFinality(entry.Issued, entry.Submission, *entry.Finality, state.Policy.MaxReceiptBytes) != nil {
 			return errors.New("managed_epoch_seal_finality_invalid")
 		}
-		err := managedCycleRetry(ctx, state.Policy.retryPolicy(), func(operation context.Context) error {
-			accepted, callErr := client.FinalizeManagedWindow(operation, entry.Issued, entry.Submission)
-			if callErr != nil {
-				return callErr
-			}
-			if entry.Finality != nil && *entry.Finality != accepted {
-				return errors.New("managed_epoch_seal_finality_conflict")
-			}
-			entry.Finality = &accepted
-			return saveManagedEpochSeal(journal, *state)
-		})
-		if err != nil {
+		if entry.Finality == nil {
 			return errors.New("managed_epoch_seal_finality_unresolved")
 		}
 	}
