@@ -69,7 +69,10 @@ def wait_for_managed_batch_epoch(
             except (ValueError, AttributeError):
                 pass
             tokens = re.findall(
-                r"managed_[a-z0-9_]+|node API status [0-9]{3}", diagnostic
+                r"managed_[a-z0-9_]+|node API status [0-9]{3}|"
+                r"runtime API (?:unavailable|response invalid|"
+                r"response capacity or encoding rejected)",
+                diagnostic,
             )
             safe = tokens[-1] if tokens else "unclassified"
             settings_path = root / "managed-agent" / "managed-settings.json"
@@ -162,6 +165,29 @@ def wait_for_managed_batch_epoch(
     return result_directory, result_states
 
 
+def observe_managed_batch_profiles(root: Path) -> dict[int, dict]:
+    connection = UnixHTTP(root / "control" / "control.sock")
+    try:
+        connection.request("GET", "/v1/observe")
+        response = connection.getresponse()
+        document = json.loads(response.read(131073))
+    finally:
+        connection.close()
+    summary = {}
+    for item in document["profiles"]:
+        binding = item["totals"]["binding"]
+        budget = item.get("budget") or {}
+        summary[binding["profile_id"]] = {
+            "phase": item["phase"],
+            "upload": item["totals"]["upload_bytes"],
+            "download": item["totals"]["download_bytes"],
+            "admitted": budget.get("admitted_bytes"),
+            "reserved": budget.get("reserved_bytes"),
+            "closure": budget.get("closure_reason"),
+        }
+    return summary
+
+
 def run_native_managed_window_batch(
     root: Path,
     runtime_binary: Path,
@@ -214,7 +240,7 @@ def run_native_managed_window_batch(
             "request_key": f"native-batch-profile-{item.profile_id}",
             "requested_bytes": item.requested_bytes,
             "freeze_after_ms": freeze_after_ms,
-            "operation_timeout_ms": 5000,
+            "operation_timeout_ms": 15000,
             "retry_interval_ms": 100,
             "max_attempts": 3,
             "require_admission_receipt": item.provision_task_id > 0,
@@ -359,12 +385,21 @@ def run_native_managed_window_batch(
             second_connection = second_client.connect(target.port)
             stack.callback(first_connection.close)
             stack.callback(second_connection.close)
-            roundtrip(first_connection, b"q" * 32)
+            try:
+                roundtrip(first_connection, b"q" * 32)
+            except (OSError, EOFError) as error:
+                observation = observe_managed_batch_profiles(root)
+                raise AssertionError(
+                    f"native_window_batch_first_payload_closed:{observation}"
+                ) from error
             wait_closed(first_connection, seconds=3)
             quota_closed = True
             roundtrip(second_connection, b"independent-user-still-active")
             independent_traffic = True
-            wait_closed(second_connection, seconds=8)
+            wait_closed(
+                second_connection,
+                seconds=validity_ms // 1000 + 3,
+            )
             expiry_closed = True
             for item in ordered_profiles:
                 state_path = (

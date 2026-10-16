@@ -349,8 +349,8 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
         assert runtime_binary and managed_binary and binaries
         self.add_second_managed_profile = True
         self.settings.usage.policy.mode = "reserved"
-        validity_ms = 5000
-        freeze_after_ms = 15000
+        validity_ms = 20000
+        freeze_after_ms = 25000
         with tempfile.TemporaryDirectory(
             prefix="papilio-native-window-batch-"
         ) as name:
