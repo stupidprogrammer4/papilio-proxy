@@ -14,6 +14,7 @@ from src.modules.billing.wallet.domain.results import WalletLedgerFacts
 
 class TopupOut(BaseModel):
     id: int
+    revision: int
     customer_id: int
     amount_rial: PositiveRialAmount
     requested_amount_rial: PositiveRialAmount | None

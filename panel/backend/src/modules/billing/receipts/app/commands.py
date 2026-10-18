@@ -1,6 +1,8 @@
 import asyncio
 import base64
+from collections.abc import Sequence
 from hashlib import sha256
+from typing import Literal, cast
 
 from papilio.errors.exceptions import ConflictException, NotFoundException
 from papilio.infra.db.tools.conflicts import handle_conflicts
@@ -10,13 +12,19 @@ from papilio.security.crypto import decrypt, encrypt
 from src.config.pagination import ServicePage, page_size
 from src.config.settings import PapilioSettings
 from src.modules.billing.receipts.app.images import ReceiptImages
+from src.modules.billing.receipts.domain.extraction import (
+    ReceiptExtractionFields,
+)
 from src.modules.billing.receipts.domain.models import PaymentReceiptModel
 from src.modules.billing.receipts.domain.results import (
     ReceiptDetails,
     ReceiptDownload,
 )
-from src.modules.billing.receipts.infra.mysql import PaymentReceiptRepository
-from src.modules.billing.wallet.infra.mysql import TopupRepository
+from src.modules.billing.receipts.infra.mysql import (
+    PaymentReceiptOutboxRepository,
+    PaymentReceiptRepository,
+)
+from src.modules.billing.wallet.interfaces import ITopupRecordService
 from src.modules.operations.preferences.interfaces import IPreferencesService
 
 
@@ -24,12 +32,14 @@ class PaymentReceiptCommand:
     def __init__(
         self,
         repo: PaymentReceiptRepository,
-        topups: TopupRepository,
+        outbox: PaymentReceiptOutboxRepository,
+        topups: ITopupRecordService,
         settings: PapilioSettings,
         preferences: IPreferencesService,
         images: ReceiptImages,
     ) -> None:
         self.repo = repo
+        self.outbox = outbox
         self.topups = topups
         self.settings = settings
         self.preferences = preferences
@@ -65,9 +75,8 @@ class PaymentReceiptCommand:
         digest = hasher.hexdigest()
         existing = await self.repo.by_content(topup_id, digest)
         if existing is not None:
-            return ReceiptDetails.model_validate(
-                existing, from_attributes=True
-            )
+            await self.outbox.ensure_pending(existing.id)
+            return await self._details(existing)
         if topup.status != "pending":
             raise ConflictException(
                 message="این پرداخت قبلاً بررسی شده است.",
@@ -99,6 +108,7 @@ class PaymentReceiptCommand:
                 encrypted_payload=ciphertext,
             )
         )
+        await self.outbox.ensure_pending(result.id)
         return ReceiptDetails.model_validate(result, from_attributes=True)
 
     async def search(
@@ -111,13 +121,22 @@ class PaymentReceiptCommand:
         await self._owned(topup_id, customer_id)
         limit = page_size(self.settings, per_page)
         result = await self.repo.page(topup_id, (page - 1) * limit, limit)
+        details = await asyncio.to_thread(
+            receipt_details,
+            result.items,
+            self.settings.configuration_encryption_key,
+        )
         return ServicePage(
-            [
-                ReceiptDetails.model_validate(row, from_attributes=True)
-                for row in result.items
-            ],
+            details,
             result.total_items,
             limit,
+        )
+
+    async def _details(self, row: PaymentReceiptModel) -> ReceiptDetails:
+        return await asyncio.to_thread(
+            receipt_detail,
+            row,
+            self.settings.configuration_encryption_key,
         )
 
     async def download(
@@ -138,7 +157,7 @@ class PaymentReceiptCommand:
         return ReceiptDownload(content=content, media_type=row.media_type)
 
     async def _owned(self, topup_id: int, customer_id: int | None) -> None:
-        topup = await self.topups.get_by_id(topup_id)
+        topup = await self.topups.get(topup_id)
         if topup is None or (
             customer_id is not None and topup.customer_id != customer_id
         ):
@@ -152,4 +171,39 @@ def missing(topup_id: int) -> NotFoundException:
         entity="topup",
         identifier="id",
         identifier_value=topup_id,
+    )
+
+
+def receipt_details(
+    rows: Sequence[PaymentReceiptModel], encryption_key: str
+) -> list[ReceiptDetails]:
+    details: list[ReceiptDetails] = []
+    for row in rows:
+        details.append(receipt_detail(row, encryption_key))
+    return details
+
+
+def receipt_detail(
+    row: PaymentReceiptModel, encryption_key: str
+) -> ReceiptDetails:
+    created_at = row.created_at
+    if created_at is None:
+        raise RuntimeError("Persisted receipt has no creation timestamp")
+    extraction = None
+    status = cast(
+        Literal["not_requested", "pending", "complete", "failed"],
+        row.ocr_status,
+    )
+    if row.encrypted_extraction is not None:
+        extraction = ReceiptExtractionFields.model_validate_json(
+            decrypt(row.encrypted_extraction, encryption_key)
+        )
+    return ReceiptDetails(
+        id=row.id,
+        topup_id=row.topup_id,
+        media_type=row.media_type,
+        size_bytes=row.size_bytes,
+        created_at=created_at,
+        ocr_status=status,
+        extraction=extraction,
     )

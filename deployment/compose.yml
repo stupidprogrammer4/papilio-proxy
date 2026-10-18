@@ -21,6 +21,22 @@ x-api: &api
     mysql: {condition: service_healthy}
     redis: {condition: service_healthy}
 services:
+  nats:
+    image: ${NATS_IMAGE:-nats:2.15.1-alpine3.22}
+    labels: {io.papilio-proxy.state: "${STATE_DIR}"}
+    command: [--jetstream, --store_dir, /data]
+    volumes:
+      - nats-data:/data
+    networks: [events]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, nc, -z, 127.0.0.1, "4222"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
   mysql:
     image: ${MYSQL_IMAGE:-mysql:8.4}
     labels: {io.papilio-proxy.state: "${STATE_DIR}"}
@@ -63,13 +79,34 @@ services:
     command: [python, /opt/deployment/bootstrap.py]
   api:
     <<: *api
+    networks: [default, events]
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      nats: {condition: service_healthy}
+      events-worker: {condition: service_healthy}
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
       interval: 5s
       timeout: 3s
       retries: 30
+  events-worker:
+    <<: *api
+    networks: [default, events]
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      nats: {condition: service_healthy}
+    command:
+      [python, -m, papilio_tasks, events, run, "src.apps.events:app"]
+    healthcheck:
+      test: [CMD, python, -m, src.apps.events_health]
+      interval: 5s
+      timeout: 3s
+      retries: 30
   worker:
     <<: *api
+    networks: [default, events]
     command: [python, -m, taskiq, worker, "src.apps.scheduler:broker", --workers, "${WORKER_COUNT:-1}", --max-async-tasks, "${WORKER_CONCURRENCY:-8}"]
     depends_on:
       api: {condition: service_healthy}
@@ -135,6 +172,8 @@ volumes:
     labels: {io.papilio-proxy.state: "${STATE_DIR}"}
   redis-data:
     labels: {io.papilio-proxy.state: "${STATE_DIR}"}
+  nats-data:
+    labels: {io.papilio-proxy.state: "${STATE_DIR}"}
   caddy-data:
     labels: {io.papilio-proxy.state: "${STATE_DIR}"}
   caddy-config:
@@ -155,3 +194,6 @@ networks:
     ipam:
       config:
         - subnet: ${NETWORK_SUBNET:-172.30.58.0/24}
+  events:
+    internal: true
+    labels: {io.papilio-proxy.state: "${STATE_DIR}"}

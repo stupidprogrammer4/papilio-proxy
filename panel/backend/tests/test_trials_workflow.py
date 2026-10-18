@@ -349,7 +349,10 @@ class TrialsWorkflowTest(SupportWorkflowTest, Paid):
             )
             await self.post(
                 f"/v1/admin/payments/topups/{topup['id']}/approve",
-                {"bank_reference": "trialpay_" + uuid4().hex},
+                {
+                    "expected_revision": 1,
+                    "bank_reference": "trialpay_" + uuid4().hex,
+                },
             )
             paid = await self.post(
                 "/v1/admin/subscriptions",

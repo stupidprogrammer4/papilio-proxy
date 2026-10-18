@@ -473,6 +473,7 @@ class CheckoutWorkflowTest(CheckoutWorkflowFixture):
         await self.post(
             f"/v1/admin/payments/topups/{topup['id']}/approve",
             {
+                "expected_revision": 1,
                 "bank_reference": "intent_" + self.suffix,
             },
         )
@@ -611,7 +612,10 @@ class CheckoutWorkflowTest(CheckoutWorkflowFixture):
             self.assertEqual(before, 1)
             approved = await self.post(
                 f"/v1/admin/payments/topups/{intent['topup_id']}/approve",
-                {"bank_reference": "same_queue_" + self.suffix},
+                {
+                    "expected_revision": 1,
+                    "bank_reference": "same_queue_" + self.suffix,
+                },
             )
             self.assertEqual(approved["status"], "approved")
             self.assertEqual(
@@ -619,7 +623,10 @@ class CheckoutWorkflowTest(CheckoutWorkflowFixture):
             )
             await self.post(
                 f"/v1/admin/payments/topups/{intent['topup_id']}/approve",
-                {"bank_reference": "same_queue_" + self.suffix},
+                {
+                    "expected_revision": 1,
+                    "bank_reference": "same_queue_" + self.suffix,
+                },
             )
             self.assertEqual(
                 await redis.xlen(self.checkout_namespace + ":jobs"), before + 2
@@ -728,7 +735,8 @@ class CheckoutWorkflowTest(CheckoutWorkflowFixture):
             )["data"]
             self.assertEqual(pending["status"], "pending")
             await self.post(
-                f"/v1/admin/payments/topups/{other_topup['id']}/reject"
+                f"/v1/admin/payments/topups/{other_topup['id']}/reject",
+                {"expected_revision": 1},
             )
             accepted = await self.upload_checkout_sms(
                 first["device"]["id"],
@@ -852,12 +860,18 @@ class CheckoutWorkflowTest(CheckoutWorkflowFixture):
                 )
         approved = await self.post(
             f"/v1/admin/payments/topups/{cancelled['topup_id']}/approve",
-            {"bank_reference": "cancel_" + self.suffix},
+            {
+                "expected_revision": 1,
+                "bank_reference": "cancel_" + self.suffix,
+            },
         )
         self.assertEqual(approved["status"], "approved")
         approved = await self.post(
             f"/v1/admin/payments/topups/{expired['topup_id']}/approve",
-            {"bank_reference": "expire_" + self.suffix},
+            {
+                "expected_revision": 1,
+                "bank_reference": "expire_" + self.suffix,
+            },
         )
         self.assertEqual(approved["status"], "approved")
         outcome = await asyncio.to_thread(
@@ -954,7 +968,7 @@ class CheckoutWorkflowTest(CheckoutWorkflowFixture):
         )
         await self.post(
             f"/v1/admin/payments/topups/{topup['id']}/approve",
-            {"bank_reference": "busy_" + self.suffix},
+            {"expected_revision": 1, "bank_reference": "busy_" + self.suffix},
         )
         async with self.app.state.dishka_container() as scope:
             offers = await scope.get(ICheckoutOfferQuery)
@@ -1020,7 +1034,10 @@ class CheckoutWorkflowTest(CheckoutWorkflowFixture):
         )
         await self.post(
             f"/v1/admin/payments/topups/{extra['id']}/approve",
-            {"bank_reference": "old_wallet_" + self.suffix},
+            {
+                "expected_revision": 1,
+                "bank_reference": "old_wallet_" + self.suffix,
+            },
         )
         async with self.app.state.dishka_container() as scope:
             unit = await scope.get(MySQLUnitOfWork)
@@ -1037,7 +1054,10 @@ class CheckoutWorkflowTest(CheckoutWorkflowFixture):
                 credited = await asyncio.create_task(
                     self.post(
                         f"/v1/admin/payments/topups/{intent['topup_id']}/approve",
-                        {"bank_reference": "new_wallet_" + self.suffix},
+                        {
+                            "expected_revision": 1,
+                            "bank_reference": "new_wallet_" + self.suffix,
+                        },
                     ),
                     context=Context(),
                 )
@@ -1127,7 +1147,10 @@ class CheckoutWorkflowTest(CheckoutWorkflowFixture):
         self.assertEqual(changed.status_code, 200, changed.text)
         await self.post(
             f"/v1/admin/payments/topups/{intent['topup_id']}/approve",
-            {"bank_reference": "changed_" + self.suffix},
+            {
+                "expected_revision": 1,
+                "bank_reference": "changed_" + self.suffix,
+            },
         )
         outcome = await asyncio.to_thread(
             _exercise_native_runtime,
@@ -1338,7 +1361,10 @@ class CheckoutWorkflowTest(CheckoutWorkflowFixture):
         _, headers, _, intent = await self.pending_intent("prefs_rr")
         await self.post(
             f"/v1/admin/payments/topups/{intent['topup_id']}/approve",
-            {"bank_reference": "prefs_rr_" + self.suffix},
+            {
+                "expected_revision": 1,
+                "bank_reference": "prefs_rr_" + self.suffix,
+            },
         )
         prefs = (await self.get("/v1/admin/settings"))["data"]
         prefs["values"]["fulfillment"]["failure_action"] = "refund_wallet"

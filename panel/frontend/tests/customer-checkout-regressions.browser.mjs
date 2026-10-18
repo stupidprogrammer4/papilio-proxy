@@ -156,7 +156,7 @@ try{
   const dialog=await newCheckout(page);
   await dialog.getByRole('button',{name:'Confirm checkout',exact:true}).click();
   await dialog.getByRole('button',{name:'Cancel unresolved request',exact:true}).click();
-  const retry=dialog.getByRole('button',{name:'Retry request cancellation',exact:true});
+  const retry=dialog.getByRole('button',{name:'Retry cancellation',exact:true});
   await retry.waitFor();
   assert.equal(await dialog.getByRole('button',{name:'Retry same checkout',exact:true}).isDisabled(),true);
   assert.deepEqual(retires[0],{request_key:state.creates[0].request_key});
@@ -201,7 +201,7 @@ try{
   const dialog=await newCheckout(page);
   await dialog.getByRole('button',{name:'Confirm checkout',exact:true}).click();
   await dialog.getByRole('button',{name:'Cancel unresolved request',exact:true}).click();
-  await dialog.getByRole('button',{name:'Retry request cancellation',exact:true}).waitFor();
+  await dialog.getByRole('button',{name:'Retry cancellation',exact:true}).waitFor();
   assert.equal(await dialog.getByRole('button',{name:'Retry same checkout',exact:true}).isDisabled(),true);
   assert.equal(await dialog.getByRole('heading',{name:'Checkout #71'}).count(),0);
   assert.equal(state.creates.length,1);

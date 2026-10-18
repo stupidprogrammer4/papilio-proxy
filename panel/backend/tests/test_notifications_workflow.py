@@ -187,7 +187,10 @@ class NotificationsWorkflowTest(SupportWorkflowTest):
                 "/v1/admin/payments/topups",
                 {"customer_id": customer_id, "amount_rial": 200_001},
             )
-            approval = {"bank_reference": "notification_" + uuid4().hex}
+            approval = {
+                "expected_revision": 1,
+                "bank_reference": "notification_" + uuid4().hex,
+            }
             paid = await self.client.post(
                 f"/v1/admin/payments/topups/{topup['id']}/approve",
                 headers=self.headers,

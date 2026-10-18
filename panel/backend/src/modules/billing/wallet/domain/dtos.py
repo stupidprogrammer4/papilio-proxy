@@ -11,7 +11,12 @@ class TopupCreate(BaseDTO):
 
 
 class TopupApproval(BaseDTO):
+    expected_revision: int = Field(gt=0)
     bank_reference: str = Field(min_length=4, max_length=128)
+
+
+class TopupRejection(BaseDTO):
+    expected_revision: int = Field(gt=0)
 
 
 class TopupSearch(BaseQuery):

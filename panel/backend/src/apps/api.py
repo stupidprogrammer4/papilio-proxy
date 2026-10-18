@@ -9,6 +9,7 @@ from papilio.core.config import get_settings
 from papilio_tasks.apps.lifecycle import Producers
 from starlette.middleware import Middleware
 
+from src.apps.events import app as events_application
 from src.apps.scheduler import app as scheduler_application
 from src.config.middleware import (
     RequestBodyLimitMiddleware,
@@ -33,7 +34,9 @@ async def private_access_logs(app: FastAPI) -> AsyncIterator[None]:
     previous = access.disabled
     access.disabled = True
     try:
-        async with Producers(scheduler_application)(app):
+        async with Producers(
+            scheduler_application, events_application
+        )(app):
             yield
     finally:
         access.disabled = previous

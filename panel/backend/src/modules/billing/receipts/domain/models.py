@@ -13,3 +13,5 @@ class PaymentReceiptModel(PersistenceEntity):
     media_type: str = CharField(32)
     size_bytes: int = BigIntField()
     encrypted_payload: str = TextField()
+    encrypted_extraction: str | None = TextField(default=None)
+    ocr_status: str = CharField(16, default="pending")

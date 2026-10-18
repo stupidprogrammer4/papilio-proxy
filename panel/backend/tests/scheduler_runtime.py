@@ -194,6 +194,134 @@ def exercise_native_installed_purchase(raw, request_id):
     )
 
 
+def exercise_native_receipt_outbox(
+    database_url, redis_url, nats_url, outbox_id
+):
+    database = make_url(database_url)
+    assert database.database is not None and "test" in database.database
+    assert database.username is not None and database.password is not None
+    with tempfile.TemporaryDirectory(prefix="papilio-receipt-outbox-") as name:
+        directory = Path(name)
+        directory.chmod(0o700)
+        config = yaml.safe_load(Path("config.yml.sample").read_text())
+        config["db"]["dsn"] = database_url
+        config["db"]["test_dsn"] = database_url
+        config["redis"]["url"] = redis_url
+        config["events"]["nats_url"] = nats_url
+        prefix = "papilio:test:receipt-outbox:" + directory.name
+        config["tasks"]["scheduler"].update(
+            url=redis_url,
+            queue_name=prefix + ":jobs",
+            schedule_prefix=prefix + ":schedules",
+            result_prefix=prefix + ":results",
+        )
+        config_path = directory / "config.yml"
+        config_path.write_text(yaml.safe_dump(config, allow_unicode=True))
+        config_path.chmod(0o600)
+        environment = {**os.environ, "PAPILIO_CONFIG": str(config_path)}
+        log_path = directory / "runtime.log"
+        processes = []
+        connection = pymysql.connect(
+            host=database.host or "127.0.0.1",
+            port=database.port or 3306,
+            user=database.username,
+            password=database.password,
+            database=database.database,
+            autocommit=True,
+            cursorclass=pymysql.cursors.DictCursor,
+        )
+        try:
+            with log_path.open("w+") as output:
+                log_path.chmod(0o600)
+                processes.append(
+                    subprocess.Popen(
+                        [
+                            sys.executable,
+                            "-m",
+                            "taskiq",
+                            "worker",
+                            "src.apps.scheduler:broker",
+                            "--workers",
+                            "1",
+                            "--max-async-tasks",
+                            "8",
+                        ],
+                        env=environment,
+                        stdout=output,
+                        stderr=output,
+                        start_new_session=True,
+                    )
+                )
+                processes.append(
+                    subprocess.Popen(
+                        [
+                            sys.executable,
+                            "-m",
+                            "taskiq",
+                            "scheduler",
+                            "src.apps.scheduler:scheduler",
+                            "--skip-first-run",
+                            "--update-interval",
+                            "1",
+                        ],
+                        env=environment,
+                        stdout=output,
+                        stderr=output,
+                        start_new_session=True,
+                    )
+                )
+                deadline = time.monotonic() + 90
+                delivered = None
+                while time.monotonic() < deadline:
+                    exited = any(
+                        process.poll() is not None for process in processes
+                    )
+                    if exited:
+                        raise AssertionError(
+                            "Native receipt outbox runtime exited early"
+                        )
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            "SELECT status, attempts "
+                            "FROM tbl_receipt_ocr_outboxes WHERE id=%s",
+                            (outbox_id,),
+                        )
+                        row = cursor.fetchone()
+                    output.flush()
+                    logs = log_path.read_text()
+                    if (
+                        row
+                        and row["status"] == "published"
+                        and "PublishReceiptOcrOutbox" in logs
+                    ):
+                        delivered = (row["status"], row["attempts"])
+                        break
+                    time.sleep(0.2)
+                if delivered is None:
+                    raise AssertionError(
+                        "Native receipt outbox schedule did not publish"
+                    )
+                return delivered
+        finally:
+            connection.close()
+            for process in processes:
+                if process.poll() is None:
+                    os.killpg(process.pid, signal.SIGINT)
+            for process in processes:
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    os.killpg(process.pid, signal.SIGKILL)
+                    process.wait(timeout=5)
+            import redis
+
+            client = redis.Redis.from_url(redis_url)
+            keys = list(client.scan_iter(match=prefix + ":*"))
+            if keys:
+                client.delete(*keys)
+            client.close()
+
+
 def _exercise_native_runtime(
     raw,
     query,

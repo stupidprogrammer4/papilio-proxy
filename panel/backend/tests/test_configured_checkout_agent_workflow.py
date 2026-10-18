@@ -259,7 +259,10 @@ class ConfiguredCheckoutAgentWorkflowTest(CoreProvisioningAgentFixture):
                 )
                 await self.post(
                     f"/v1/admin/payments/topups/{topup['id']}/approve",
-                    {"bank_reference": "checkout_" + self.suffix},
+                    {
+                        "expected_revision": 1,
+                        "bank_reference": "checkout_" + self.suffix,
+                    },
                 )
                 offered = await self.client.post(
                     f"/v1/bot/checkouts/offers/{plan['id']}",

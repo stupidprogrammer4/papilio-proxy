@@ -8,6 +8,7 @@ let failedCreate=true,failedCancel=true,failedConfirm=true,historyFailed=true,mi
 const plan={id:42,title:'Volume without expiry',code:'volume',price_rial:100000,quota_bytes:5*1024**3,duration_days:null,is_active:true};
 let offer={customer_id:31,plan_id:42,price_rial:90000,offer_sha256:'a'.repeat(64),plan_title:plan.title,quota_bytes:plan.quota_bytes,duration_days:null,membership_count:2,delivery_mode:'configured_bundle',captured_at:'2026-10-08T00:00:00Z',default_expiry_seconds:777};
 let intent={id:71,customer_id:31,plan_id:42,revision:1,state:'awaiting_funding',funding_mode:'approved_topup',delivery_mode:'configured_bundle',price_rial:90000,offer_sha256:offer.offer_sha256,auto_renew:true,expires_at:'2026-10-08T00:12:57Z',changed_offer_action:'require_confirmation',topup_id:91,subscription_id:null,reason_code:null};
+const receipt={id:92,topup_id:91,media_type:'image/jpeg',size_bytes:4096,created_at:'2026-10-08T00:00:00Z',ocr_status:'complete',extraction:{amount_raw:'120000',amount_rial:120000,currency:'rial',destination_kind:null,visible_destination:null,destination_masked:null,bank_namespace:null,bank_reference:null,occurred_at_raw:null,occurred_at_utc:null,calendar:null,timezone:null,transaction_status_claim:null,field_evidence:{amount:{text:'Transfer 120000 rial',confidence_milli:930,line_indexes:[1],region:[]}},warnings:['receipt_image_requires_manual_comparison'],reason_codes:['timezone_unknown']}};
 const respond=(r,data,status=200)=>r.fulfill({status,contentType:'application/json',body:JSON.stringify(data)});
 const paged=(data,total=1)=>({data,meta:{pager:{total_pages:total}}});
 page.on('pageerror',e=>errors.push(e.message));
@@ -27,8 +28,9 @@ await page.route(url=>url.pathname.startsWith('/api/'),route=>{
  if(path==='/v1/customer/checkouts/71')return respond(route,{data:intent});
  if(path==='/v1/customer/checkouts/71/cancel'){actions.push({action:'cancel',body:req.postDataJSON()});if(failedCancel){failedCancel=false;return respond(route,{error:{message_code:'request_failed'}},503);}intent={...intent,state:'cancelled',revision:2};return respond(route,{data:intent});}
  if(path==='/v1/customer/checkouts/71/reconfirm'){actions.push({action:'reconfirm',body:req.postDataJSON()});if(failedConfirm){failedConfirm=false;return respond(route,{error:{message_code:'request_failed'}},503);}intent={...intent,state:'ready',price_rial:offer.price_rial,revision:4};return respond(route,{data:intent});}
- if(path==='/v1/customer/topups/91')return respond(route,{data:{id:91,customer_id:31,amount_rial:120000,status:'pending',bank_reference:null,approved_by_staff_id:null}});
+ if(path==='/v1/customer/topups/91')return respond(route,{data:{id:91,revision:1,customer_id:31,amount_rial:120000,status:'pending',bank_reference:null,approved_by_staff_id:null}});
  if(path==='/v1/customer/topups/91/instruction')return respond(route,{data:[{title:'Selected receiving account',bank_name:'Bank',recipient:'Receiving owner',account:'controlled',instructions:'Transfer the requested amount'}]});
+ if(path==='/v1/customer/topups/91/receipts')return respond(route,paged([receipt]));
  return respond(route,paged([]));
 });
 try{
@@ -57,6 +59,10 @@ try{
  await dialog.getByRole('button',{name:'Retry same checkout',exact:true}).click();await dialog.getByRole('heading',{name:'Checkout #71'}).waitFor();
  assert.deepEqual(creates[0],creates[1]);assert.equal(creates[1].plan_id,42);assert.equal(creates[1].expiry_seconds,777);assert.equal(creates[1].destination_id,20);assert.equal(creates[1].topup_amount_rial,120000);assert.equal(creates[1].expected_price_rial,90000);assert.equal(creates[1].auto_renew,true);
  await dialog.getByText('Selected receiving account · Bank',{exact:true}).waitFor();
+ await dialog.getByText('Some receipt fields are missing or ambiguous. Review the image before taking action.',{exact:true}).waitFor();
+ assert.equal(await dialog.getByTestId('ocr-reason-codes').count(),0);
+ assert.equal(await dialog.getByTestId('ocr-warnings').count(),0);
+ assert.equal(await dialog.getByTestId('ocr-field-evidence').count(),0);
  await dialog.getByRole('button',{name:'Cancel checkout',exact:true}).click();await dialog.getByRole('button',{name:'Retry cancellation'}).waitFor();
  await dialog.getByRole('button',{name:'Retry cancellation'}).click();await dialog.getByText('Cancelled',{exact:true}).waitFor();
  assert.deepEqual(actions[0],actions[1]);assert.equal(actions[1].body.expected_revision,1);

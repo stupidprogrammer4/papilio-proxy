@@ -38,7 +38,10 @@ class CheckoutIpPolicyWorkflowTest(CheckoutWorkflowFixture):
         await self.set_ip_defaults(2)
         await self.post(
             f"/v1/admin/payments/topups/{intent['topup_id']}/approve",
-            {"bank_reference": "ip_offer_" + self.suffix},
+            {
+                "expected_revision": 1,
+                "bank_reference": "ip_offer_" + self.suffix,
+            },
         )
         sql = (
             "SELECT i.state,i.subscription_id,w.balance_rial,"

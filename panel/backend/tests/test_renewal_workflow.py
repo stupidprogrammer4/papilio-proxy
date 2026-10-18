@@ -126,7 +126,10 @@ class RenewalWorkflowTest(IsolatedAsyncioTestCase):
                     approved = await client.post(
                         f"/v1/admin/payments/topups/{topup_id}/approve",
                         headers=headers,
-                        json={"bank_reference": "bank_" + uuid4().hex},
+                        json={
+                            "expected_revision": 1,
+                            "bank_reference": "bank_" + uuid4().hex,
+                        },
                     )
                     self.assertEqual(approved.status_code, 200)
                     purchase = await client.post(

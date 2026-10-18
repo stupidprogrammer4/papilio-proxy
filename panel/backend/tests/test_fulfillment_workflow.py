@@ -171,7 +171,7 @@ class FulfillmentWorkflowFixture(AutomationWorkflowFixture):
         )
         await self.post(
             f"/v1/admin/payments/topups/{topup['id']}/approve",
-            {"bank_reference": "ful_" + self.suffix},
+            {"expected_revision": 1, "bank_reference": "ful_" + self.suffix},
         )
         purchase_body = {
             "customer_id": customer["id"],

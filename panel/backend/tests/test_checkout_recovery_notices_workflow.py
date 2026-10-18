@@ -28,7 +28,7 @@ class CheckoutRecoveryNoticesWorkflowTest(CheckoutWorkflowTest):
         )
         await self.post(
             f"/v1/admin/payments/topups/{topup['id']}/approve",
-            {"bank_reference": "retry_" + self.suffix},
+            {"expected_revision": 1, "bank_reference": "retry_" + self.suffix},
         )
         async with self.app.state.dishka_container() as scope:
             offers = await scope.get(ICheckoutOfferQuery)
@@ -217,7 +217,10 @@ class CheckoutRecoveryNoticesWorkflowTest(CheckoutWorkflowTest):
         )
         await self.post(
             f"/v1/admin/payments/topups/{topup['id']}/approve",
-            {"bank_reference": "manualretry_" + self.suffix},
+            {
+                "expected_revision": 1,
+                "bank_reference": "manualretry_" + self.suffix,
+            },
         )
         async with self.app.state.dishka_container() as scope:
             offer = await (await scope.get(ICheckoutOfferQuery)).get(
@@ -572,7 +575,10 @@ class CheckoutRecoveryNoticesWorkflowTest(CheckoutWorkflowTest):
         _, _, _, intent = await self.pending_intent("admissiondeadline")
         await self.post(
             f"/v1/admin/payments/topups/{intent['topup_id']}/approve",
-            {"bank_reference": "admissiondeadline_" + self.suffix},
+            {
+                "expected_revision": 1,
+                "bank_reference": "admissiondeadline_" + self.suffix,
+            },
         )
         async with self.connection.uow() as unit:
             async with transaction(unit):

@@ -4,7 +4,7 @@ import {pathToFileURL} from 'node:url';
 const {chromium}=await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE).href);
 const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_EXECUTABLE});
 const page=await browser.newPage(),errors=[],writes=[],outcomes=[];
-const topup={id:91,customer_id:31,amount_rial:120007,requested_amount_rial:120000,payment_identifier_mode:'rial_suffix4',payment_identifier_code4:'0007',status:'pending',bank_reference:null,approved_by_staff_id:null};
+const topup={id:91,revision:1,customer_id:31,amount_rial:120007,requested_amount_rial:120000,payment_identifier_mode:'rial_suffix4',payment_identifier_code4:'0007',status:'pending',bank_reference:null,approved_by_staff_id:null};
 const instruction={destination_id:20,title:'Controlled account',kind:'card',account:'6037990000000001',recipient:'Controlled recipient',bank_name:'Controlled bank',instructions:null,topup_id:91,requested_amount_rial:120000,payable_amount_rial:120007,payment_identifier_mode:'rial_suffix4',payment_identifier_code4:'0007'};
 const checkout={id:71,customer_id:31,plan_id:42,revision:1,state:'awaiting_funding',funding_mode:'approved_topup',delivery_mode:'manual_profiles',price_rial:90000,offer_sha256:'a'.repeat(64),auto_renew:false,expires_at:'2026-10-08T10:00:00Z',changed_offer_action:'require_confirmation',topup_id:91,subscription_id:null,reason_code:null};
 const cases=[{name:'missing code',patch:{payment_identifier_code4:null}},{name:'code differs from payable suffix',patch:{payment_identifier_code4:'9007'}},{name:'requested amount exceeds payable',patch:{requested_amount_rial:120008}}];

@@ -205,6 +205,17 @@ class EventLoopWorkflowTest(SupportWorkflowTest):
                     )
                 ).scalar_one()
                 self.assertEqual(count, 0)
+                outbox_count = (
+                    await unit.execute(
+                        text(
+                            "SELECT COUNT(*) FROM tbl_receipt_ocr_outboxes "
+                            "WHERE receipt_id IN (SELECT id FROM "
+                            "tbl_payment_receipts WHERE topup_id=:id)"
+                        ),
+                        {"id": topup["id"]},
+                    )
+                ).scalar_one()
+                self.assertEqual(outbox_count, 0)
             entered.clear()
             completed.clear()
             with patch.object(commands, "encrypt", new=delayed):
@@ -247,6 +258,16 @@ class EventLoopWorkflowTest(SupportWorkflowTest):
                 self.assertNotIn(
                     content.decode("latin1"), stored.encrypted_payload
                 )
+                outbox_count = (
+                    await unit.execute(
+                        text(
+                            "SELECT COUNT(*) FROM tbl_receipt_ocr_outboxes "
+                            "WHERE receipt_id=:id AND status='pending'"
+                        ),
+                        {"id": receipt["id"]},
+                    )
+                ).scalar_one()
+                self.assertEqual(outbox_count, 1)
         finally:
             await client.aclose()
 

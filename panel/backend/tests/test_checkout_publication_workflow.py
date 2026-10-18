@@ -111,7 +111,8 @@ class CheckoutPublicationWorkflowTest(CheckoutWorkflowTest):
                             await wallets.approve(
                                 intent["topup_id"],
                                 TopupApproval(
-                                    bank_reference="outer_" + self.suffix
+                                    expected_revision=1,
+                                    bank_reference="outer_" + self.suffix,
                                 ),
                                 staff_id,
                             )
@@ -141,7 +142,10 @@ class CheckoutPublicationWorkflowTest(CheckoutWorkflowTest):
                     approval_response = await self.client.post(
                         f"/v1/admin/payments/topups/{intent['topup_id']}/approve",
                         headers=self.headers,
-                        json={"bank_reference": "outage_" + self.suffix},
+                        json={
+                            "expected_revision": 1,
+                            "bank_reference": "outage_" + self.suffix,
+                        },
                     )
                 except SendTaskError as error:
                     approval_error = error
@@ -175,7 +179,10 @@ class CheckoutPublicationWorkflowTest(CheckoutWorkflowTest):
                 )
                 replay = await self.post(
                     f"/v1/admin/payments/topups/{intent['topup_id']}/approve",
-                    {"bank_reference": "outage_" + self.suffix},
+                    {
+                        "expected_revision": 1,
+                        "bank_reference": "outage_" + self.suffix,
+                    },
                 )
                 self.assertEqual(replay["status"], "approved")
                 async with self.app.state.dishka_container() as scope:

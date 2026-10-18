@@ -120,7 +120,10 @@ class CoreProvisioningAgentFixture(StaffAdministrationWorkflowFixture):
         )
         await self.post(
             f"/v1/admin/payments/topups/{topup['id']}/approve",
-            {"bank_reference": "installed_" + self.suffix},
+            {
+                "expected_revision": 1,
+                "bank_reference": "installed_" + self.suffix,
+            },
         )
         purchase = {
             "customer_id": customer["id"],

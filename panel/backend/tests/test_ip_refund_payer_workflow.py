@@ -103,11 +103,17 @@ class IpRefundPayerWorkflowTest(IpLimitWorkflowFixture):
             await asyncio.gather(
                 self.post(
                     f"/v1/admin/payments/topups/{payer_topup['id']}/approve",
-                    {"bank_reference": "payer_" + self.suffix},
+                    {
+                        "expected_revision": 1,
+                        "bank_reference": "payer_" + self.suffix,
+                    },
                 ),
                 self.post(
                     f"/v1/admin/payments/topups/{receiver_topup['id']}/approve",
-                    {"bank_reference": "receiver_" + self.suffix},
+                    {
+                        "expected_revision": 1,
+                        "bank_reference": "receiver_" + self.suffix,
+                    },
                 ),
             )
             sale = await client.post(

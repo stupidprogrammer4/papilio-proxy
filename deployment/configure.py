@@ -279,6 +279,7 @@ def validate_existing(state: Path, requested: dict[str, str]) -> None:
         "CADDY_IMAGE",
         "MYSQL_IMAGE",
         "REDIS_IMAGE",
+        "NATS_IMAGE",
     }
     if (
         any(runtime.get(key) != value for key, value in requested.items())

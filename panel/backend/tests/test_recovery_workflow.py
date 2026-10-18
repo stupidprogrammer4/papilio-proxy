@@ -96,7 +96,7 @@ class RecoveryWorkflowTest(TrialsWorkflowTest):
             reference = "restore_" + self.suffix
             await self.post(
                 f"/v1/admin/payments/topups/{topup['id']}/approve",
-                {"bank_reference": reference},
+                {"expected_revision": 1, "bank_reference": reference},
             )
             purchase_data = {
                 "customer_id": customer_id,
@@ -237,7 +237,10 @@ class RecoveryWorkflowTest(TrialsWorkflowTest):
                     settled = await admin.post(
                         f"/v1/admin/payments/topups/{topup['id']}/approve",
                         headers=admin_headers,
-                        json={"bank_reference": reference},
+                        json={
+                            "expected_revision": 1,
+                            "bank_reference": reference,
+                        },
                     )
                     self.assertEqual(settled.status_code, 200)
                 async with httpx.AsyncClient(

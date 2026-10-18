@@ -10,6 +10,7 @@ from src.modules.accounts.staff.domain.results import Principal
 from src.modules.billing.wallet.domain.dtos import (
     TopupApproval,
     TopupCreate,
+    TopupRejection,
     TopupSearch,
     WalletLedgerSearch,
 )
@@ -107,11 +108,12 @@ async def approve(
 @router.post("/topups/{id:int}/reject")
 async def reject(
     id: int,
+    data: TopupRejection,
     principal: Annotated[Principal, scoped("payments")],
     command: FromDishka[IWalletCommand],
 ) -> APIResponse[TopupOut, None]:
     """Reject a top-up request without crediting the wallet."""
-    result = await command.reject(id, principal.staff_id)
+    result = await command.reject(id, data, principal.staff_id)
     return APIResponse.from_data(TopupOut.from_model(result))
 
 

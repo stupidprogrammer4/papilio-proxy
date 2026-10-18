@@ -576,7 +576,7 @@ class ResellerAccountsWorkflowTest(StaffAdministrationWorkflowTest):
             )
             await self.post(
                 f"/v1/admin/payments/topups/{topup['id']}/approve",
-                {"bank_reference": uuid4().hex},
+                {"expected_revision": 1, "bank_reference": uuid4().hex},
             )
             purchase = await a.post(
                 "/v1/reseller/subscriptions",

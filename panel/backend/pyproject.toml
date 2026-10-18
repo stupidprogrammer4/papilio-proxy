@@ -10,7 +10,7 @@ dependencies = [
   "aiohttp>=3.11,<4",
   "anyio>=4.13,<5",
   "papilio[server,mysql,crypto,passwords,rate-limit-redis] @ https://codeload.github.com/stupidprogrammer4/papilio/tar.gz/e026dbc9aa335ab4f6cc79f7ff2aecb198bd93ad",
-  "papilio-tasks[scheduler-redis] @ https://codeload.github.com/stupidprogrammer4/papilio-tasks/tar.gz/bca239763eab5c0d176b5ac8af9e878edb6997a7",
+  "papilio-tasks[scheduler-redis,events-nats] @ https://codeload.github.com/stupidprogrammer4/papilio-tasks/tar.gz/bca239763eab5c0d176b5ac8af9e878edb6997a7",
   "Pillow>=11,<13",
   "qrcode[pil]>=8.2,<9",
   "aiomysql>=0.2,<1",

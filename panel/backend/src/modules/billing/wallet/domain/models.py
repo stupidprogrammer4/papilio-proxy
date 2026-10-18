@@ -39,6 +39,7 @@ class TopupModel(PersistenceEntity):
     customer_id: int = ForeignKeyField("tbl_customers.id", index=True)
     amount_rial: int = BigIntField()
     status: str = CharField(16, default="pending")
+    revision: int = IntField(default=1)
     bank_reference: str | None = CharField(128, default=None, unique=True)
     approved_by_staff_id: int | None = ForeignKeyField(
         "tbl_staff.id", default=None

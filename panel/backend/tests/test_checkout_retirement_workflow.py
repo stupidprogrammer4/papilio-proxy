@@ -93,7 +93,10 @@ class CheckoutRetirementWorkflowTest(CheckoutWorkflowTest):
         self.assertIsNone(foreign.json()["data"]["intent"])
         await self.post(
             f"/v1/admin/payments/topups/{intent['topup_id']}/approve",
-            {"bank_reference": "retirement_" + self.suffix},
+            {
+                "expected_revision": 1,
+                "bank_reference": "retirement_" + self.suffix,
+            },
         )
         from src.modules.sales.checkout.interfaces import (
             ICheckoutRecoveryRunner,
@@ -274,7 +277,10 @@ class CheckoutRetirementWorkflowTest(CheckoutWorkflowTest):
         _, _, body, intent = await self.pending_intent(suffix="purchasefirst")
         await self.post(
             f"/v1/admin/payments/topups/{intent['topup_id']}/approve",
-            {"bank_reference": "purchasefirst_" + self.suffix},
+            {
+                "expected_revision": 1,
+                "bank_reference": "purchasefirst_" + self.suffix,
+            },
         )
         entered = asyncio.Event()
 

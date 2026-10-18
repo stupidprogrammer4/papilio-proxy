@@ -441,7 +441,10 @@ class SmsDevicesWorkflowTest(StaffAdministrationWorkflowTest):
             self.client.post(
                 f"/v1/admin/payments/topups/{topup['id']}/approve",
                 headers=self.headers,
-                json={"bank_reference": bank_reference},
+                json={
+                    "expected_revision": 1,
+                    "bank_reference": bank_reference,
+                },
             ),
             self.upload(
                 enrollment["device"]["id"],
@@ -501,7 +504,7 @@ class SmsDevicesWorkflowTest(StaffAdministrationWorkflowTest):
         bank_reference = "reuse_" + self.suffix[:12]
         manual = await self.post(
             f"/v1/admin/payments/topups/{manually_paid['id']}/approve",
-            {"bank_reference": bank_reference},
+            {"expected_revision": 1, "bank_reference": bank_reference},
         )
         self.assertEqual(manual["status"], "approved")
 
@@ -567,7 +570,7 @@ class SmsDevicesWorkflowTest(StaffAdministrationWorkflowTest):
         self.assertEqual(credits, 0)
         await self.post(
             f"/v1/admin/payments/topups/{first['id']}/approve",
-            {"bank_reference": "12345678"},
+            {"expected_revision": 1, "bank_reference": "12345678"},
         )
         debit = await self.upload(
             enrollment["device"]["id"],

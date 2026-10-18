@@ -5,7 +5,7 @@ from urllib.parse import urlsplit
 
 from papilio.core.config import Settings
 from papilio_tasks.apps.taskiq import RedisSettings
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, SecretStr, model_validator
 
 from src.modules.accounts.customers.domain.dtos import CustomerAccessState
 from src.modules.accounts.resellers.domain.dtos import ResellerDefaults
@@ -65,6 +65,10 @@ class PublicSettings(BaseModel):
 
 class TaskSettings(BaseModel):
     scheduler: RedisSettings
+
+
+class EventsSettings(BaseModel):
+    nats_url: str = Field(min_length=1)
 
 
 class IpLimitSettings(BaseModel):
@@ -246,6 +250,8 @@ class ReceiptSettings(BaseModel):
     max_pixels: int = Field(gt=0)
     allowed_formats: list[Literal["JPEG", "PNG", "WEBP"]] = Field(min_length=1)
     jpeg_quality: int = Field(ge=1, le=95)
+    ocr_api_key: SecretStr | None = None
+    ocr_timeout_seconds: int = Field(default=20, gt=0, le=120)
 
     @model_validator(mode="after")
     def valid_upload(self) -> "ReceiptSettings":
@@ -485,6 +491,9 @@ class PapilioSettings(Settings):
     security: SecuritySettings
     public: PublicSettings
     tasks: TaskSettings
+    events: EventsSettings = Field(
+        default_factory=lambda: EventsSettings(nats_url="nats://nats:4222")
+    )
     operations: OperationsSettings
     ip_limits: IpLimitSettings
     checkout: CheckoutSettings

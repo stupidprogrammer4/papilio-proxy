@@ -53,6 +53,7 @@ class ResellerBillingWorkflowTest(
         await self.post(
             f"/v1/admin/payments/topups/{topup['id']}/approve",
             {
+                "expected_revision": 1,
                 "bank_reference": "rb_" + uuid4().hex,
             },
         )
@@ -960,7 +961,7 @@ class ResellerBillingWorkflowTest(
                 self.client.post(
                     f"/v1/admin/payments/topups/{topup['id']}/approve",
                     headers=self.headers,
-                    json={"bank_reference": reference},
+                    json={"expected_revision": 1, "bank_reference": reference},
                 )
                 for topup, reference in zip(topups, references, strict=True)
             ),
@@ -983,7 +984,7 @@ class ResellerBillingWorkflowTest(
                 self.client.post(
                     f"/v1/admin/payments/topups/{topup['id']}/approve",
                     headers=self.headers,
-                    json={"bank_reference": reference},
+                    json={"expected_revision": 1, "bank_reference": reference},
                 )
                 for topup, reference in zip(topups, references, strict=True)
             )

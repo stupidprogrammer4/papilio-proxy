@@ -257,6 +257,10 @@ receipts:
   - WEBP
   jpeg_quality: 85
   max_concurrent_images: 2
+  ocr_api_key: null
+  ocr_timeout_seconds: 20
+events:
+  nats_url: nats://nats:4222
 customers:
   creation_access:
     is_active: true

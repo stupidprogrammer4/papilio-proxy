@@ -211,7 +211,10 @@ class LoyaltyWorkflowTest(
         )
         await self.post(
             f"/v1/admin/payments/topups/{topup['id']}/approve",
-            {"bank_reference": self.suffix + "-first-race"},
+            {
+                "expected_revision": 1,
+                "bank_reference": self.suffix + "-first-race",
+            },
         )
         body = {
             **source_purchase,

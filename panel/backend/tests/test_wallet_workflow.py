@@ -101,16 +101,49 @@ class WalletWorkflowTest(IsolatedAsyncioTestCase):
                     self.assertEqual(topup.status_code, 200)
                     topup_id = topup.json()["data"]["id"]
                     path = f"/v1/admin/payments/topups/{topup_id}/approve"
+                    stale_approval = await client.post(
+                        path,
+                        headers=headers,
+                        json={
+                            "expected_revision": 2,
+                            "bank_reference": reference,
+                        },
+                    )
+                    self.assertEqual(stale_approval.status_code, 409)
+                    self.assertEqual(
+                        stale_approval.json()["error"]["message_code"],
+                        "topup_revision_conflict",
+                    )
+                    reject_path = (
+                        f"/v1/admin/payments/topups/{topup_id}/reject"
+                    )
+                    stale_rejection = await client.post(
+                        reject_path,
+                        headers=headers,
+                        json={"expected_revision": 2},
+                    )
+                    self.assertEqual(stale_rejection.status_code, 409)
+                    self.assertEqual(
+                        stale_rejection.json()["error"]["message_code"],
+                        "topup_revision_conflict",
+                    )
                     approved = await client.post(
                         path,
                         headers=headers,
-                        json={"bank_reference": reference},
+                        json={
+                            "expected_revision": 1,
+                            "bank_reference": reference,
+                        },
                     )
                     self.assertEqual(approved.status_code, 200)
+                    self.assertEqual(approved.json()["data"]["revision"], 2)
                     repeated = await client.post(
                         path,
                         headers=headers,
-                        json={"bank_reference": reference},
+                        json={
+                            "expected_revision": 1,
+                            "bank_reference": reference,
+                        },
                     )
                     self.assertEqual(repeated.status_code, 200)
                     balance = await client.get(

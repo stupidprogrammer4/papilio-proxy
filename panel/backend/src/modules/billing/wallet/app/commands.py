@@ -36,6 +36,7 @@ from src.modules.billing.wallet.app.ledger import ledger_entry
 from src.modules.billing.wallet.domain.dtos import (
     TopupApproval,
     TopupCreate,
+    TopupRejection,
     TopupSearch,
 )
 from src.modules.billing.wallet.domain.models import TopupModel, WalletModel
@@ -270,6 +271,8 @@ class WalletCommand:
             and topup.bank_reference == data.bank_reference
         ):
             return topup
+        if topup.revision != data.expected_revision:
+            raise revision_conflict(id)
         if topup.status != "pending":
             raise ConflictException(
                 message="این درخواست قبلاً بررسی شده است.",
@@ -292,6 +295,7 @@ class WalletCommand:
             topup,
             TopupModel.patch(
                 status="approved",
+                revision=topup.revision + 1,
                 bank_reference=data.bank_reference,
                 approved_by_staff_id=staff_id,
             ),
@@ -335,6 +339,7 @@ class WalletCommand:
             topup,
             TopupModel.patch(
                 status="approved",
+                revision=topup.revision + 1,
                 bank_reference=bank_reference,
                 approved_by_staff_id=None,
                 approved_by_device_id=device_id,
@@ -398,6 +403,7 @@ class WalletCommand:
             topup,
             TopupModel.patch(
                 status="approved",
+                revision=topup.revision + 1,
                 bank_reference=bank_reference,
                 approved_by_staff_id=None,
                 approved_by_device_id=device_id,
@@ -417,10 +423,14 @@ class WalletCommand:
         return result
 
     @transactional
-    async def reject(self, id: int, staff_id: int) -> TopupModel:
+    async def reject(
+        self, id: int, data: TopupRejection, staff_id: int
+    ) -> TopupModel:
         topup = await self.topups.locked(id)
         if topup is None:
             raise _missing(id)
+        if topup.revision != data.expected_revision:
+            raise revision_conflict(id)
         if topup.status != "pending":
             raise ConflictException(
                 message="این درخواست قبلاً بررسی شده است.",
@@ -429,7 +439,11 @@ class WalletCommand:
             )
         result = await self.topups.update_existing(
             topup,
-            TopupModel.patch(status="rejected", approved_by_staff_id=staff_id),
+            TopupModel.patch(
+                status="rejected",
+                revision=topup.revision + 1,
+                approved_by_staff_id=staff_id,
+            ),
         )
         return result
 
@@ -464,4 +478,14 @@ def _missing(id: int) -> NotFoundException:
         entity="topup",
         identifier="id",
         identifier_value=id,
+    )
+
+
+def revision_conflict(id: int) -> ConflictException:
+    return ConflictException(
+        message=(
+            "این درخواست شارژ تغییر کرده است. نسخهٔ فعلی را بارگیری کنید."
+        ),
+        message_code="topup_revision_conflict",
+        unique_dict={"topup_id": id},
     )

@@ -198,12 +198,18 @@ class CustomerCheckoutWorkflowTest(AutomationWorkflowFixture):
             self.assertEqual(balance.json()["data"]["balance_rial"], 0)
             reviewed = await self.post(
                 f"/v1/admin/payments/topups/{tid}/approve",
-                {"bank_reference": "bank_" + self.suffix},
+                {
+                    "expected_revision": 1,
+                    "bank_reference": "bank_" + self.suffix,
+                },
             )
             self.assertEqual(reviewed["status"], "approved")
             await self.post(
                 f"/v1/admin/payments/topups/{tid}/approve",
-                {"bank_reference": "bank_" + self.suffix},
+                {
+                    "expected_revision": 1,
+                    "bank_reference": "bank_" + self.suffix,
+                },
             )
             balance = await first.get("/v1/customer/wallet")
             self.assertEqual(balance.json()["data"]["balance_rial"], 100000)
@@ -701,7 +707,10 @@ class CustomerCheckoutWorkflowTest(AutomationWorkflowFixture):
             tid = topup.json()["data"]["id"]
             await self.post(
                 f"/v1/admin/payments/topups/{tid}/approve",
-                {"bank_reference": "quote_" + self.suffix},
+                {
+                    "expected_revision": 1,
+                    "bank_reference": "quote_" + self.suffix,
+                },
             )
             changed = await self.client.patch(
                 f"/v1/admin/plans/{plan['id']}",

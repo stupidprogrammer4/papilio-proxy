@@ -6,6 +6,10 @@
   "scripts": {
     "dev": "pnpm --filter @papilio/panel dev",
     "preview": "pnpm --filter @papilio/panel preview",
-    "build": "pnpm --filter @papilio/panel build"
+    "build": "pnpm --filter @papilio/panel build",
+    "test:browser": "node tests/run-browser-tests.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.64.1"
   }
 }

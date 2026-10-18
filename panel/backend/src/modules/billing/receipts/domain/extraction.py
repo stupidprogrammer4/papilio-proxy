@@ -10,6 +10,18 @@ class ReceiptOcrLine(BaseModel):
     region: tuple[tuple[int, int], ...] = ()
 
 
+class ReceiptOcrResult(BaseModel):
+    lines: tuple[ReceiptOcrLine, ...] = ()
+    failure_code: (
+        Literal[
+            "provider_rejected",
+            "invalid_provider_response",
+            "provider_response_too_large",
+        ]
+        | None
+    ) = None
+
+
 class ReceiptFieldEvidence(BaseModel):
     line_indexes: tuple[int, ...] = Field(min_length=1)
     text: str = Field(min_length=1)

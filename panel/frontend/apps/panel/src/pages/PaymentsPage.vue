@@ -44,13 +44,13 @@ async function load(): Promise<void> {
 }
 async function approve(): Promise<void> {
   if (!selected.value) return; busy.value = true; error.value = ""; notice.value = "";
-  try { selected.value = await item<Topup>(`/v1/admin/payments/topups/${selected.value.id}/approve`, "POST", { bank_reference: asciiDigits(bankReference.value.trim()) }); notice.value = t("payments.approved"); bankReference.value = ""; await load(); }
+  try { selected.value = await item<Topup>(`/v1/admin/payments/topups/${selected.value.id}/approve`, "POST", { expected_revision: selected.value.revision, bank_reference: asciiDigits(bankReference.value.trim()) }); notice.value = t("payments.approved"); bankReference.value = ""; await load(); }
   catch (cause) { error.value = cause instanceof Error ? cause.message : t("errors.request_failed"); }
   finally { busy.value = false; }
 }
 async function reject(): Promise<void> {
   if (!selected.value) return; busy.value = true; error.value = ""; notice.value = "";
-  try { selected.value = await item<Topup>(`/v1/admin/payments/topups/${selected.value.id}/reject`, "POST"); notice.value = t("payments.rejected"); await load(); }
+  try { selected.value = await item<Topup>(`/v1/admin/payments/topups/${selected.value.id}/reject`, "POST", { expected_revision: selected.value.revision }); notice.value = t("payments.rejected"); await load(); }
   catch (cause) { error.value = cause instanceof Error ? cause.message : t("errors.request_failed"); }
   finally { busy.value = false; }
 }

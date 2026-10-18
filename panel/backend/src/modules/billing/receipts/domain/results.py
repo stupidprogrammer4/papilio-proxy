@@ -1,6 +1,11 @@
 from datetime import UTC, datetime
+from typing import Literal
 
 from pydantic import BaseModel, field_validator
+
+from src.modules.billing.receipts.domain.extraction import (
+    ReceiptExtractionFields,
+)
 
 
 class ReceiptDetails(BaseModel):
@@ -9,6 +14,10 @@ class ReceiptDetails(BaseModel):
     media_type: str
     size_bytes: int
     created_at: datetime
+    ocr_status: Literal["not_requested", "pending", "complete", "failed"] = (
+        "pending"
+    )
+    extraction: ReceiptExtractionFields | None = None
 
     @field_validator("created_at")
     @classmethod

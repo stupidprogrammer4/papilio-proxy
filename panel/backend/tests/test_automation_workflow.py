@@ -169,7 +169,7 @@ class AutomationWorkflowFixture(IsolatedAsyncioTestCase):
         )
         await self.post(
             f"/v1/admin/payments/topups/{topup['id']}/approve",
-            {"bank_reference": "seed_" + self.suffix},
+            {"expected_revision": 1, "bank_reference": "seed_" + self.suffix},
         )
         subscription = await self.post(
             "/v1/admin/subscriptions",
@@ -221,7 +221,7 @@ class AutomationWorkflowTest(AutomationWorkflowFixture):
         self.assertEqual((await self.post(path))["status"], "ambiguous")
         await self.post(
             f"/v1/admin/payments/topups/{competing['id']}/approve",
-            {"bank_reference": reference},
+            {"expected_revision": 1, "bank_reference": reference},
         )
         self.assertEqual((await self.post(path))["status"], "waiting")
         self.assertEqual(
@@ -256,7 +256,7 @@ class AutomationWorkflowTest(AutomationWorkflowFixture):
             self.assertEqual(len(count.scalars().all()), 1)
         await self.post(
             f"/v1/admin/payments/topups/{topup['id']}/approve",
-            {"bank_reference": "late_" + self.suffix},
+            {"expected_revision": 1, "bank_reference": "late_" + self.suffix},
         )
         self.assertEqual((await self.post(path))["status"], "closed")
         history = await self.get(

@@ -78,7 +78,10 @@ class PurchasedIpPolicyWorkflowTest(IpLimitWorkflowFixture):
         )
         await self.post(
             f"/v1/admin/payments/topups/{topup['id']}/approve",
-            {"bank_reference": name + "_" + self.suffix},
+            {
+                "expected_revision": 1,
+                "bank_reference": name + "_" + self.suffix,
+            },
         )
         subscription = await self.post(
             "/v1/admin/subscriptions",

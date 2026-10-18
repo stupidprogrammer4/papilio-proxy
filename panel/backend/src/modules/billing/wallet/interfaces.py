@@ -6,6 +6,7 @@ from src.modules.billing.sms_origins.domain.contracts import SmsSettlementProof
 from src.modules.billing.wallet.domain.dtos import (
     TopupApproval,
     TopupCreate,
+    TopupRejection,
     TopupSearch,
     WalletLedgerSearch,
 )
@@ -22,6 +23,11 @@ class ITopupInstructionQuery(Protocol):
     ) -> Awaitable[TopupPaymentInstructionRead | None]: ...
 
 
+class ITopupRecordService(Protocol):
+    def get(self, id: int) -> Awaitable[TopupModel | None]: ...
+    def locked(self, id: int) -> Awaitable[TopupModel | None]: ...
+
+
 class IWalletCommand(Protocol):
     def get_topup(self, id: int) -> Awaitable[TopupModel]: ...
     def request_topup(self, data: TopupCreate) -> Awaitable[TopupModel]: ...
@@ -34,7 +40,9 @@ class IWalletCommand(Protocol):
     def approve_from_sms_proof(
         self, id: int, proof: SmsSettlementProof
     ) -> Awaitable[TopupModel]: ...
-    def reject(self, id: int, staff_id: int) -> Awaitable[TopupModel]: ...
+    def reject(
+        self, id: int, data: TopupRejection, staff_id: int
+    ) -> Awaitable[TopupModel]: ...
     def balance(self, customer_id: int) -> Awaitable[int]: ...
     def search(
         self, data: TopupSearch

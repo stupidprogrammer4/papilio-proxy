@@ -68,7 +68,10 @@ class CheckoutFinancialLocksWorkflowTest(CheckoutWorkflowTest):
         )
         await self.post(
             f"/v1/admin/payments/topups/{seed['id']}/approve",
-            {"bank_reference": "lockseed_" + self.suffix},
+            {
+                "expected_revision": 1,
+                "bank_reference": "lockseed_" + self.suffix,
+            },
         )
         prefs = (await self.get("/v1/admin/settings"))["data"]
         policy = prefs["values"]["notifications"]
@@ -106,7 +109,8 @@ class CheckoutFinancialLocksWorkflowTest(CheckoutWorkflowTest):
                     result = await command.approve(
                         intent["topup_id"],
                         TopupApproval(
-                            bank_reference="lockapproved_" + self.suffix
+                            expected_revision=1,
+                            bank_reference="lockapproved_" + self.suffix,
                         ),
                         staff_id,
                     )
