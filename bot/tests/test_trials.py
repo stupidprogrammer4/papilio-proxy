@@ -20,12 +20,63 @@ class TrialConsumerTest(IsolatedAsyncioTestCase):
         availability = "cooldown"
         claim_count = 0
         renewal_mode = "self"
+        trial_visible = False
+        presentation_available = True
+        presentation_locales = []
+
+        def presentation_data():
+            return {
+                "welcome_message": (
+                    "Hello {display_name} · {brand_title} · {balance}"
+                ),
+                "welcome_photo_url": "https://cdn.example.test/welcome.webp",
+                "menu_buttons": [
+                    {
+                        "action": "purchases",
+                        "label": "Orders",
+                        "visible": True,
+                    },
+                    {"action": "loyalty", "label": "Points", "visible": True},
+                    {
+                        "action": "trial",
+                        "label": "Trial hidden",
+                        "visible": trial_visible,
+                    },
+                    {"action": "account", "label": "Account", "visible": True},
+                    {"action": "catalog", "label": "Shop", "visible": True},
+                    {
+                        "action": "subscriptions",
+                        "label": "Services",
+                        "visible": True,
+                    },
+                    {"action": "wallet", "label": "Wallet", "visible": True},
+                    {"action": "support", "label": "Support", "visible": True},
+                ],
+            }
 
         async def api_handler(request):
             nonlocal claim_count
+            if request.path == "/v1/bot/presentation":
+                locale = request.query.get("locale")
+                presentation_locales.append(locale)
+                if not presentation_available:
+                    return web.json_response(
+                        {"error": {"message_code": "network"}},
+                        status=503,
+                    )
+                self.assertEqual(
+                    request.headers["X-Papilio-Bot-Key"],
+                    "controlled-api-key",
+                )
+                calls.append((request.path, {}))
+                return web.json_response(
+                    {"success": True, "data": presentation_data()}
+                )
             body = await request.json()
             self.assertEqual(body["telegram_id"], 61)
             self.assertEqual(body["display_name"], "Customer")
+            if request.path == "/v1/bot/home":
+                self.assertEqual(body["locale"], "fa")
             self.assertEqual(
                 request.headers["X-Papilio-Bot-Key"], "controlled-api-key"
             )
@@ -35,6 +86,7 @@ class TrialConsumerTest(IsolatedAsyncioTestCase):
                     "display_name": "Customer",
                     "brand_title": "Private account",
                     "balance_rial": 101,
+                    "presentation": presentation_data(),
                 }
             elif request.path.endswith("/availability"):
                 data = {
@@ -123,13 +175,27 @@ class TrialConsumerTest(IsolatedAsyncioTestCase):
                     "message_id": len(telegram_calls),
                     "date": 1,
                     "chat": {"id": 61, "type": "private"},
-                    "text": data["text"],
+                    "photo": [
+                        {
+                            "file_id": "controlled-photo",
+                            "file_unique_id": "photo-1",
+                            "width": 320,
+                            "height": 240,
+                        }
+                    ],
+                }
+                if method == "sendPhoto"
+                else {
+                    "message_id": len(telegram_calls),
+                    "date": 1,
+                    "chat": {"id": 61, "type": "private"},
+                    "text": data.get("text", ""),
                 }
             )
             return web.json_response({"ok": True, "result": result})
 
         application = web.Application(client_max_size=65536)
-        application.router.add_post("/v1/bot/{tail:.*}", api_handler)
+        application.router.add_route("*", "/v1/bot/{tail:.*}", api_handler)
         application.router.add_post("/bot{token}/{method}", telegram_handler)
         runner = web.AppRunner(application, access_log=None)
         await runner.setup()
@@ -156,10 +222,18 @@ class TrialConsumerTest(IsolatedAsyncioTestCase):
             chat_id=61,
             chat_type="private",
             message_date=1,
+            language_code=None,
         ):
+            telegram_user = {
+                "id": 61,
+                "is_bot": False,
+                "first_name": "Customer",
+            }
+            if language_code is not None:
+                telegram_user["language_code"] = language_code
             callback = {
                 "id": str(identifier),
-                "from": {"id": 61, "is_bot": False, "first_name": "Customer"},
+                "from": telegram_user,
                 "chat_instance": "controlled",
                 "data": data,
             }
@@ -211,32 +285,82 @@ class TrialConsumerTest(IsolatedAsyncioTestCase):
             self.assertNotIn("https://", str(telegram_calls))
             await start(16, 61, "private")
             self.assertEqual(calls[-1][0], "/v1/bot/home")
-            self.assertIn("Private account", telegram_calls[-1][1]["text"])
+            photo_method, photo = telegram_calls[-2]
+            self.assertEqual(photo_method, "sendPhoto")
+            self.assertEqual(
+                photo["photo"], "https://cdn.example.test/welcome.webp"
+            )
+            message = telegram_calls[-1][1]
+            self.assertIn(
+                "Hello Customer · Private account · ۱۰٫۱ تومان",
+                message["text"],
+            )
+            menu_buttons = json.loads(message["reply_markup"])[
+                "inline_keyboard"
+            ]
+            labels = [button["text"] for row in menu_buttons for button in row]
+            self.assertIn("Orders", labels)
+            self.assertNotIn("Trial hidden", labels)
+            before = len(
+                [path for path, _ in calls if path != "/v1/bot/presentation"]
+            )
             await feed(1, "trial")
+            self.assertEqual(
+                len(
+                    [
+                        path
+                        for path, _ in calls
+                        if path != "/v1/bot/presentation"
+                    ]
+                ),
+                before,
+            )
+            self.assertEqual(telegram_calls[-1][0], "answerCallbackQuery")
+            self.assertEqual(telegram_calls[-1][1]["show_alert"], "true")
+            presentation_available = False
+            before = len(
+                [path for path, _ in calls if path != "/v1/bot/presentation"]
+            )
+            await feed(19, "trial")
+            self.assertEqual(
+                len(
+                    [
+                        path
+                        for path, _ in calls
+                        if path != "/v1/bot/presentation"
+                    ]
+                ),
+                before,
+            )
+            self.assertEqual(telegram_calls[-1][1]["show_alert"], "true")
+            presentation_available = True
+            trial_visible = True
+            await feed(2, "trial", language_code="en-US")
+            self.assertEqual(presentation_locales[-1], "en")
             message = telegram_calls[-2][1]
             self.assertIn("۰.۵۰ گیبی‌بایت", message["text"])
             self.assertIn("فاصلهٔ لازم", message["text"])
             self.assertIn("۲۰۲۶-۱۰-۰۸ ۰۸:۰۰ UTC", message["text"])
             self.assertNotIn("trial_claim", message["reply_markup"])
             availability = "eligible"
-            await feed(2, "trial")
+            await feed(3, "trial")
             keyboard = json.loads(telegram_calls[-2][1]["reply_markup"])
             self.assertEqual(
                 keyboard["inline_keyboard"][0][0]["callback_data"],
                 "trial_claim",
             )
-            await feed(3, "trial_claim")
-            self.assertIn("همان دکمه", telegram_calls[-2][1]["text"])
             await feed(4, "trial_claim")
+            self.assertIn("همان دکمه", telegram_calls[-2][1]["text"])
+            await feed(5, "trial_claim")
             self.assertIn("منتظر آماده‌سازی", telegram_calls[-2][1]["text"])
             self.assertIn("service:91", telegram_calls[-2][1]["reply_markup"])
-            await feed(5, "trial_claim")
+            await feed(6, "trial_claim")
             self.assertIn("وضعیت فعلی: فعال", telegram_calls[-2][1]["text"])
             claims = [body for path, body in calls if path == "/v1/bot/trials"]
             self.assertEqual(claims[0], claims[1])
             self.assertEqual(claims[1], claims[2])
             self.assertEqual(claims[0]["request_key"], "telegram-trial:77")
-            await feed(6, "service:91")
+            await feed(7, "service:91")
             self.assertEqual(calls[-1][0], "/v1/bot/subscriptions/91/delivery")
             self.assertIn(
                 "renewal-status:91", telegram_calls[-2][1]["reply_markup"]
@@ -256,11 +380,11 @@ class TrialConsumerTest(IsolatedAsyncioTestCase):
             self.assertNotIn("987654321", telegram_calls[-2][1]["text"])
             self.assertNotIn("reply_markup", telegram_calls[-2][1])
             before = len(calls)
-            await feed(7, "trial_claim", accessible=False)
+            await feed(17, "trial_claim", accessible=False)
             self.assertEqual(len(calls), before)
             self.assertEqual(telegram_calls[-1][1]["show_alert"], "true")
             availability = "malformed"
-            await feed(8, "trial")
+            await feed(18, "trial")
             self.assertNotIn("reply_markup", telegram_calls[-2][1])
         finally:
             await api.close()

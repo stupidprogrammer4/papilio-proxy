@@ -1,7 +1,9 @@
 import asyncio
 import json
 import math
+from contextvars import ContextVar
 from typing import Any
+from urllib.parse import urlencode
 
 import aiohttp
 
@@ -17,6 +19,7 @@ from papilio_telegram.checkout import (
     CheckoutRetirement,
 )
 from papilio_telegram.commerce import (
+    BotPresentation,
     CustomerLoyalty,
     CustomerPriceQuote,
     CustomerRenewalEligibility,
@@ -25,6 +28,7 @@ from papilio_telegram.commerce import (
     TrialSubscription,
 )
 from papilio_telegram.config import BotApiLimits
+from papilio_telegram.locales import BotLocale
 from papilio_telegram.topups import TopupPaymentInstruction
 
 
@@ -47,6 +51,13 @@ class BotApi:
         self.base_url, self.key = base_url.rstrip("/"), key
         self.timeout_seconds, self.limits = timeout_seconds, limits
         self.client: aiohttp.ClientSession | None = None
+        self._presentation: ContextVar[BotPresentation] = ContextVar(
+            f"bot_presentation_{id(self)}", default=BotPresentation()
+        )
+
+    @property
+    def presentation(self) -> BotPresentation:
+        return self._presentation.get()
 
     def session(self) -> aiohttp.ClientSession:
         if self.client is None or self.client.closed:
@@ -123,14 +134,34 @@ class BotApi:
         return payload
 
     async def home(
-        self, telegram_id: int, display_name: str
+        self,
+        telegram_id: int,
+        display_name: str,
+        locale: BotLocale = "fa",
     ) -> dict[str, Any]:
         response = await self.call(
             "/v1/bot/home",
             "POST",
-            {"telegram_id": telegram_id, "display_name": display_name},
+            {
+                "telegram_id": telegram_id,
+                "display_name": display_name,
+                "locale": locale,
+            },
         )
-        return response["data"]
+        data = response["data"]
+        self._set_presentation(data.get("presentation", {}))
+        return data
+
+    async def refresh_presentation(self, locale: BotLocale) -> None:
+        query = urlencode({"locale": locale})
+        response = await self.call(f"/v1/bot/presentation?{query}")
+        self._set_presentation(response.get("data", {}))
+
+    def _set_presentation(self, value: Any) -> None:
+        try:
+            self._presentation.set(BotPresentation.model_validate(value))
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise BotApiError("bot_presentation_invalid") from exc
 
     async def plans(
         self, telegram_id: int, display_name: str, page: int = 1

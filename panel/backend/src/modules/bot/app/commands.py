@@ -23,6 +23,7 @@ from src.modules.billing.wallet.interfaces import (
     ITopupInstructionQuery,
     IWalletCommand,
 )
+from src.modules.bot.app.helpers.presentation import presentation_from_settings
 from src.modules.bot.domain.dtos import (
     BotAutoRenew,
     BotIdentity,
@@ -110,6 +111,9 @@ class BotCommand:
         )
         balance = await self.wallets.balance(customer.id)
         preferences = (await self.preferences.current()).values
+        presentation = presentation_from_settings(
+            preferences.bot_presentation, data.locale
+        )
         return BotHome(
             preferences.brand_title,
             customer.id,
@@ -118,6 +122,7 @@ class BotCommand:
             preferences.payment_instructions,
             preferences.support_handle,
             tuple(preferences.topup_options_rial),
+            presentation,
         )
 
     async def delivery(

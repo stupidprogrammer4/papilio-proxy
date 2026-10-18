@@ -35,6 +35,7 @@ from src.modules.billing.wallet.interfaces import IWalletCommand
 from src.modules.network.routing.app.services import HostGroupService
 from src.modules.network.routing.infra.mysql import HostGroupRepository
 from src.modules.operations.preferences.app.services import PreferencesService
+from src.modules.operations.preferences.domain.dtos import PreferencesWrite
 from src.modules.operations.preferences.infra.mysql import (
     PreferencesRepository,
 )
@@ -146,6 +147,25 @@ class BotPurchaseWorkflowTest(IsolatedAsyncioTestCase):
             docs_url=None,
         )
         try:
+            async with connection.uow() as unit:
+                preferences = PreferencesService(
+                    PreferencesRepository(unit), settings
+                )
+                current = await preferences.current()
+                current.values.bot_presentation.localized_texts[
+                    "fa"
+                ].welcome_message = "پیکربندی تست {display_name}"
+                current.values.bot_presentation.welcome_photo_url = (
+                    "https://cdn.example.test/panel-bot.webp"
+                )
+                current.values.bot_presentation.show_trials = False
+                await preferences.write(
+                    PreferencesWrite(
+                        expected_revision=current.revision,
+                        values=current.values,
+                    ),
+                    owner_id,
+                )
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app),
                 base_url="http://testserver",
@@ -163,6 +183,69 @@ class BotPurchaseWorkflowTest(IsolatedAsyncioTestCase):
                     "/v1/bot/home", json=identity, headers=headers
                 )
                 self.assertEqual(home.status_code, 200)
+                presentation = home.json()["data"]["presentation"]
+                self.assertEqual(
+                    presentation["welcome_message"],
+                    "پیکربندی تست {display_name}",
+                )
+                self.assertEqual(
+                    presentation["welcome_photo_url"],
+                    "https://cdn.example.test/panel-bot.webp",
+                )
+                self.assertFalse(
+                    next(
+                        button
+                        for button in presentation["menu_buttons"]
+                        if button["action"] == "trial"
+                    )["visible"]
+                )
+                unauthorized_presentation = await client.get(
+                    "/v1/bot/presentation"
+                )
+                self.assertEqual(unauthorized_presentation.status_code, 401)
+                latest_presentation = await client.get(
+                    "/v1/bot/presentation?locale=fa", headers=headers
+                )
+                self.assertEqual(latest_presentation.status_code, 200)
+                self.assertFalse(
+                    next(
+                        button
+                        for button in latest_presentation.json()["data"][
+                            "menu_buttons"
+                        ]
+                        if button["action"] == "trial"
+                    )["visible"]
+                )
+                async with connection.uow() as unit:
+                    preferences = PreferencesService(
+                        PreferencesRepository(unit), settings
+                    )
+                    current = await preferences.current()
+                    current.values.bot_presentation.show_trials = True
+                    await preferences.write(
+                        PreferencesWrite(
+                            expected_revision=current.revision,
+                            values=current.values,
+                        ),
+                        owner_id,
+                    )
+                latest_presentation = await client.get(
+                    "/v1/bot/presentation?locale=en", headers=headers
+                )
+                self.assertTrue(
+                    next(
+                        button
+                        for button in latest_presentation.json()["data"][
+                            "menu_buttons"
+                        ]
+                        if button["action"] == "trial"
+                    )["visible"]
+                )
+                self.assertTrue(
+                    latest_presentation.json()["data"][
+                        "welcome_message"
+                    ].startswith("Hello ")
+                )
                 customer_id = home.json()["data"]["customer_id"]
                 request_topup = await client.post(
                     "/v1/bot/topups",
@@ -205,7 +288,10 @@ class BotPurchaseWorkflowTest(IsolatedAsyncioTestCase):
                     billing = await scope.get(IWalletCommand)
                     await billing.approve(
                         topup_id,
-                        TopupApproval(bank_reference="bank_" + uuid4().hex),
+                        TopupApproval(
+                            expected_revision=1,
+                            bank_reference="bank_" + uuid4().hex,
+                        ),
                         owner_id,
                     )
                 payload = {

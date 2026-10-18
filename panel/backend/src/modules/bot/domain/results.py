@@ -6,6 +6,30 @@ from pydantic import BaseModel
 
 
 @dataclass(frozen=True, slots=True)
+class BotMenuButton:
+    action: Literal[
+        "purchases",
+        "loyalty",
+        "trial",
+        "account",
+        "catalog",
+        "subscriptions",
+        "wallet",
+        "support",
+    ]
+    label: str
+    visible: bool
+
+
+@dataclass(frozen=True, slots=True)
+class BotPresentation:
+    welcome_message: str
+    welcome_photo_url: str | None
+    menu_buttons: tuple[BotMenuButton, ...]
+    message_catalog: dict[str, str]
+
+
+@dataclass(frozen=True, slots=True)
 class BotHome:
     brand_title: str
     customer_id: int
@@ -14,6 +38,7 @@ class BotHome:
     payment_instructions: str | None
     support_handle: str | None
     topup_options_rial: tuple[int, ...]
+    presentation: BotPresentation
 
 
 class BotDelivery(BaseModel):

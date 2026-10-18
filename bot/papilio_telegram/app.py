@@ -9,6 +9,7 @@ from papilio_telegram.api import BotApi
 from papilio_telegram.config import BotSettings
 from papilio_telegram.delivery import register_delivery
 from papilio_telegram.handlers import register
+from papilio_telegram.message_catalog import install_bot_message_catalog
 from papilio_telegram.webhook import ForegroundRequestHandler
 
 
@@ -21,6 +22,7 @@ def main() -> None:
         settings.api_timeout_seconds,
         settings.api_limits,
     )
+    install_bot_message_catalog(bot, api)
     dispatcher = Dispatcher(disable_fsm=True)
     dispatcher.include_router(register(api, settings.checkout_limits))
     admission = WebhookAdmission(

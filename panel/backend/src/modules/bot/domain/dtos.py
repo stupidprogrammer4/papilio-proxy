@@ -1,10 +1,15 @@
+from typing import Literal
+
 from papilio.schemas.inputs import BaseDTO
 from pydantic import Field
+
+BotLocale = Literal["fa", "en", "ru", "zh"]
 
 
 class BotIdentity(BaseDTO):
     telegram_id: int = Field(gt=0)
     display_name: str = Field(min_length=1, max_length=120)
+    locale: BotLocale = "fa"
 
 
 class BotTopup(BotIdentity):

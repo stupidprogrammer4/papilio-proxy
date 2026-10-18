@@ -14,6 +14,8 @@ from aiogram.types import (
 from papilio_telegram.api import BotApi, BotApiError
 from papilio_telegram.checkout import CheckoutDraftLimits, CheckoutDrafts
 from papilio_telegram.checkout_handlers import register_checkout, show_offer
+from papilio_telegram.flow_guard import BotFlowGuard
+from papilio_telegram.locales import BotLocale, telegram_locale
 from papilio_telegram.presentation import (
     fa,
     gibibytes,
@@ -32,6 +34,7 @@ from papilio_telegram.presentation import (
     trial_subscription_text,
     trial_text,
     wallet_menu,
+    welcome_message,
 )
 from papilio_telegram.privacy import PrivateChatGuard
 from papilio_telegram.topups import TopupFlowLimits
@@ -62,6 +65,26 @@ def identity(user: User) -> tuple[int, str]:
     return user.id, (user.full_name or "کاربر تلگرام")[:120]
 
 
+def user_locale(user: User) -> BotLocale:
+    return telegram_locale(user.language_code)
+
+
+async def present_home(
+    message: Message, result: dict[str, Any], api: BotApi
+) -> None:
+    if api.presentation.welcome_photo_url is not None:
+        await message.answer_photo(api.presentation.welcome_photo_url)
+    await message.answer(
+        welcome_message(
+            api.presentation,
+            str(result["display_name"]),
+            str(result["brand_title"]),
+            int(result["balance_rial"]),
+        ),
+        reply_markup=menu(api.presentation),
+    )
+
+
 def register(
     api: BotApi,
     checkout_limits: CheckoutDraftLimits | None = None,
@@ -71,6 +94,7 @@ def register(
     guard = PrivateChatGuard()
     router.message.outer_middleware(guard)
     router.callback_query.outer_middleware(guard)
+    router.callback_query.outer_middleware(BotFlowGuard(api))
     drafts = CheckoutDrafts(checkout_limits) if checkout_limits else None
     if drafts is not None:
         router.include_router(register_checkout(api, drafts))
@@ -93,16 +117,10 @@ def register(
             return
         telegram_id, name = identity(message.from_user)
         try:
-            home = await api.home(telegram_id, name)
-            greeting = (
-                f"سلام {home['display_name']} 🌿\n"
-                f"به {home['brand_title']} خوش آمدید.\n"
-                f"💰 موجودی کیف پول: {toman(int(home['balance_rial']))}"
+            home = await api.home(
+                telegram_id, name, user_locale(message.from_user)
             )
-            await message.answer(
-                greeting,
-                reply_markup=menu(),
-            )
+            await present_home(message, home, api)
         except BotApiError as exc:
             await message.answer(
                 _ERRORS.get(exc.code, "درخواست انجام نشد. دوباره تلاش کنید.")
@@ -112,16 +130,12 @@ def register(
     async def home(callback: CallbackQuery) -> None:
         telegram_id, name = identity(callback.from_user)
         try:
-            result = await api.home(telegram_id, name)
-            text = (
-                f"🦋 {result['brand_title']}\n\n"
-                f"💰 موجودی کیف پول: {toman(int(result['balance_rial']))}"
+            result = await api.home(
+                telegram_id, name, user_locale(callback.from_user)
             )
-            await say(
-                callback,
-                text,
-                menu(),
-            )
+            if isinstance(callback.message, Message):
+                await present_home(callback.message, result, api)
+            await callback.answer()
         except BotApiError as exc:
             await say(callback, _ERRORS.get(exc.code, "درخواست انجام نشد."))
 
@@ -130,7 +144,7 @@ def register(
         telegram_id, name = identity(callback.from_user)
         try:
             result = await api.loyalty(telegram_id, name)
-            await say(callback, loyalty_text(result), menu())
+            await say(callback, loyalty_text(result), menu(api.presentation))
         except BotApiError as exc:
             await say(
                 callback,
@@ -138,7 +152,7 @@ def register(
                     exc.code,
                     "امتیاز خرید دریافت نشد؛ دوباره از همین بخش تلاش کنید.",
                 ),
-                menu(),
+                menu(api.presentation),
             )
 
     @router.callback_query(F.data.startswith("plans:"))
@@ -235,11 +249,11 @@ def register(
                 f"خرید شمارهٔ {fa(result['id'])} ثبت شد.\n"
                 "سرویس پس از راه‌اندازی نود فعال می‌شود. "
                 "وضعیت را از «سرویس‌های من» پیگیری کنید.",
-                menu(),
+                menu(api.presentation),
             )
         except BotApiError as exc:
             text = _ERRORS.get(exc.code, "خرید انجام نشد. دوباره تلاش کنید.")
-            keyboard = menu()
+            keyboard = menu(api.presentation)
             if exc.code == "network":
                 text = (
                     "نتیجهٔ خرید هنوز مشخص نیست. برای پیگیری امن، "
@@ -280,7 +294,7 @@ def register(
                     ]
                 )
                 if offer.eligible
-                else menu()
+                else menu(api.presentation)
             )
             await say(
                 callback,
@@ -391,20 +405,22 @@ def register(
                     f"🧾 درخواست شارژ شمارهٔ {fa(result['id'])} ثبت شد.\n\n"
                     "اطلاعات واریز اختصاصی در دسترس نیست؛ قبل از واریز، "
                     "مبلغ و مقصد را از حساب کاربری بررسی کنید.",
-                    menu(),
+                    menu(api.presentation),
                 )
             else:
                 await say(
                     callback,
                     payment_instruction_text(instruction),
-                    payment_instruction_menu(instruction, menu()),
+                    payment_instruction_menu(
+                        instruction, menu(api.presentation)
+                    ),
                     parse_mode="HTML",
                 )
         except BotApiError as exc:
             await say(
                 callback,
                 _ERRORS.get(exc.code, "درخواست شارژ ثبت نشد."),
-                menu(),
+                menu(api.presentation),
             )
 
     @router.callback_query(F.data.startswith("subs:"))
@@ -495,7 +511,7 @@ def register(
             await say(
                 callback,
                 f"🔄 تمدید خودکار اشتراک {fa(result['id'])} {state} شد.",
-                menu(),
+                menu(api.presentation),
             )
         except BotApiError as exc:
             await say(
@@ -533,14 +549,14 @@ def register(
                     callback,
                     "ورود به پنل پشتیبانی فعلاً در دسترس نیست. "
                     f"راه ارتباط پشتیبانی: {link['support_handle']}",
-                    menu(),
+                    menu(api.presentation),
                 )
             else:
                 await say(
                     callback,
                     "ورود به پنل پشتیبانی در دسترس نیست "
                     "و راه ارتباط جایگزین هنوز تنظیم نشده است.",
-                    menu(),
+                    menu(api.presentation),
                 )
         except BotApiError as exc:
             await say(

@@ -11,6 +11,7 @@ from aiohttp import web
 
 from papilio_telegram.api import BotApi
 from papilio_telegram.checkout import CheckoutDraftLimits
+from papilio_telegram.commerce import BotPresentation
 from papilio_telegram.config import BotApiLimits
 from papilio_telegram.handlers import register
 
@@ -84,6 +85,10 @@ class CheckoutConsumerTest(unittest.IsolatedAsyncioTestCase):
 
         async def api_handler(request):
             nonlocal lose_first_response, lose_retire_response
+            if request.path == "/v1/bot/presentation":
+                return web.json_response(
+                    {"data": BotPresentation().model_dump(mode="json")}
+                )
             body = await request.json()
             path = request.path
             calls.append((path, body, dict(request.query)))
@@ -200,7 +205,7 @@ class CheckoutConsumerTest(unittest.IsolatedAsyncioTestCase):
             return web.json_response({"ok": True, "result": result})
 
         application = web.Application(client_max_size=65536)
-        application.router.add_post("/v1/bot/{tail:.*}", api_handler)
+        application.router.add_route("*", "/v1/bot/{tail:.*}", api_handler)
         application.router.add_post("/bot{token}/{method}", telegram_handler)
         runner = web.AppRunner(application, access_log=None)
         await runner.setup()

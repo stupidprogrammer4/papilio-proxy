@@ -11,6 +11,7 @@ from aiogram.types import (
 
 from papilio_telegram.checkout import CheckoutPaymentInstruction
 from papilio_telegram.commerce import (
+    BotPresentation,
     CustomerLoyalty,
     CustomerPriceQuote,
     CustomerRenewalEligibility,
@@ -118,43 +119,57 @@ def payment_instruction_menu(
     return InlineKeyboardMarkup(inline_keyboard=rows + actions.inline_keyboard)
 
 
-def menu() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🧾 خریدهای من", callback_data="ch:1")],
-            [
-                InlineKeyboardButton(
-                    text="🏅 گروه و امتیاز خرید من", callback_data="loyalty"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🎁 اشتراک آزمایشی", callback_data="trial"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="👤 حساب کاربری و رسیدها", callback_data="account"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🛍 خرید سرویس", callback_data="plans:1"
-                ),
-                InlineKeyboardButton(
-                    text="📱 سرویس‌های من", callback_data="subs:1"
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    text="💳 کیف پول و شارژ", callback_data="wallet"
-                ),
-                InlineKeyboardButton(
-                    text="💬 پشتیبانی", callback_data="support"
-                ),
-            ],
-        ]
+def welcome_message(
+    presentation: BotPresentation,
+    display_name: str,
+    brand_title: str,
+    balance_rial: int,
+) -> str:
+    replacements = (
+        ("{display_name}", display_name),
+        ("{brand_title}", brand_title),
+        ("{balance}", toman(balance_rial)),
     )
+    text = presentation.welcome_message
+    for placeholder, value in replacements:
+        text = text.replace(placeholder, value)
+    return text
+
+
+def menu(presentation: BotPresentation | None = None) -> InlineKeyboardMarkup:
+    settings = presentation or BotPresentation()
+    buttons = {button.action: button for button in settings.menu_buttons}
+    actions = {
+        "purchases": "ch:1",
+        "loyalty": "loyalty",
+        "trial": "trial",
+        "account": "account",
+        "catalog": "plans:1",
+        "subscriptions": "subs:1",
+        "wallet": "wallet",
+        "support": "support",
+    }
+    groups = (
+        ("purchases",),
+        ("loyalty",),
+        ("trial",),
+        ("account",),
+        ("catalog", "subscriptions"),
+        ("wallet", "support"),
+    )
+    rows: list[list[InlineKeyboardButton]] = []
+    for group in groups:
+        row = [
+            InlineKeyboardButton(
+                text=buttons[action].label,
+                callback_data=actions[action],
+            )
+            for action in group
+            if buttons[action].visible
+        ]
+        if row:
+            rows.append(row)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def plan_menu(

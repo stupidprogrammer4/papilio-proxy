@@ -12,6 +12,7 @@ from aiohttp import ClientSession, web
 
 from papilio_telegram.api import BotApi
 from papilio_telegram.checkout import CheckoutDraftLimits
+from papilio_telegram.commerce import BotPresentation
 from papilio_telegram.config import BotApiLimits, BotSettings
 from papilio_telegram.delivery import register_delivery
 from papilio_telegram.handlers import register
@@ -43,6 +44,10 @@ class CheckoutNoticeConsumerTest(IsolatedAsyncioTestCase):
         }
 
         async def backend(request):
+            if request.path == "/v1/bot/presentation":
+                return web.json_response(
+                    {"data": BotPresentation().model_dump(mode="json")}
+                )
             body = await request.json()
             calls.append((request.path, body))
             if request.path.endswith("/authorize"):
@@ -85,7 +90,7 @@ class CheckoutNoticeConsumerTest(IsolatedAsyncioTestCase):
             return web.json_response({"ok": True, "result": result})
 
         controlled = web.Application()
-        controlled.router.add_post("/v1/bot/{tail:.*}", backend)
+        controlled.router.add_route("*", "/v1/bot/{tail:.*}", backend)
         controlled.router.add_post("/bot{token}/{method}", telegram)
         control_runner = web.AppRunner(controlled, access_log=None)
         await control_runner.setup()
@@ -135,9 +140,7 @@ class CheckoutNoticeConsumerTest(IsolatedAsyncioTestCase):
                 async with client.post(
                     delivery_origin + "/internal/notifications/deliver",
                     json={"notification_id": 17, "claim_token": "b" * 64},
-                    headers={
-                        "X-Papilio-Delivery-Key": delivery_key
-                    },
+                    headers={"X-Papilio-Delivery-Key": delivery_key},
                 ) as response:
                     return await response.json()
 

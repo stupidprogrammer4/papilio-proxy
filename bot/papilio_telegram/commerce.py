@@ -1,7 +1,87 @@
 from datetime import datetime
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+class BotMenuButton(BaseModel):
+    action: Literal[
+        "purchases",
+        "loyalty",
+        "trial",
+        "account",
+        "catalog",
+        "subscriptions",
+        "wallet",
+        "support",
+    ]
+    label: str = Field(min_length=1, max_length=64)
+    visible: bool
+
+
+class BotPresentation(BaseModel):
+    welcome_message: str = Field(
+        default=(
+            "سلام {display_name} 🌿\n"
+            "به {brand_title} خوش آمدید.\n"
+            "💰 موجودی کیف پول: {balance}"
+        ),
+        min_length=1,
+        max_length=3000,
+    )
+    welcome_photo_url: str | None = None
+    message_catalog: dict[str, str] = Field(default_factory=dict)
+    menu_buttons: list[BotMenuButton] = Field(
+        default_factory=lambda: [
+            BotMenuButton(
+                action="purchases", label="🧾 خریدهای من", visible=True
+            ),
+            BotMenuButton(
+                action="loyalty",
+                label="🏅 گروه و امتیاز خرید من",
+                visible=True,
+            ),
+            BotMenuButton(
+                action="trial", label="🎁 اشتراک آزمایشی", visible=True
+            ),
+            BotMenuButton(
+                action="account", label="👤 حساب کاربری و رسیدها", visible=True
+            ),
+            BotMenuButton(
+                action="catalog", label="🛍 خرید سرویس", visible=True
+            ),
+            BotMenuButton(
+                action="subscriptions", label="📱 سرویس‌های من", visible=True
+            ),
+            BotMenuButton(
+                action="wallet", label="💳 کیف پول و شارژ", visible=True
+            ),
+            BotMenuButton(action="support", label="💬 پشتیبانی", visible=True),
+        ]
+    )
+
+    @field_validator("welcome_photo_url")
+    @classmethod
+    def https_photo_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme != "https"
+            or parsed.hostname is None
+            or parsed.username is not None
+            or parsed.password is not None
+        ):
+            raise ValueError("The bot photo must use HTTPS")
+        return value
+
+    @model_validator(mode="after")
+    def all_menu_actions_are_unique(self) -> "BotPresentation":
+        actions = [button.action for button in self.menu_buttons]
+        if len(actions) != 8 or len(set(actions)) != 8:
+            raise ValueError("The bot menu presentation is incomplete")
+        return self
 
 
 class CustomerTier(BaseModel):

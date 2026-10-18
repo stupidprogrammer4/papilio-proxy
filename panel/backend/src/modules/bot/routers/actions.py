@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -13,6 +13,7 @@ from src.modules.accounts.customer_auth.domain.results import CustomerLoginLink
 from src.modules.billing.wallet.domain.results import (
     TopupPaymentInstructionRead,
 )
+from src.modules.bot.app.interfaces import IBotPresentationQuery
 from src.modules.bot.domain.dtos import (
     BotAutoRenew,
     BotIdentity,
@@ -20,7 +21,10 @@ from src.modules.bot.domain.dtos import (
     BotTopup,
     BotTrialClaim,
 )
-from src.modules.bot.domain.results import BotDelivery, BotSupportAccess
+from src.modules.bot.domain.results import (
+    BotDelivery,
+    BotSupportAccess,
+)
 from src.modules.bot.interfaces import IBotCommand, IBotTrialCommand
 from src.modules.network.ip_limits.interfaces import IIpPolicyProjectionQuery
 from src.modules.operations.notifications.domain.context import (
@@ -61,6 +65,27 @@ router = APIRouter(
 )
 
 
+class BotMenuButtonOut(BaseModel):
+    action: Literal[
+        "purchases",
+        "loyalty",
+        "trial",
+        "account",
+        "catalog",
+        "subscriptions",
+        "wallet",
+        "support",
+    ]
+    label: str
+    visible: bool
+
+
+class BotPresentationOut(BaseModel):
+    welcome_message: str
+    welcome_photo_url: str | None
+    menu_buttons: list[BotMenuButtonOut]
+
+
 class HomeOut(BaseModel):
     brand_title: str
     customer_id: int
@@ -69,6 +94,7 @@ class HomeOut(BaseModel):
     payment_instructions: str | None
     support_handle: str | None
     topup_options_rial: list[int]
+    presentation: BotPresentationOut
 
 
 class TopupOut(BaseModel):
@@ -90,6 +116,18 @@ async def home(
     result = await command.home(data)
     return APIResponse.from_data(
         HomeOut.model_validate(result, from_attributes=True)
+    )
+
+
+@router.get("/presentation")
+async def presentation(
+    query: FromDishka[IBotPresentationQuery],
+    locale: Literal["fa", "en", "ru", "zh"] = Query(default="fa"),
+) -> APIResponse[BotPresentationOut, None]:
+    """Read the latest bot presentation settings."""
+    result = await query.get(locale)
+    return APIResponse.from_data(
+        BotPresentationOut.model_validate(result, from_attributes=True)
     )
 
 
