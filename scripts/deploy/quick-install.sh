@@ -187,7 +187,7 @@ while IFS= read -r member; do
         *) fail 'Source archive contains an unexpected path.' ;;
     esac
 done < "${temporary}/archive.list"
-tar -xzf "$archive" --strip-components=1 -C "$extracted"
+(umask 022; tar -xzf "$archive" --strip-components=1 -C "$extracted")
 [ -f "${extracted}/scripts/deploy/install.sh" ] || fail 'Source archive is missing the installer.'
 [ -f "${extracted}/deployment/compose.yml" ] || fail 'Source archive is missing deployment files.'
 printf '%s\n' "$ref" > "${extracted}/.papilio-quick-install-ref"
