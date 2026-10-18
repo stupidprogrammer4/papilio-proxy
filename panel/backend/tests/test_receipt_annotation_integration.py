@@ -356,7 +356,7 @@ class ReceiptAnnotationIntegrationTest(IsolatedAsyncioTestCase):
                     path, headers=writer_headers, json=data
                 )
                 self.assertEqual(saved.status_code, 200, saved.text)
-                self.assertEqual(saved.json()["data"][0]["revision"], 1)
+                self.assertEqual(saved.json()["data"]["revision"], 1)
                 stale = await client.put(
                     path, headers=writer_headers, json=data
                 )
