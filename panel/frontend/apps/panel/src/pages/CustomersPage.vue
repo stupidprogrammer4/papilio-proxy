@@ -7,12 +7,13 @@ import { useAuth } from "@papilio/auth";
 import { onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { ApiError, item, query, request, type Customer, type Page, type Plan, type Subscription, type Topup, type WalletBalance } from "@papilio/api";
-import { faNumber, toman } from "@papilio/ui";
+import { useLocalizedFormats } from "../composables/useLocalizedFormats";
 import CustomerAccess from "../components/CustomerAccess.vue";
 import NumField from "@papilio/ui/NumField.vue";
 
 const auth = useAuth();
 const { t } = useI18n();
+const { toman, number: faNumber } = useLocalizedFormats();
 const rows = ref<Customer[]>([]); const total = ref(0); const page = ref(1); const pages = ref(1); const q = ref(""); const selected = ref<Customer | null>(null);
 const wallet = ref<number | null>(null); const plans = ref<Plan[]>([]); const planTotal = ref(0); const planPage = ref(1); const planPages = ref(1); const planQ = ref(""); const chosenPlan = ref<Plan | null>(null);
 const name = ref(""); const telegram = ref(""); const topupAmount = ref(""); const autoRenew = ref(false); const busy = ref(false); const loading = ref(false); const error = ref(""); const notice = ref("");
@@ -56,7 +57,7 @@ async function select(row: Customer, force = false): Promise<void> {
 async function saveProfile(): Promise<void> {
   const row = selected.value; if (!row || busy.value || !auth.can("customers", "update")) return;
   busy.value = true; error.value = ""; notice.value = "";
-  try { const result = await item<Customer>(`/v1/admin/customers/${row.id}/profile`, "PUT", { display_name: profileName.value.trim() }); if (selected.value?.id === row.id) selected.value = result; notice.value = "Customer name saved."; await load(); }
+  try { const result = await item<Customer>(`/v1/admin/customers/${row.id}/profile`, "PUT", { display_name: profileName.value.trim() }); if (selected.value?.id === row.id) selected.value = result; notice.value = t("customers.profileSaved"); await load(); }
   catch (cause) { error.value = cause instanceof Error ? cause.message : "The operation failed. Please try again."; }
   finally { busy.value = false; }
 }
@@ -64,7 +65,7 @@ async function create(): Promise<void> {
   busy.value = true; error.value = ""; notice.value = "";
   try {
     const row = await item<Customer>("/v1/admin/customers", "POST", { display_name: name.value.trim(), access: creationAccess.value, telegram_id: telegram.value ? Number(telegram.value) : null });
-    createOpen.value=false; name.value = ""; telegram.value = ""; notice.value = "Customer created."; page.value = 1; await load(); await select(row, true);
+    createOpen.value=false; name.value = ""; telegram.value = ""; notice.value = t("customers.created"); page.value = 1; await load(); await select(row, true);
   } catch (cause) { error.value = cause instanceof Error ? cause.message : "The operation failed. Please try again."; }
   finally { busy.value = false; }
 }
@@ -73,7 +74,7 @@ async function topup(): Promise<void> {
   busy.value = true; error.value = ""; notice.value = "";
   try {
     const result = await item<Topup>("/v1/admin/payments/topups", "POST", { customer_id: selected.value.id, amount_rial: Number(topupAmount.value) * 10 });
-    topupAmount.value = ""; notice.value = `Top-up request #${faNumber(result.id)} created. Review it in Payments.`;
+    topupAmount.value = ""; notice.value = t("customers.topupCreated", { id: faNumber(result.id) });
   } catch (cause) { error.value = cause instanceof Error ? cause.message : "The operation failed. Please try again."; }
   finally { busy.value = false; }
 }
@@ -84,7 +85,7 @@ async function purchase(): Promise<void> {
   try {
     const result = await item<Subscription>("/v1/admin/subscriptions", "POST", { purchase_key: purchaseKey.value, customer_id: selected.value.id, plan_id: chosenPlan.value.id, expected_price_rial: chosenPlan.value.price_rial, auto_renew: autoRenew.value });
     wallet.value = (await item<WalletBalance>(`/v1/admin/payments/wallets/${selected.value.id}`)).balance_rial;
-    notice.value = `Subscription #${faNumber(result.id)} purchased and queued for provisioning.`; chosenPlan.value = null; purchaseKey.value = "";
+    notice.value = t("customers.purchaseQueued", { id: faNumber(result.id) }); chosenPlan.value = null; purchaseKey.value = "";
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : "The operation failed. Please try again.";
     if(cause instanceof ApiError && cause.code === "purchase_price_changed" && chosenPlan.value) {
@@ -107,10 +108,40 @@ const createOpen=ref(false);
   <div :class="{ split: Boolean(selected) }">
     <div class="card"><div class="card-pad"><div class="toolbar"><label class="field"><span>{{ t('customers.search') }}</span><input v-model="q" :placeholder="t('customers.name')" /></label></div></div><div class="table-wrap"><table class="data-table"><thead><tr><th>{{ t('customers.id') }}</th><th>{{ t('customers.name') }}</th><th>{{ t('customers.telegram') }}</th><th>{{ t('customers.status') }}</th></tr></thead><tbody><tr v-for="row in rows" :key="row.id" :class="{ 'selected-row': selected?.id === row.id }" tabindex="0" @click="select(row)" @keydown.enter="select(row)"><td class="tabular">{{ faNumber(row.id) }}</td><td><strong>{{ row.display_name }}</strong></td><td class="tabular">{{ row.telegram_id ? faNumber(row.telegram_id) : '—' }}</td><td><span class="badge" :class="row.is_active ? 'success' : 'danger'">{{ row.is_active ? t('customers.active') : t('customers.inactive') }}</span></td></tr></tbody></table><div v-if="!loading && !rows.length" class="empty">{{ t('customers.empty') }}</div><div v-if="loading" class="empty">{{ t('customers.loading') }}</div></div><div class="pager"><button :disabled="page <= 1" :aria-label="t('customers.previousPage')" @click="page--; load()">‹</button><span>{{ t('customers.pageCount', { page: faNumber(page), total: faNumber(total) }) }}</span><button :disabled="page >= pages" :aria-label="t('customers.nextPage')" @click="page++; load()">›</button></div></div>
     <div class="stack"><Modal v-if="auth.can('customers', 'create')" v-model="createOpen" :title="t('customers.createTitle')" :busy="busy" wide><p v-if="error" class="message error" role="alert">{{error}}</p><form class="form-grid" @submit.prevent="create"><label class="field"><span>{{ t('customers.displayName') }}</span><input v-model="name" required maxlength="120" /></label><NumField v-model="telegram" :label="t('customers.telegramOptional')" /><template v-if="creationAccess"><label class="check-row"><input v-model="creationAccess.is_active" type="checkbox" />{{ t('customers.allowSignIn') }}</label><label class="check-row"><input v-model="creationAccess.services_enabled" type="checkbox" />{{ t('customers.enableService') }}</label><label class="check-row"><input v-model="creationAccess.renewals_enabled" type="checkbox" />{{ t('customers.allowRenewals') }}</label></template><button class="btn" :disabled="busy || !name.trim() || !creationAccess">{{ t('customers.create') }}</button></form></Modal>
-      <div v-if="selected" class="card card-pad"><h2>Account: {{ selected.display_name }}</h2><div class="detail-line"><span>Customer ID</span><strong>{{ faNumber(selected.id) }}</strong></div><form v-if="auth.can('customers','update')" class="form-grid" @submit.prevent="saveProfile"><label class="field"><span>Customer display name</span><input v-model="profileName" maxlength="120" required :disabled="busy" /></label><button class="btn secondary" :disabled="busy || !profileName.trim()">Save name</button></form><RouterLink v-if="auth.can('subscriptions')" class="btn secondary" :to="`/subscriptions?customer_id=${selected.id}`">Customer subscriptions</RouterLink><RouterLink v-if="auth.can('notifications')" class="btn secondary" :to="{path:'/notifications',query:{customer_id:selected.id}}">Customer notifications</RouterLink><RouterLink v-if="auth.can('support')" class="btn secondary" :to="{path:'/support',query:{customer_id:selected.id}}">Customer support</RouterLink><div v-if="auth.can('payments')" class="detail-line"><span>Wallet balance</span><strong>{{ wallet === null ? '…' : toman(wallet) }}</strong></div><RouterLink v-if="auth.can('payments')" class="btn secondary" :to="`/customers/${selected.id}/wallet`">Wallet activity</RouterLink><form v-if="auth.can('payments', 'create')" class="form-grid" style="margin-top:20px" @submit.prevent="topup"><NumField v-model="topupAmount" label="Top-up amount (toman)" /><button class="btn secondary" :disabled="busy || !Number(topupAmount)">Create top-up request</button></form></div>
+      <div v-if="selected" class="card card-pad">
+        <h2>{{ t("customers.accountTitle", { name: selected.display_name }) }}</h2>
+        <div class="detail-line"><span>{{ t("customers.customerId") }}</span><strong>{{ faNumber(selected.id) }}</strong></div>
+        <form v-if="auth.can('customers','update')" class="form-grid" @submit.prevent="saveProfile">
+          <label class="field"><span>{{ t("customers.profileName") }}</span><input v-model="profileName" maxlength="120" required :disabled="busy" /></label>
+          <button class="btn secondary" :disabled="busy || !profileName.trim()">{{ t("customers.saveName") }}</button>
+        </form>
+        <RouterLink v-if="auth.can('subscriptions')" class="btn secondary" :to="`/subscriptions?customer_id=${selected.id}`">{{ t("customers.subscriptionsLink") }}</RouterLink>
+        <RouterLink v-if="auth.can('notifications')" class="btn secondary" :to="{path:'/notifications',query:{customer_id:selected.id}}">{{ t("customers.notificationsLink") }}</RouterLink>
+        <RouterLink v-if="auth.can('support')" class="btn secondary" :to="{path:'/support',query:{customer_id:selected.id}}">{{ t("customers.supportLink") }}</RouterLink>
+        <div v-if="auth.can('payments')" class="detail-line"><span>{{ t("customers.walletBalance") }}</span><strong>{{ wallet === null ? '…' : toman(wallet) }}</strong></div>
+        <RouterLink v-if="auth.can('payments')" class="btn secondary" :to="`/customers/${selected.id}/wallet`">{{ t("customers.walletActivity") }}</RouterLink>
+        <form v-if="auth.can('payments', 'create')" class="form-grid" style="margin-top:20px" @submit.prevent="topup">
+          <NumField v-model="topupAmount" :label="t('customers.topupAmountToman')" />
+          <button class="btn secondary" :disabled="busy || !Number(topupAmount)">{{ t("customers.createTopup") }}</button>
+        </form>
+      </div>
       <CustomerConfigurations v-if="selected && auth.can('network') && auth.can('subscriptions')" :key="`configs-${selected.id}`" :customer-id="selected.id" /><TrialOffer v-if="selected && auth.can('subscriptions')" :key="selected.id" :customer-id="selected.id" admin :can-claim="auth.can('subscriptions','create')" />
       <CustomerAccess v-if="selected" :customer="selected" @changed="accessChanged" />
-      <div v-if="selected && auth.can('subscriptions', 'create') && auth.can('payments')" class="card card-pad"><h2>Purchase with wallet</h2><div class="form-grid"><label class="field"><span>Find a plan</span><input v-model="planQ" placeholder="Plan name" /></label><div class="table-wrap"><table class="data-table"><tbody><tr v-for="plan in plans" :key="plan.id" :class="{ 'selected-row': chosenPlan?.id === plan.id }" tabindex="0" @click="chosenPlan = plan" @keydown.enter="chosenPlan = plan"><td>{{ plan.title }}</td><td class="tabular">{{ toman(plan.price_rial) }}</td></tr></tbody></table><div v-if="!plans.length" class="empty">No active plans found.</div></div><div class="pager"><button :disabled="planPage <= 1" @click="planPage--; loadPlans()">‹</button><span>{{ faNumber(planPage) }} of {{ faNumber(planPages) }}</span><button :disabled="planPage >= planPages" @click="planPage++; loadPlans()">›</button></div><label class="field" style="flex-direction:row; align-items:center"><input v-model="autoRenew" type="checkbox" style="width:auto;min-height:0" /> Automatic wallet renewal</label><div v-if="chosenPlan" class="hint-box">{{ chosenPlan.title }} · {{ toman(chosenPlan.price_rial) }} will be deducted from the wallet. Service activation follows successful node provisioning.</div><PlanConfigurations v-if="chosenPlan" :plan-id="chosenPlan.id" public /><button class="btn" :disabled="busy || !chosenPlan || wallet === null || wallet < chosenPlan.price_rial" @click="purchase">Purchase selected plan</button></div></div>
+      <div v-if="selected && auth.can('subscriptions', 'create') && auth.can('payments')" class="card card-pad">
+        <h2>{{ t("customers.purchaseTitle") }}</h2>
+        <div class="form-grid">
+          <label class="field"><span>{{ t("customers.findPlan") }}</span><input v-model="planQ" :placeholder="t('customers.planNamePlaceholder')" /></label>
+          <div class="table-wrap">
+            <table class="data-table"><tbody><tr v-for="plan in plans" :key="plan.id" :class="{ 'selected-row': chosenPlan?.id === plan.id }" tabindex="0" @click="chosenPlan = plan" @keydown.enter="chosenPlan = plan"><td>{{ plan.title }}</td><td class="tabular">{{ toman(plan.price_rial) }}</td></tr></tbody></table>
+            <div v-if="!plans.length" class="empty">{{ t("customers.noActivePlans") }}</div>
+          </div>
+          <div class="pager"><button :disabled="planPage <= 1" :aria-label="t('customers.previousPlanPage')" @click="planPage--; loadPlans()">‹</button><span>{{ t("customers.planPageCount", { page: faNumber(planPage), total: faNumber(planPages) }) }}</span><button :disabled="planPage >= planPages" :aria-label="t('customers.nextPlanPage')" @click="planPage++; loadPlans()">›</button></div>
+          <label class="field" style="flex-direction:row; align-items:center"><input v-model="autoRenew" type="checkbox" style="width:auto;min-height:0" /> {{ t("customers.automaticRenewal") }}</label>
+          <div v-if="chosenPlan" class="hint-box">{{ t("customers.planPriceHint", { title: chosenPlan.title, price: toman(chosenPlan.price_rial) }) }}</div>
+          <PlanConfigurations v-if="chosenPlan" :plan-id="chosenPlan.id" public />
+          <button class="btn" :disabled="busy || !chosenPlan || wallet === null || wallet < chosenPlan.price_rial" @click="purchase">{{ t("customers.purchaseSelectedPlan") }}</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
