@@ -44,12 +44,12 @@ class PaymentPresentationTest(unittest.TestCase):
         keyboard = payment_instruction_menu(
             value, InlineKeyboardMarkup(inline_keyboard=[])
         )
-        self.assertEqual(
-            keyboard.inline_keyboard[0][0].copy_text.text, value.account
-        )
-        self.assertEqual(
-            keyboard.inline_keyboard[1][0].copy_text.text, "1051234"
-        )
+        account_copy = keyboard.inline_keyboard[0][0].copy_text
+        amount_copy = keyboard.inline_keyboard[1][0].copy_text
+        assert account_copy is not None
+        assert amount_copy is not None
+        self.assertEqual(account_copy.text, value.account)
+        self.assertEqual(amount_copy.text, "1051234")
 
     def test_exact_payment_does_not_claim_suffix_or_automatic_matching(self):
         value = self.instruction(
