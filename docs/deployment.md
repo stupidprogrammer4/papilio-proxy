@@ -64,8 +64,11 @@ and retains the source under
 under `~/papilio-state`, and can install Docker on supported Linux distributions.
 It reopens `/dev/tty` for setup values, the owner password and optional Telegram
 token, so secrets are never placed in shell history or process arguments. Append
-`--enable-bot` as `bash -s -- --enable-bot` to configure Telegram. For repeat
-deployment from the project checkout, continue using `install.sh` below.
+`--enable-bot` as `bash -s -- --enable-bot` to configure Telegram, or
+`--enable-ocr` to enter the Google Vision API key privately. The key is stored
+in the private `config.yml`; running the installer again with `--enable-ocr`
+preserves all existing settings and does not prompt again once a key is stored.
+For repeat deployment from the project checkout, continue using `install.sh` below.
 
 Point a domain at this machine and make HTTP port 80 reachable for certificate
 issuance. Then run:
@@ -120,9 +123,14 @@ This supports private host files with a different UID while retaining
 
 ```bash
 bash scripts/deploy/status.sh --state-dir "$HOME/papilio-state"
+bash scripts/deploy/doctor.sh --state-dir "$HOME/papilio-state"
 bash scripts/deploy/stop.sh --state-dir "$HOME/papilio-state"
 bash scripts/deploy/start.sh --state-dir "$HOME/papilio-state"
 ```
+
+`doctor.sh` checks Compose healthchecks. It reports OCR provider connectivity,
+node runtime, external payment sources, worker job execution and scheduler
+dispatch as unchecked; those need their own real integration checks.
 
 Stop retains volumes and configuration. Start stops this project's application
 writers, checks database compatibility, bootstraps the native owner and starts

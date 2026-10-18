@@ -25,11 +25,11 @@ deploy_help() {
         '       scripts/deploy/backup.sh --key-file PATH --output PATH' \
         'All entrypoints: --docker-sudo (explicit Linux sudo access to Docker)' \
         'Install options: --install-docker --no-start --project-name NAME' \
-        'Configure options: --public-url URL --owner-username NAME --enable-bot' \
+        'Configure options: --public-url URL --owner-username NAME --enable-bot --enable-ocr' \
         '  --bind-address ADDRESS --http-port PORT --https-port PORT' \
         '  --worker-count N --worker-concurrency N --scheduler-interval N --start-timeout N' \
         '  --network-subnet CIDR --run-uid UID --run-gid GID' \
-        'Secrets are entered interactively; do not put passwords or bot tokens in arguments.'
+        'Secrets are entered interactively; do not put passwords or API keys in arguments.'
 }
 
 deploy_parse_args() {
@@ -77,6 +77,11 @@ deploy_parse_args() {
                 ;;
             --enable-bot)
                 [ "$operation" = install ] || deploy_fail '--enable-bot belongs to installation.'
+                DEPLOY_CONFIGURE_ARGS+=("$1")
+                shift
+                ;;
+            --enable-ocr)
+                [ "$operation" = install ] || deploy_fail '--enable-ocr belongs to installation.'
                 DEPLOY_CONFIGURE_ARGS+=("$1")
                 shift
                 ;;

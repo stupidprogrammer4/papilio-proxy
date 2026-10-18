@@ -45,10 +45,15 @@ class GoogleVisionReceiptOcr:
                     data=body,
                     headers={**headers, "Content-Type": "application/json"},
                 ) as response:
-                    if (
-                        response.status in {401, 403, 429}
-                        or response.status >= 500
-                    ):
+                    if response.status == 401:
+                        return ReceiptOcrResult(
+                            failure_code="provider_rejected"
+                        )
+                    if response.status == 403:
+                        return ReceiptOcrResult(
+                            failure_code="provider_rejected"
+                        )
+                    if response.status == 429 or response.status >= 500:
                         raise ReceiptOcrRetryableError(
                             "Google Vision is temporarily unavailable"
                         )

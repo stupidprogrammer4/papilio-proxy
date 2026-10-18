@@ -30,6 +30,7 @@ Options:
 
 Optional:
   --enable-bot           Also configure Telegram; asks for its token privately
+  --enable-ocr           Configure Google Vision; asks for its API key privately
   --state-dir PATH       Persistent configuration (default: ~/papilio-state)
   --ref NAME             Git branch/tag to install (default: main)
   --bind-address IPv4    Public HTTPS defaults to 0.0.0.0
@@ -93,7 +94,7 @@ while [ "$#" -gt 0 ]; do
             forwarded+=("$1" "$2")
             shift 2
             ;;
-        --enable-bot|--no-start|--docker-sudo|--install-docker)
+        --enable-bot|--enable-ocr|--no-start|--docker-sudo|--install-docker)
             forwarded+=("$1")
             shift
             ;;

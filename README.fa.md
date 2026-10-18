@@ -69,8 +69,10 @@
 [آموزش فارسی](docs/getting-started.fa.md) و [English guide](docs/getting-started.en.md) را ببینید.
 نصب‌کننده API، پنل و سرویس‌های وظایف را اجرا می‌کند؛ تلگرام اختیاری است.
 هسته‌های پروکسی به تنظیم و پذیرش جداگانه نیاز دارند.
-پس از نصب، `scripts/deploy/doctor.sh` را برای بررسی healthcheckهای Compose اجرا کنید.
-این دستور اجرای jobهای worker/scheduler و سرویس‌های بیرونی مثل OCR، پرداخت و runtime نود را نمی‌آزماید.
+برای واردکردن محرمانهٔ کلید API گوگل ویژن، گزینهٔ `--enable-ocr` را بدهید.
+پس از نصب، از checkout دستور `scripts/deploy/doctor.sh` را اجرا کنید؛ بعد از نصب یک‌خطی مسیر آن
+`$HOME/.local/share/papilio-proxy/source/scripts/deploy/doctor.sh` است.
+این دستور فقط healthcheckهای Compose را بررسی می‌کند و اجرای worker/scheduler، OCR، پرداخت یا runtime نود را نمی‌آزماید.
 
 ## مسیر محصول
 

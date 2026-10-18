@@ -11,6 +11,8 @@ from uuid import uuid4
 
 import nats
 import yaml
+from aiohttp import web
+from aiohttp.test_utils import TestServer
 from alembic import command
 from alembic.config import Config
 from faststream.nats import NatsBroker as NativeNatsBroker
@@ -22,6 +24,7 @@ from papilio_tasks.apps.events.application import create_app as events_app
 from papilio_tasks.apps.events.registry.jetstream import JetRegistrar
 from papilio_tasks.infra.faststream.brokers.backends.nats import NatsBroker
 from PIL import Image
+from pydantic import SecretStr
 from sqlalchemy import func, select, text, update
 from sqlmodel import col
 
@@ -42,6 +45,9 @@ from src.modules.billing.receipts.domain.extraction import (
     ReceiptOcrResult,
 )
 from src.modules.billing.receipts.domain.models import PaymentReceiptModel
+from src.modules.billing.receipts.infra.google_vision import (
+    GoogleVisionReceiptOcr,
+)
 from src.modules.billing.receipts.infra.mysql import (
     PaymentReceiptOutboxRepository,
     PaymentReceiptRepository,
@@ -429,6 +435,126 @@ class ReceiptOutboxIntegrationTest(IsolatedAsyncioTestCase):
             )
             await client.close()
             await publisher_app.stop()
+            async with self.connection.uow() as unit:
+                await unit.execute(text("SET FOREIGN_KEY_CHECKS=0"))
+                async with unit.transaction():
+                    await unit.execute(
+                        text(
+                            "DELETE FROM tbl_receipt_ocr_outboxes "
+                            "WHERE receipt_id=:id"
+                        ),
+                        {"id": receipt.id},
+                    )
+                    await unit.execute(
+                        text("DELETE FROM tbl_payment_receipts WHERE id=:id"),
+                        {"id": receipt.id},
+                    )
+                await unit.execute(text("SET FOREIGN_KEY_CHECKS=1"))
+
+    async def test_terminal_google_vision_error_is_stored_and_acked_once(self):
+        suffix = uuid4().hex
+        settings = configured_settings()
+        settings.receipts.ocr_api_key = SecretStr("test-google-api-key")
+        image = b"private-test-receipt-image"
+        encrypted_payload = await asyncio.to_thread(
+            encrypt,
+            base64.b64encode(image).decode("ascii"),
+            settings.configuration_encryption_key,
+        )
+        async with self.connection.uow() as unit:
+            await unit.execute(text("SET FOREIGN_KEY_CHECKS=0"))
+            async with unit.transaction():
+                receipt = await PaymentReceiptRepository(unit).create(
+                    PaymentReceiptModel(
+                        topup_id=2_000_000_000,
+                        content_hash=suffix[:64],
+                        media_type="image/jpeg",
+                        size_bytes=len(image),
+                        encrypted_payload=encrypted_payload,
+                    )
+                )
+            await unit.execute(text("SET FOREIGN_KEY_CHECKS=1"))
+
+        calls = []
+
+        async def rejected(_request: web.Request) -> web.Response:
+            calls.append(True)
+            return web.Response(status=403)
+
+        application = web.Application()
+        application.router.add_post("/v1/images:annotate", rejected)
+        server = TestServer(application)
+        durable = "receipt-ocr-rejected-" + suffix[:12]
+        publisher_app = None
+        client = None
+        try:
+            await server.start_server()
+            endpoint = str(server.make_url("/v1/images:annotate"))
+            broker = NatsBroker(NativeNatsBroker(str(NATS_TEST_URL)))
+            registrar = JetRegistrar(broker)
+            registrar.publisher(ReceiptOcrRequested)
+            publisher_app = events_app(registrar=registrar)
+            await publisher_app.start()
+            client = await nats.connect(str(NATS_TEST_URL))
+            with patch(
+                "src.modules.billing.receipts.infra.google_vision._ENDPOINT",
+                endpoint,
+            ):
+                ocr = GoogleVisionReceiptOcr(settings.receipts)
+                jetstream = client.jetstream()
+                await jetstream.purge_stream(ReceiptOcrRequested.stream.name)
+                subscription = await jetstream.pull_subscribe(
+                    ReceiptOcrRequested.subject,
+                    durable=durable,
+                    stream=ReceiptOcrRequested.stream.name,
+                )
+                await ReceiptOcrRequested.publish(
+                    ReceiptOcrRequest(receipt_id=receipt.id)
+                )
+                messages = await subscription.fetch(1, timeout=5)
+                message = next(iter(messages))
+                await self._process_ocr_delivery(settings, ocr, message.data)
+                await message.ack()
+
+                await ReceiptOcrRequested.publish(
+                    ReceiptOcrRequest(receipt_id=receipt.id)
+                )
+                replayed = await subscription.fetch(1, timeout=5)
+                replay = next(iter(replayed))
+                await self._process_ocr_delivery(settings, ocr, replay.data)
+                await replay.ack()
+
+            async with self.connection.uow() as independent:
+                stored = await independent.execute(
+                    select(PaymentReceiptTable).where(
+                        col(PaymentReceiptTable.id) == receipt.id
+                    )
+                )
+                result = stored.scalar_one()
+                self.assertEqual(result.ocr_status, "failed")
+                extraction = ReceiptExtractionFields.model_validate_json(
+                    decrypt(
+                        result.encrypted_extraction or "",
+                        settings.configuration_encryption_key,
+                    )
+                )
+            self.assertEqual(extraction.reason_codes, ("provider_rejected",))
+            self.assertEqual(calls, [True])
+        finally:
+            await server.close()
+            if client is not None:
+                try:
+                    await client.jetstream().delete_consumer(
+                        ReceiptOcrRequested.stream.name, durable
+                    )
+                except NotFoundError:
+                    pass
+                await client.jetstream().purge_stream(
+                    ReceiptOcrRequested.stream.name
+                )
+                await client.close()
+            if publisher_app is not None:
+                await publisher_app.stop()
             async with self.connection.uow() as unit:
                 await unit.execute(text("SET FOREIGN_KEY_CHECKS=0"))
                 async with unit.transaction():

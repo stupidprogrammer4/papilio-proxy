@@ -25,11 +25,49 @@ class QuickInstallTest(unittest.TestCase):
         self.assertIn("--owner-username", result.stdout)
         self.assertIn("password", result.stdout.lower())
         self.assertIn("--enable-bot", result.stdout)
+        self.assertIn("--enable-ocr", result.stdout)
         self.assertIn("curl -fsSL", result.stdout)
         self.assertIn("If omitted, the installer asks", result.stdout)
 
     def test_script_has_valid_bash_syntax(self):
         subprocess.run(["bash", "-n", str(QUICK_INSTALL)], check=True)
+
+    def test_deployment_installer_accepts_ocr_flag_without_secret_argument(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            state = root / "private-state"
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            docker = fake_bin / "docker"
+            docker.write_text(
+                "#!/usr/bin/env bash\n"
+                'if [ "$1" = compose ] && [ "$2" = version ]; then exit 0; fi\n'
+                'if [ "$1" = compose ] && [ "$2" = up ]; then printf -- "--wait-timeout\\n"; exit 0; fi\n'
+                'if [ "$1" = info ]; then printf "linux\\n"; exit 0; fi\n'
+                "exit 0\n",
+                encoding="utf-8",
+            )
+            docker.chmod(0o700)
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+
+            result = subprocess.run(
+                [
+                    "bash",
+                    str(ROOT / "scripts" / "deploy" / "install.sh"),
+                    "--state-dir",
+                    str(state),
+                    "--enable-ocr",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("Interactive installation needs a terminal", result.stderr)
+            self.assertNotIn("Unknown argument", result.stderr)
 
     def test_noninteractive_invocation_without_tty_fails_before_network(self):
         result = subprocess.run(
@@ -92,7 +130,10 @@ class QuickInstallTest(unittest.TestCase):
             try:
                 child_pid, terminal = pty.fork()
                 if child_pid == 0:
-                    os.execvp("bash", ["bash", str(QUICK_INSTALL)])
+                    os.execvp(
+                        "bash",
+                        ["bash", str(QUICK_INSTALL), "--enable-ocr"],
+                    )
 
                 output = bytearray()
                 while b"Panel URL" not in output:
@@ -116,6 +157,7 @@ class QuickInstallTest(unittest.TestCase):
             arguments = log_path.read_text(encoding="utf-8")
             self.assertIn("https://panel.example.test", arguments)
             self.assertIn("admin", arguments)
+            self.assertIn("--enable-ocr", arguments)
 
     def test_public_install_rejects_plain_http_before_download(self):
         result = subprocess.run(

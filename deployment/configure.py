@@ -346,6 +346,64 @@ def enable_existing_bot(state: Path, requested: dict[str, str]) -> None:
                 Path(temporary).unlink()
 
 
+def google_vision_api_key() -> str:
+    api_key = getpass.getpass("Google Vision API key: ")
+    if not api_key or any(character.isspace() for character in api_key):
+        raise ValueError("Google Vision API key is empty or contains whitespace")
+    return api_key
+
+
+def receipt_ocr_config_with_key(content: str, api_key: str) -> str:
+    lines = content.splitlines(keepends=True)
+    updated = []
+    in_receipts = False
+    replacements = 0
+    for line in lines:
+        body = line.rstrip("\r\n")
+        newline = line[len(body) :]
+        if re.fullmatch(r"receipts:[ \t]*(?:#.*)?", body):
+            in_receipts = True
+            updated.append(line)
+            continue
+        if in_receipts and body and not body[0].isspace() and not body.startswith("#"):
+            in_receipts = False
+        match = re.match(
+            r"^(?P<prefix>[ \t]+ocr_api_key[ \t]*:[ \t]*)(?P<value>.*)$",
+            body,
+        )
+        if not in_receipts or match is None:
+            updated.append(line)
+            continue
+        comment = re.search(r"[ \t]+#.*$", match.group("value"))
+        suffix = comment.group(0) if comment is not None else ""
+        updated.append(match.group("prefix") + json.dumps(api_key) + suffix + newline)
+        replacements += 1
+    if replacements != 1:
+        raise ValueError("Cannot find one receipts.ocr_api_key setting")
+    return "".join(updated)
+
+
+def enable_existing_ocr(state: Path) -> None:
+    path = state / "config.yml"
+    content = read_private(path)
+    raw = yaml.safe_load(content)
+    validate_settings(raw)
+    if raw["receipts"].get("ocr_api_key"):
+        return
+    updated = receipt_ocr_config_with_key(content, google_vision_api_key())
+    validate_settings(yaml.safe_load(updated))
+    descriptor, temporary = tempfile.mkstemp(prefix=".ocr-config-", dir=state)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(updated)
+        os.chmod(temporary, 0o600)
+        if hasattr(os, "chown") and os.geteuid() == 0:
+            os.chown(temporary, path.stat().st_uid, path.stat().st_gid)
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
 def caddyfile(origin: str, enabled: bool) -> str:
     telegram = "reverse_proxy bot:8020" if enabled else "respond 404"
     routes = (
@@ -383,8 +441,17 @@ def configure(args) -> None:
     runtime = runtime_values(args, origin, state)
     if state.exists() and any(state.iterdir()):
         previous = parse_env(read_private(state / "compose.env"))
-        if args.enable_bot and previous.get("BOT_ENABLED") == "false":
+        enabling_bot = args.enable_bot and previous.get("BOT_ENABLED") == "false"
+        if enabling_bot:
             enable_existing_bot(state, runtime)
+        if args.enable_ocr:
+            persisted = parse_env(read_private(state / "compose.env"))
+            validate_existing(state, persisted)
+            enable_existing_ocr(state)
+            refresh_caddy_environment(state)
+            print("Google Vision OCR configured in private settings.")
+            return
+        if enabling_bot:
             refresh_caddy_environment(state)
             print("Bot configuration enabled; existing secrets preserved.")
             return
@@ -428,6 +495,9 @@ def configure(args) -> None:
     validate_settings(raw)
     password = owner_password(args.owner_username)
     bot = bot_values(raw, origin, args.enable_bot)
+    if args.enable_ocr:
+        raw["receipts"]["ocr_api_key"] = google_vision_api_key()
+        validate_settings(raw)
     state.parent.mkdir(parents=True, exist_ok=True)
     state.mkdir(mode=0o700, exist_ok=True)
     state.chmod(0o700)
@@ -484,6 +554,7 @@ def parser() -> argparse.ArgumentParser:
     cli.add_argument("--public-url", required=True)
     cli.add_argument("--owner-username", required=True)
     cli.add_argument("--enable-bot", action="store_true")
+    cli.add_argument("--enable-ocr", action="store_true")
     cli.add_argument("--bind-address", default="127.0.0.1")
     cli.add_argument("--http-port", type=int, default=80)
     cli.add_argument("--https-port", type=int)

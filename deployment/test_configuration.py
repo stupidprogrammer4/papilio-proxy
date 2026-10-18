@@ -65,9 +65,7 @@ class ConfigurationTest(unittest.TestCase):
         self.assertFalse(raw["core_runtime"]["allow_start"])
         self.assertEqual(raw["core_provisioning"]["mode"], "disabled")
         self.assertEqual(raw["core_usage"]["mode"], "disabled")
-        self.assertEqual(
-            raw["rate_limit"]["trusted_proxies"], ["172.30.58.254"]
-        )
+        self.assertEqual(raw["rate_limit"]["trusted_proxies"], ["172.30.58.254"])
         if os.name != "nt":
             self.assertTrue(
                 all(
@@ -99,9 +97,7 @@ class ConfigurationTest(unittest.TestCase):
         )
         old = configure.parse_env(before["bot.env"].decode())
         new = configure.parse_env(after["bot.env"].decode())
-        self.assertEqual(
-            old["TELEGRAM_WEBHOOK_SECRET"], new["TELEGRAM_WEBHOOK_SECRET"]
-        )
+        self.assertEqual(old["TELEGRAM_WEBHOOK_SECRET"], new["TELEGRAM_WEBHOOK_SECRET"])
         self.assertEqual(
             new["TELEGRAM_WEBHOOK_PUBLIC_URL"],
             "https://fixture.example.com/telegram/webhook",
@@ -115,6 +111,74 @@ class ConfigurationTest(unittest.TestCase):
         self.assertEqual(settings.api_url, "http://api:8000")
         self.generate(args, [])
         self.assertEqual(after, self.snapshot())
+
+    def test_google_vision_key_is_entered_privately_and_preserved(self):
+        args = self.options("--worker-count", "3")
+        self.generate(args, ["Fixture-private-105", "Fixture-private-105"])
+        owner = (self.state / "secrets/owner-password").read_bytes()
+        config_path = self.state / "config.yml"
+        config = config_path.read_text().replace(
+            "  ocr_api_key: null", "  ocr_api_key: null  # keep this note"
+        )
+        config_path.write_text(config)
+        with config_path.open("a") as config:
+            config.write("# operator-maintained settings\n")
+        args = self.options("--enable-ocr")
+
+        self.generate(args, ["AIzaFixtureVisionKey123456789"])
+        import yaml
+
+        configured = yaml.safe_load((self.state / "config.yml").read_text())
+        self.assertEqual(
+            configured["receipts"]["ocr_api_key"],
+            "AIzaFixtureVisionKey123456789",
+        )
+        self.assertEqual((self.state / "secrets/owner-password").read_bytes(), owner)
+        self.assertEqual((self.state / "config.yml").stat().st_mode & 0o777, 0o600)
+        runtime = configure.parse_env((self.state / "compose.env").read_text())
+        self.assertEqual(runtime["WORKER_COUNT"], "3")
+        self.assertIn("# operator-maintained settings", config_path.read_text())
+        self.assertIn(
+            'ocr_api_key: "AIzaFixtureVisionKey123456789"  # keep this note',
+            config_path.read_text(),
+        )
+
+        before = self.snapshot()
+        self.generate(args, [])
+        self.assertEqual(before, self.snapshot())
+
+    def test_first_install_can_configure_google_vision(self):
+        args = self.options("--enable-ocr")
+
+        self.generate(
+            args,
+            [
+                "Fixture-private-105",
+                "Fixture-private-105",
+                "AIzaFixtureVisionKey123456789",
+            ],
+        )
+
+        import yaml
+
+        configured = yaml.safe_load((self.state / "config.yml").read_text())
+        self.assertEqual(
+            configured["receipts"]["ocr_api_key"],
+            "AIzaFixtureVisionKey123456789",
+        )
+        if os.name != "nt":
+            self.assertEqual((self.state / "config.yml").stat().st_mode & 0o777, 0o600)
+
+    def test_empty_google_vision_key_does_not_change_installed_state(self):
+        args = self.options()
+        self.generate(args, ["Fixture-private-105", "Fixture-private-105"])
+        before = self.snapshot()
+        args.enable_ocr = True
+
+        with self.assertRaises(ValueError):
+            self.generate(args, [""])
+
+        self.assertEqual(before, self.snapshot())
 
     def test_invalid_origins_and_ports_leave_no_state(self):
         cases = [

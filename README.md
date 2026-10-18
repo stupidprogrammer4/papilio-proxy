@@ -90,10 +90,12 @@ first. It can install Docker on supported Linux distributions and keeps source
 and persistent state under your home directory. Add
 `--enable-bot` to configure Telegram. See [deployment](docs/deployment.md) for
 local-only setup, lifecycle options and recovery.
-After installation, run `scripts/deploy/doctor.sh` to check the Compose
-healthchecks. It reports external OCR/payment integrations, node runtime,
-worker job execution and scheduler dispatch as unchecked because this command
-does not exercise those boundaries.
+Pass `--enable-ocr` to enter the Google Vision API key privately during setup.
+After installation, run `scripts/deploy/doctor.sh` from the checkout, or
+`$HOME/.local/share/papilio-proxy/source/scripts/deploy/doctor.sh` after the
+one-line bootstrap, to check Compose healthchecks. It reports external
+OCR/payment integrations, node runtime, worker job execution and scheduler
+dispatch as unchecked because this command does not exercise those boundaries.
 Do not commit bank details, device keys, Telegram tokens or installation state.
 
 ## Product direction

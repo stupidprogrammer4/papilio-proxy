@@ -256,6 +256,40 @@ def test_google_vision_rate_limit_is_marked_for_delayed_retry(monkeypatch):
         asyncio.run(run_request())
 
 
+@pytest.mark.parametrize("status", [401, 403])
+def test_google_vision_auth_failures_are_terminal(monkeypatch, status):
+    async def rejected(request: web.Request) -> web.Response:
+        return web.Response(status=status)
+
+    app = web.Application()
+    app.router.add_post("/v1/images:annotate", rejected)
+
+    async def run_request() -> ReceiptOcrResult:
+        async with TestServer(app) as server:
+            monkeypatch.setattr(
+                google_vision,
+                "_ENDPOINT",
+                str(server.make_url("/v1/images:annotate")),
+            )
+            settings = ReceiptSettings(
+                enabled=True,
+                max_image_bytes=1024,
+                max_request_bytes=2048,
+                max_per_topup=3,
+                max_pixels=10000,
+                allowed_formats=["JPEG"],
+                jpeg_quality=80,
+                max_concurrent_images=1,
+                ocr_api_key=SecretStr("sensitive-key"),
+                ocr_timeout_seconds=5,
+            )
+            return await GoogleVisionReceiptOcr(settings).recognize(b"image")
+
+    result = asyncio.run(run_request())
+
+    assert result.failure_code == "provider_rejected"
+
+
 def test_google_vision_rejects_oversized_provider_response(monkeypatch):
     async def oversized(request: web.Request) -> web.Response:
         return web.Response(body=b"x" * 17, content_type="application/json")
