@@ -177,3 +177,16 @@ jobs:
       - name: Vet managed Xray engine
         working-directory: proxy/engines/xray
         run: go vet ./...
+
+  deployment:
+    name: Deployment images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build API image
+        run: docker build --file deployment/api.Dockerfile --tag papilio-proxy-api:ci .
+      - name: Build Telegram bot image
+        run: docker build --file deployment/bot.Dockerfile --tag papilio-proxy-bot:ci .
+      - name: Build panel image
+        run: docker build --file deployment/web.Dockerfile --tag papilio-proxy-web:ci .
