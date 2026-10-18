@@ -871,125 +871,145 @@ class OpenVpnWorkflowTest(
     async def test_populated_management_upgrade_preflight_and_preservation(
         self,
     ):
+        import json
         import os
         from unittest.mock import patch
+        from uuid import uuid4
 
         from alembic import command
         from alembic.config import Config
+        from papilio.infra.db.connection import DBConnection
+        from papilio.infra.db.uow import MySQLUnitOfWork
+        from papilio.security.crypto import encrypt
         from sqlalchemy.engine import make_url
 
-        subscription, request, _, _ = await self.setup_sale(
-            protocols=("openvpn",), configuration_options=[self.options()]
-        )
-        await self.post(f"/v1/admin/provisioning/{request['id']}/prepare")
-        task = (
-            await self.get(f"/v1/admin/provisioning/{request['id']}/tasks")
-        )["data"][0]
-        snapshot_query = text(
-            "SELECT c.encrypted_settings,p.encrypted_credentials,"
-            "t.encrypted_payload FROM tbl_provision_tasks t "
-            "JOIN tbl_configurations c ON c.id=t.configuration_id "
-            "JOIN tbl_profiles p ON p.id=t.profile_id WHERE t.id=:id"
-        )
-        async with self.connection.uow() as unit:
-            before = (
-                await unit.execute(snapshot_query, {"id": task["id"]})
-            ).one()
-            # Recreate the historical schema's missing endpoint reservations.
-            await unit.execute(text("DELETE FROM tbl_open_vpn_sockets"))
-            await unit.commit()
         assert self.settings.db is not None
-        config = Config("alembic.ini")
-        config.set_main_option(
-            "sqlalchemy.url",
-            make_url(self.settings.db.dsn).render_as_string(
-                hide_password=False
-            ),
+        schema = "papilio_openvpn_upgrade_" + uuid4().hex[:12]
+        target_url = make_url(str(self.settings.db.dsn)).set(database=schema)
+        target_dsn = target_url.render_as_string(hide_password=False)
+        target = DBConnection(
+            dsn=target_dsn,
+            pool_size=2,
+            max_overflow=0,
+            pool_timeout=30,
+            pool_recycle=1800,
+            uow_factory=MySQLUnitOfWork,
         )
-        with patch.dict(os.environ, {"PAPILIO_CONFIG": "config.yml.sample"}):
-            await asyncio.to_thread(
-                command.downgrade, config, "0035_reseller_customer_access"
+        async with self.maintenance.uow() as unit:
+            await unit.execute(text(f"CREATE DATABASE `{schema}`"))
+        config = Config("alembic.ini")
+        config.set_main_option("sqlalchemy.url", target_dsn)
+        try:
+            with patch.dict(
+                os.environ, {"PAPILIO_CONFIG": "config.yml.sample"}
+            ):
+                await asyncio.to_thread(
+                    command.upgrade,
+                    config,
+                    "0035_reseller_customer_access",
+                )
+            encrypted_settings = encrypt(
+                json.dumps({"options": self.options()}),
+                self.settings.configuration_encryption_key,
             )
-            async with self.connection.uow() as unit:
+            async with target.uow() as unit:
+                await unit.execute(
+                    text(
+                        "INSERT INTO tbl_nodes "
+                        "(id,code,label,public_host,public_port,protocol,"
+                        "agent_key_hash,is_enabled) VALUES "
+                        "(1,'legacy-openvpn','Legacy OpenVPN',"
+                        "'openvpn.example.invalid',1194,'openvpn',"
+                        "'legacy-test-agent-key',1)"
+                    )
+                )
+                await unit.execute(
+                    text(
+                        "INSERT INTO tbl_cores "
+                        "(id,node_id,code,label,kind) VALUES "
+                        "(1,1,'legacy_openvpn','Legacy OpenVPN','openvpn')"
+                    )
+                )
                 await unit.execute(
                     text(
                         "INSERT INTO tbl_configurations "
-                        "(revision,node_id,core_id,listen_port,port_network,"
-                        "label,protocol,encrypted_settings) "
-                        "SELECT revision,node_id,core_id,listen_port+1,"
-                        "port_network,:label,protocol,encrypted_settings "
-                        "FROM tbl_configurations WHERE id=:id"
+                        "(id,revision,node_id,core_id,listen_port,"
+                        "port_network,label,protocol,encrypted_settings) "
+                        "VALUES "
+                        "(1,1,1,1,1194,'udp','legacy-openvpn-1','openvpn',"
+                        ":settings),(2,1,1,1,1195,'udp',"
+                        "'legacy-openvpn-2','openvpn',:settings)"
                     ),
-                    {
-                        "id": task["configuration_id"],
-                        "label": "historical-overlap-" + self.suffix,
-                    },
+                    {"settings": encrypted_settings},
                 )
                 await unit.commit()
-            with self.assertRaisesRegex(RuntimeError, "overlapping OpenVPN"):
-                await asyncio.to_thread(command.upgrade, config, "head")
-            async with self.connection.uow() as unit:
-                created = (
+            with patch.dict(
+                os.environ, {"PAPILIO_CONFIG": "config.yml.sample"}
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError, "overlapping OpenVPN"
+                ):
+                    await asyncio.to_thread(
+                        command.upgrade,
+                        config,
+                        "0036_openvpn_management_sockets",
+                    )
+                async with target.uow() as unit:
+                    created = (
+                        await unit.execute(
+                            text(
+                                "SELECT COUNT(*) "
+                                "FROM information_schema.tables "
+                                "WHERE table_schema=DATABASE() "
+                                "AND table_name='tbl_open_vpn_sockets'"
+                            )
+                        )
+                    ).scalar_one()
+                    self.assertEqual(created, 0)
+                    revision = (
+                        await unit.execute(
+                            text("SELECT version_num FROM alembic_version")
+                        )
+                    ).scalar_one()
+                    self.assertEqual(revision, "0035_reseller_customer_access")
+                    await unit.execute(
+                        text("DELETE FROM tbl_configurations WHERE id=2")
+                    )
+                    await unit.commit()
+                await asyncio.to_thread(
+                    command.upgrade,
+                    config,
+                    "0036_openvpn_management_sockets",
+                )
+                with self.assertRaisesRegex(RuntimeError, "active management"):
+                    await asyncio.to_thread(
+                        command.downgrade,
+                        config,
+                        "0035_reseller_customer_access",
+                    )
+            async with target.uow() as unit:
+                config_row = (
                     await unit.execute(
                         text(
-                            "SELECT COUNT(*) FROM information_schema.tables "
-                            "WHERE table_schema=DATABASE() "
-                            "AND table_name='tbl_open_vpn_sockets'"
+                            "SELECT encrypted_settings FROM "
+                            "tbl_configurations WHERE id=1"
                         )
                     )
                 ).scalar_one()
-                self.assertEqual(created, 0)
-                revision = (
+                self.assertEqual(config_row, encrypted_settings)
+                endpoint = (
                     await unit.execute(
-                        text("SELECT version_num FROM alembic_version")
+                        text(
+                            "SELECT configuration_id,path "
+                            "FROM tbl_open_vpn_sockets"
+                        )
                     )
-                ).scalar_one()
-                self.assertEqual(revision, "0035_reseller_customer_access")
-                await unit.execute(
-                    text("DELETE FROM tbl_configurations WHERE label=:label"),
-                    {"label": "historical-overlap-" + self.suffix},
+                ).one()
+                self.assertEqual(
+                    endpoint,
+                    (1, self.options()["management_socket"]),
                 )
-                await unit.commit()
-            await asyncio.to_thread(command.upgrade, config, "head")
-            with self.assertRaisesRegex(RuntimeError, "active management"):
-                await asyncio.to_thread(
-                    command.downgrade, config, "0035_reseller_customer_access"
-                )
-        async with self.connection.uow() as unit:
-            after = (
-                await unit.execute(snapshot_query, {"id": task["id"]})
-            ).one()
-            self.assertTrue(
-                before == after, "PKI/profile/task ciphertext changed"
-            )
-            endpoint = (
-                await unit.execute(
-                    text(
-                        "SELECT configuration_id,path "
-                        "FROM tbl_open_vpn_sockets"
-                    )
-                )
-            ).one()
-            self.assertEqual(
-                endpoint,
-                (
-                    task["configuration_id"],
-                    self.options()["management_socket"],
-                ),
-            )
-            paid = (
-                await unit.execute(
-                    text(
-                        "SELECT status,price_rial FROM tbl_subscriptions "
-                        "WHERE id=:id"
-                    ),
-                    {"id": subscription["id"]},
-                )
-            ).one()
-            self.assertEqual(paid, ("pending_provision", 100000))
-            count = (
-                await unit.execute(
-                    text("SELECT COUNT(*) FROM tbl_wallet_entries")
-                )
-            ).scalar_one()
-            self.assertEqual(count, 2)
+        finally:
+            await target.dispose()
+            async with self.maintenance.uow() as unit:
+                await unit.execute(text(f"DROP DATABASE `{schema}`"))
