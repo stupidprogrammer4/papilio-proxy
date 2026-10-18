@@ -17,10 +17,27 @@ try{
  await page.getByRole('heading',{name:'Papilio Service',exact:true}).waitFor();
  await page.getByText('Available connections',{exact:true}).waitFor();
  await page.getByRole('button',{name:'Copy subscription URL'}).waitFor();
+ assert.equal(await page.getByTestId('theme-selector').count(),0);
+ await page.emulateMedia({colorScheme:'dark'});
+ await page.waitForFunction(()=>document.documentElement.dataset.theme==='dark');
+ await page.emulateMedia({colorScheme:'light'});
+ await page.waitForFunction(()=>document.documentElement.dataset.theme==='light');
+ await page.getByRole('tab',{name:'Android'}).waitFor();
+ await page.getByRole('link',{name:'Get app v2rayNG'}).waitFor();
+ await page.getByRole('tab',{name:'iOS'}).click();
+ const streisand=page.getByRole('link',{name:'Get app Streisand'});
+ await streisand.waitFor();
+ assert.equal(await streisand.getAttribute('href'),'https://apps.apple.com/us/app/streisand/id6450534064');
+ await page.getByRole('tab',{name:'Windows'}).click();
+ await page.getByRole('link',{name:'Get app v2rayN'}).waitFor();
+ await page.locator('.usage-ring').waitFor();
  await page.getByTestId('locale-selector').selectOption('fa');
  await page.getByText('اتصال‌های در دسترس',{exact:true}).waitFor();
  await page.getByText('حجم').waitFor();
  await page.getByRole('button',{name:'کپی نشانی اشتراک'}).waitFor();
+ await page.getByRole('tab',{name:'اندروید'}).waitFor();
+ await page.getByRole('tab',{name:'آی‌اواس'}).click();
+ await page.getByRole('link',{name:'دریافت برنامه Streisand'}).waitFor();
  assert.deepEqual(errors,[]);assert(methods.length>=2&&methods.every(method=>method==='GET'));
  console.log('Public customer service summary and connection actions render in English and Persian; controlled read-only HTTP.');
 }finally{await browser.close();}

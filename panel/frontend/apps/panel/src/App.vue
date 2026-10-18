@@ -76,7 +76,7 @@ watch(()=>reseller.session,session=>{if(dealer.value&&reseller.checked&&!session
 async function signOut():Promise<void>{if(signingOut.value)return;signingOut.value=true;signOutError.value="";try{if(dealer.value)await reseller.logout();else await auth.logout();await router.push(dealer.value?"/reseller/login":"/login");}catch(cause){signOutError.value=cause instanceof Error?cause.message:"Could not sign out. Try again.";}finally{signingOut.value=false;}}
 </script>
 <template>
- <DisplayPreferences v-if="bareWorkspace" />
+ <DisplayPreferences v-if="bareWorkspace" :show-theme="!route.path.startsWith('/service/')" />
  <RouterView v-if="bareWorkspace" />
  <div v-else class="layout">
   <button v-if="menuOpen" type="button" class="navigation-backdrop" :aria-label="navLabel('Close navigation')" @click="menuOpen=false" />

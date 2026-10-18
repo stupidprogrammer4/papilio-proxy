@@ -2364,6 +2364,19 @@
     "downloaded": "Connection file downloaded.",
     "copied": "Subscription URL copied.",
     "copyFailed": "Could not copy the URL. Check your browser clipboard permission.",
+    "used": "used",
+    "setupEyebrow": "GET CONNECTED",
+    "appsByPlatform": "Choose your device",
+    "importHint": "Install a client, then add your private subscription link from the button above.",
+    "configHint": "Import the subscription link in your client, or download a single connection below.",
+    "getApp": "Get app",
+    "platforms": {"android": "Android", "ios": "iOS", "windows": "Windows", "macos": "macOS", "linux": "Linux"},
+    "clientDescriptions": {
+      "crossPlatformClient": "Simple client with support for this device.",
+      "androidClient": "Android client for V2Ray and Xray configurations.",
+      "iosClient": "iPhone and iPad client for proxy configurations.",
+      "desktopClient": "Desktop client for V2Ray and Xray configurations."
+    },
     "statuses": {
       "serviceSuspended": "Service access suspended",
       "revoking": "Revoking",
