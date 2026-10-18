@@ -128,9 +128,29 @@ jobs:
       - name: Build panel
         working-directory: panel/frontend
         run: pnpm build
-      - name: Run browser workflows
+      - name: Run browser workflows against the dev server
         working-directory: panel/frontend
-        run: pnpm test:browser
+        run: |
+          set -euo pipefail
+          PAPILIO_DISABLE_FILE_WATCHER=true \
+            pnpm --filter @papilio/panel exec vite \
+            --host 127.0.0.1 --port 4523 --strictPort \
+            > "$RUNNER_TEMP/panel-dev-server.log" 2>&1 &
+          dev_server_pid=$!
+          trap 'kill "$dev_server_pid" 2>/dev/null || true; wait "$dev_server_pid" 2>/dev/null || true' EXIT
+          ready=false
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4523/ >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then
+            cat "$RUNNER_TEMP/panel-dev-server.log"
+            exit 1
+          fi
+          PANEL_ORIGIN=http://127.0.0.1:4523 pnpm test:browser
 
   go:
     name: Go runtimes
