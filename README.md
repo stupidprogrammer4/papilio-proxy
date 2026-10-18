@@ -81,13 +81,14 @@ The installer brings up the API, panel and native task services; Telegram is opt
 Proxy cores require their own deliberate setup and verification.
 
 ```bash
-bash scripts/deploy/install.sh \
-  --public-url http://127.0.0.1:8080 \
-  --http-port 8080 \
-  --owner-username myadmin
+set -o pipefail; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/main/scripts/deploy/quick-install.sh | bash -s -- --public-url https://panel.example.com --owner-username admin
 ```
 
-See [deployment](docs/deployment.md) for public HTTPS, lifecycle options and recovery.
+Point the domain to the server and allow ports 80/443 first. The installer can
+install Docker on supported Linux distributions, asks for the owner password
+privately, and keeps source and persistent state under your home directory. Add
+`--enable-bot` to configure Telegram. See [deployment](docs/deployment.md) for
+local-only setup, lifecycle options and recovery.
 Do not commit bank details, device keys, Telegram tokens or installation state.
 
 ## Product direction

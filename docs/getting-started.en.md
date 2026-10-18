@@ -4,46 +4,28 @@
 
 ## 1. Prepare the host
 
-Use Linux, macOS with Docker Desktop, or Windows through WSL2 with Docker Desktop
-integration. You need Bash, Git, Docker with Compose, network access for image
-builds, and an available port. Python and Node build tools run inside images.
+Use a Linux server with a domain pointed at it and ports 80/443 reachable.
+The one-line installer downloads the application, installs Docker on supported
+Linux distributions if needed, and keeps its source and state under your home
+directory. Python and Node build tools run inside images.
 
-Clone your chosen Papilio repository or release and enter its root directory.
-The commands below run from that directory. See [deployment](deployment.md) for
-the complete host requirements and configurable capacities.
-
-## 2. Try the panel locally
+## 2. Install the panel
 
 ```bash
-bash scripts/deploy/install.sh \
-  --public-url http://127.0.0.1:8080 \
-  --http-port 8080 \
-  --owner-username myadmin
+set -o pipefail; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/main/scripts/deploy/quick-install.sh | bash -s -- --public-url https://panel.example.com --owner-username admin
 ```
 
-The installer requests the owner password privately, builds the application,
-initializes its database and prints the panel URL after readiness checks. Choose
-your own administrator username. Do not use the local HTTP example for public access.
+Replace the example domain. The installer asks for the owner password privately,
+builds the application, initializes its database and prints the panel URL after
+readiness checks. Keep the displayed state path for service management. For
+loopback-only evaluation, use `--public-url http://127.0.0.1:8080` instead.
 
-## 3. Configure public HTTPS and optional Telegram
+## 3. Enable the optional Telegram bot
 
-Point a domain you control at the host. Permit certificate validation on port 80
-and HTTPS traffic on port 443, including any upstream router forwarding.
-
-```bash
-bash scripts/deploy/install.sh \
-  --project-name my-panel \
-  --state-dir "$HOME/papilio-state" \
-  --public-url https://panel.example.com \
-  --bind-address 0.0.0.0 \
-  --http-port 80 --https-port 443 \
-  --owner-username myadmin \
-  --enable-bot
-```
-
-Replace the example domain. Caddy handles certificate issuance and renewal;
-DNS and external reachability must be correct first. The installer requests the
-Telegram token privately. Omit `--enable-bot` to keep Telegram disabled.
+Add `--enable-bot` to the same command to configure Telegram. Caddy handles
+certificate issuance and renewal; DNS and external reachability must be correct
+first. The installer requests the Telegram token privately. Omit the flag to
+keep Telegram disabled.
 Do not pass tokens or passwords in command arguments or commit installation state.
 
 ## 4. Set up your business
