@@ -90,6 +90,10 @@ first. It can install Docker on supported Linux distributions and keeps source
 and persistent state under your home directory. Add
 `--enable-bot` to configure Telegram. See [deployment](docs/deployment.md) for
 local-only setup, lifecycle options and recovery.
+After installation, run `scripts/deploy/doctor.sh` to check the Compose
+healthchecks. It reports external OCR/payment integrations, node runtime,
+worker job execution and scheduler dispatch as unchecked because this command
+does not exercise those boundaries.
 Do not commit bank details, device keys, Telegram tokens or installation state.
 
 ## Product direction

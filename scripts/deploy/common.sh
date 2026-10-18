@@ -21,7 +21,7 @@ deploy_fail() {
 
 deploy_help() {
     printf '%s\n' \
-        'Usage: scripts/deploy/<install|start|stop|status>.sh [--state-dir PATH]' \
+        'Usage: scripts/deploy/<install|start|stop|status|doctor>.sh [--state-dir PATH]' \
         '       scripts/deploy/backup.sh --key-file PATH --output PATH' \
         'All entrypoints: --docker-sudo (explicit Linux sudo access to Docker)' \
         'Install options: --install-docker --no-start --project-name NAME' \
