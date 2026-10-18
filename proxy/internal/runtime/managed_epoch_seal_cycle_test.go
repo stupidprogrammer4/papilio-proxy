@@ -315,6 +315,58 @@ func TestManagedEpochRecoverySealRequiresDeterministicRequestIdentity(t *testing
 	}
 }
 
+func TestManagedEpochSealAppliedAcceptsRecoveryAfterIncompleteLocalSeal(t *testing.T) {
+	p, policy, _, installation, original := managedEpochSealTestFixture(t)
+	journal, err := OpenJournal(filepath.Join(t.TempDir(), "journal"), 65536)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer journal.Close()
+	current := *installation.Acceptance
+	client := &Client{config: ClientConfig{APIURL: "https://api.example", NodeCode: "owned"}}
+	local := managedEpochSealJournal{
+		Version: 1, APIURL: client.config.APIURL, NodeCode: client.config.NodeCode,
+		InstallationID: p.InstallationID, Policy: policy,
+		Request: ManagedEpochSealRequest{Epoch: current.ProcessEpoch, RequestID: policy.RequestID},
+	}
+	if err = saveManagedEpochSeal(journal, local); err != nil {
+		t.Fatal(err)
+	}
+	requestID := managedEpochRecoverySealRequestID(
+		policy.RequestID,
+		p.InstallationID,
+		current,
+	)
+	acceptance := ManagedEpochSealAcceptance{
+		ID: 23, Epoch: current.ProcessEpoch, InstallationID: p.InstallationID,
+		RequestID: requestID, ReceiptSHA256: strings.Repeat("c", 64),
+		AcceptanceID: strings.Repeat("d", 32), AcceptedAt: time.Now().UTC(),
+	}
+	recovery := managedEpochRecoverySealJournal{
+		Version: 1, APIURL: client.config.APIURL, NodeCode: client.config.NodeCode,
+		InstallationID: p.InstallationID, Epoch: current.ProcessEpoch,
+		RequestID: requestID, Acceptance: &acceptance,
+	}
+	if err = saveManagedEpochRecoverySeal(journal, recovery); err != nil {
+		t.Fatal(err)
+	}
+	applied, err := managedEpochSealApplied(
+		journal, client, p.InstallationID, current.ProcessEpoch, requestID,
+	)
+	if err != nil || !applied {
+		t.Fatal("accepted recovery seal was hidden by incomplete local seal", applied, err)
+	}
+	local.Original = &original
+	if err = saveManagedEpochSeal(journal, local); err != nil {
+		t.Fatal(err)
+	}
+	if applied, err = managedEpochSealApplied(
+		journal, client, p.InstallationID, current.ProcessEpoch, requestID,
+	); err != nil || applied {
+		t.Fatal("recovery seal bypassed a persisted normal proof", applied, err)
+	}
+}
+
 func TestManagedEpochSealCycleRejectsUnpaidAnchorAndPolicyCapacities(t *testing.T) {
 	p, policy, initial, installation, _ := managedEpochSealTestFixture(t)
 	if validateManagedEpochSealPolicyBeforeLaunch(p, nil) != nil || validateManagedEpochSealPolicyBeforeLaunch(p, &ManagedEpochSealPolicy{}) != nil {

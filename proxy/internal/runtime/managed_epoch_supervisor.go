@@ -205,6 +205,15 @@ func managedEpochSealApplied(
 		return false, errors.New("managed_epoch_seal_journal_unresolved")
 	}
 	if !state.AcceptanceApplied {
+		if state.Original == nil && state.Acceptance == nil {
+			return managedEpochRecoverySealApplied(
+				journal,
+				client,
+				installationID,
+				epoch,
+				recoveryRequestID,
+			)
+		}
 		return false, nil
 	}
 	if state.Original == nil || state.Acceptance == nil ||

@@ -126,7 +126,7 @@ func validateManagedBatchIssuedWindow(
 	if wire.Predecessor != nil || wire.BaselineUploadBytes != 0 || wire.BaselineDownloadBytes != 0 {
 		return errors.New("managed_window_batch_initial_window_invalid")
 	}
-	return validateManagedProvisionClaim(issued, request.ProvisionTaskID, true)
+	return validateManagedProvisionClaim(issued, request.ProvisionTaskID, requireCurrent)
 }
 
 func (c *Client) IssueManagedWindows(

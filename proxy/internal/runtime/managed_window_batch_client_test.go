@@ -106,6 +106,45 @@ func TestManagedWindowBatchClientIssuesAndFinalizesByStableIdentity(t *testing.T
 	}
 }
 
+func TestManagedWindowBatchRecoveryAcceptsExpiredProvisionClaim(t *testing.T) {
+	requests, issued, expectation, _, _ := managedWindowBatchFixture(t)
+	request := requests[0]
+	request.ProvisionTaskID = 9
+	issuedWindow := issued[0]
+	issuedWindow.Window.IssuedAt = time.Now().UTC().Add(-2 * time.Minute)
+	issuedWindow.Window.ValidUntil = time.Now().UTC().Add(-time.Minute)
+	original, err := json.Marshal(issuedWindow.Window)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issuedWindow.OriginalWindow = string(original)
+	issuedWindow.WindowSHA256 = checksum(original)
+	issuedWindow.ProvisionClaim = &ManagedProvisionClaim{
+		TaskID:     request.ProvisionTaskID,
+		RequestID:  7,
+		ClaimToken: strings.Repeat("k", 32),
+		ClaimUntil: issuedWindow.Window.ValidUntil,
+	}
+	if err = validateManagedBatchIssuedWindow(
+		issuedWindow,
+		request,
+		expectation,
+		65536,
+		false,
+	); err != nil {
+		t.Fatal("recovery rejected an already-issued expired claim", err)
+	}
+	if err = validateManagedBatchIssuedWindow(
+		issuedWindow,
+		request,
+		expectation,
+		65536,
+		true,
+	); err == nil {
+		t.Fatal("initial issuance accepted an expired claim")
+	}
+}
+
 func managedWindowBatchProfileSubmission(
 	t *testing.T,
 	window ManagedWindowWire,
