@@ -98,7 +98,7 @@ jobs:
         run: |
           ruff check papilio_telegram tests
           ruff format --check papilio_telegram tests
-          pyright papilio_telegram tests
+          pyright --pythonpath "$(python -c 'import sys; print(sys.executable)')" papilio_telegram tests
       - name: Run bot tests
         working-directory: bot
         run: python -m pytest -q
@@ -112,8 +112,6 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: pnpm
-          cache-dependency-path: panel/frontend/pnpm-lock.yaml
       - name: Enable pnpm
         run: corepack enable
       - name: Install frontend dependencies

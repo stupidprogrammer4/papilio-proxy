@@ -15,23 +15,39 @@ def upgrade() -> None:
     op.create_table(
         "tbl_balancer_policies",
         sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
-        sa.Column("created_at", sa.DateTime(), nullable=False,
-                  server_default=sa.func.current_timestamp()),
-        sa.Column("updated_at", sa.DateTime(), nullable=False,
-                  server_default=sa.func.current_timestamp()),
-        sa.Column("group_id", sa.BigInteger(),
-                  sa.ForeignKey("tbl_host_groups.id"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(),
+            nullable=False,
+            server_default=sa.func.current_timestamp(),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(),
+            nullable=False,
+            server_default=sa.func.current_timestamp(),
+        ),
+        sa.Column(
+            "group_id",
+            sa.BigInteger(),
+            sa.ForeignKey("tbl_host_groups.id"),
+            nullable=False,
+        ),
         sa.Column("client_core", sa.String(16), nullable=False),
         sa.Column("revision", sa.Integer(), nullable=False),
         sa.Column("policy_json", sa.Text(), nullable=False),
-        sa.UniqueConstraint("group_id", "client_core",
-                            name="uq_balancer_group_core"),
+        sa.UniqueConstraint(
+            "group_id", "client_core", name="uq_balancer_group_core"
+        ),
     )
 
 
 def downgrade() -> None:
-    if op.get_bind().execute(
-        sa.text("SELECT 1 FROM tbl_balancer_policies LIMIT 1")
-    ).first() is not None:
+    if (
+        op.get_bind()
+        .execute(sa.text("SELECT 1 FROM tbl_balancer_policies LIMIT 1"))
+        .first()
+        is not None
+    ):
         raise RuntimeError("Restore a backup to preserve balancing policies")
     op.drop_table("tbl_balancer_policies")

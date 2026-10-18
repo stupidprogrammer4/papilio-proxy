@@ -280,8 +280,8 @@ class ManagedInstallationMigrationTest(ManagedInstallationWorkflowFixture):
                                 "SELECT referenced_table_name FROM "
                                 "information_schema.key_column_usage WHERE "
                                 "table_schema=DATABASE() AND table_name IN "
-                            "('tbl_managed_windows',"
-                            "'tbl_managed_barriers') AND "
+                                "('tbl_managed_windows',"
+                                "'tbl_managed_barriers') AND "
                                 "column_name='epoch_id' AND "
                                 "referenced_table_name IS NOT NULL"
                             )

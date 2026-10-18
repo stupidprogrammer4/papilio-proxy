@@ -10,9 +10,7 @@ async def check() -> None:
     settings = get_settings(PapilioSettings)
     client = await nats.connect(settings.events.nats_url, connect_timeout=2)
     try:
-        await client.jetstream().consumer_info(
-            "receipt-ocr", "receipt-ocr-v1"
-        )
+        await client.jetstream().consumer_info("receipt-ocr", "receipt-ocr-v1")
     finally:
         await client.close()
 

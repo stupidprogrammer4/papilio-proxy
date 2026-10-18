@@ -1,4 +1,5 @@
 """Captured wallet payment contracts and stateless private callbacks."""
+
 from dataclasses import dataclass
 from typing import Literal
 
@@ -40,7 +41,8 @@ class WalletTopupRead(BaseModel):
             raise ValueError("Payable amount is below requested credit")
         if self.payment_identifier_mode == "rial_suffix4":
             if self.requested_amount_rial is None or (
-                self.payment_identifier_code4 != f"{self.amount_rial % 10000:04d}"
+                self.payment_identifier_code4
+                != f"{self.amount_rial % 10000:04d}"
             ):
                 raise ValueError("Incomplete or mismatched payment identifier")
         elif self.payment_identifier_code4 is not None:
@@ -92,8 +94,10 @@ def callback_values(value: str, kind: str, count: int) -> tuple[int, ...]:
     if len(value.encode()) > TELEGRAM_CALLBACK_BYTES:
         raise ValueError("Callback exceeds Telegram protocol capacity")
     parts = value.split(":")
-    if len(parts) != count + 1 or parts[0] != kind or any(
-        not part.isascii() or not part.isdigit() for part in parts[1:]
+    if (
+        len(parts) != count + 1
+        or parts[0] != kind
+        or any(not part.isascii() or not part.isdigit() for part in parts[1:])
     ):
         raise ValueError("Malformed top-up callback")
     result = tuple(int(part) for part in parts[1:])

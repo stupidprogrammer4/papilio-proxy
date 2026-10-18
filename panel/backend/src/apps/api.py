@@ -34,9 +34,7 @@ async def private_access_logs(app: FastAPI) -> AsyncIterator[None]:
     previous = access.disabled
     access.disabled = True
     try:
-        async with Producers(
-            scheduler_application, events_application
-        )(app):
+        async with Producers(scheduler_application, events_application)(app):
             yield
     finally:
         access.disabled = previous
