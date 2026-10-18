@@ -19,11 +19,14 @@ usage() {
 Install Papilio on a Linux server with one command.
 
 Usage:
+  set -o pipefail; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/main/scripts/deploy/quick-install.sh | bash
   set -o pipefail; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/main/scripts/deploy/quick-install.sh | bash -s -- --public-url https://panel.example.com --owner-username admin
 
-Required:
+If omitted, the installer asks for the panel URL and administrator name (default: admin).
+
+Options:
   --public-url URL       Public HTTPS domain (or local http://127.0.0.1:8080)
-  --owner-username NAME  Initial panel administrator
+  --owner-username NAME  Initial panel administrator (default: admin)
 
 Optional:
   --enable-bot           Also configure Telegram; asks for its token privately
@@ -103,15 +106,31 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-[ -n "$public_url" ] || fail 'Set --public-url to your domain or local address.'
-[ -n "$owner_username" ] || fail 'Set --owner-username for the panel administrator.'
 [[ "$ref" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] || fail 'Invalid branch or tag name.'
 [[ "$public_url" != *$'\n'* && "$public_url" != *'@'* ]] || fail 'URL cannot contain credentials or newlines.'
-[ -r /dev/tty ] || fail 'Run this command from an interactive terminal so secrets can be entered privately.'
 [ "$(uname -s)" = Linux ] || fail 'The one-line server installer currently supports Linux. Use Docker Desktop for macOS/WSL and run install.sh from the checkout.'
 if grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then
     fail 'For WSL, enable Docker Desktop integration and run install.sh from the checkout.'
 fi
+if [ -z "$public_url" ]; then
+    if ! { : </dev/tty; } 2>/dev/null; then
+        fail 'Run this command from an interactive terminal so setup values and secrets can be entered privately.'
+    fi
+    read -r -p 'Panel URL (for example https://panel.example.com): ' public_url </dev/tty \
+        || fail 'Could not read the panel URL.'
+    forwarded+=(--public-url "$public_url")
+fi
+if [ -z "$owner_username" ]; then
+    if ! { : </dev/tty; } 2>/dev/null; then
+        fail 'Run this command from an interactive terminal so setup values and secrets can be entered privately.'
+    fi
+    read -r -p 'Administrator username [admin]: ' owner_username </dev/tty \
+        || fail 'Could not read the administrator username.'
+    owner_username="${owner_username:-admin}"
+    forwarded+=(--owner-username "$owner_username")
+fi
+[ -n "$public_url" ] || fail 'Enter a panel URL.'
+[ -n "$owner_username" ] || fail 'Enter an administrator username.'
 
 case "$public_url" in
     https://*)
@@ -137,6 +156,10 @@ case "$public_url" in
         ;;
     *) fail 'Use HTTPS for a public domain. Plain HTTP is supported only for local testing.' ;;
 esac
+
+if ! { : </dev/tty; } 2>/dev/null; then
+    fail 'Run this command from an interactive terminal so setup values and secrets can be entered privately.'
+fi
 
 command -v curl >/dev/null 2>&1 || fail 'Install curl and retry.'
 command -v tar >/dev/null 2>&1 || fail 'Install tar and retry.'

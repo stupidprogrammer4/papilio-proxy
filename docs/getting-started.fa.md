@@ -11,16 +11,16 @@
 ## ۲. نصب پنل
 
 ```bash
-set -o pipefail; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/main/scripts/deploy/quick-install.sh | bash -s -- --public-url https://panel.example.com --owner-username admin
+set -o pipefail; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/main/scripts/deploy/quick-install.sh | bash
 ```
 
-دامنهٔ نمونه را عوض کنید. نصب‌کننده رمز مدیر را در ترمینال خصوصی می‌گیرد، imageها و دیتابیس را آماده می‌کند
-و پس از بررسی سلامت آدرس پنل و مسیر state را نشان می‌دهد. نام مدیر را خودتان انتخاب کنید.
-برای آزمایش فقط روی همان سرور، به‌جای دامنه از `--public-url http://127.0.0.1:8080` استفاده کنید.
+نصب‌کننده آدرس پنل و نام مدیر (پیش‌فرض `admin`) را می‌پرسد و رمز را خصوصی می‌گیرد؛ imageها و دیتابیس را آماده می‌کند
+و پس از بررسی سلامت، آدرس پنل و مسیر state را نشان می‌دهد. دامنه باید به سرور اشاره کند و پورت‌های ۸۰ و ۴۴۳ باز باشند.
+برای نصب بدون پرسش، `--public-url` و `--owner-username` را پس از `bash -s --` بدهید. برای آزمایش فقط روی همان سرور، از `--public-url http://127.0.0.1:8080` استفاده کنید.
 
 ## ۳. فعال‌کردن بات تلگرام
 
-برای نصب Telegram bot، `--enable-bot` را به همان دستور یک‌خطی اضافه کنید. Caddy صدور و تمدید گواهی را انجام می‌دهد؛
+برای نصب Telegram bot، دستور را با `bash -s -- --enable-bot` تمام کنید. Caddy صدور و تمدید گواهی را انجام می‌دهد؛
 DNS و دسترسی بیرونی باید از قبل درست باشند. نصب‌کننده توکن تلگرام را خصوصی می‌گیرد.
 رمز و توکن را در آرگومان دستور نگذارید و دادهٔ نصب را وارد Git نکنید.
 

@@ -53,17 +53,19 @@ are installed inside images, so they are not host prerequisites.
 On a Linux server, use the one-line bootstrap from any directory:
 
 ```bash
-set -o pipefail; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/main/scripts/deploy/quick-install.sh | bash -s -- --public-url https://panel.example.com --owner-username admin
+set -o pipefail; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/main/scripts/deploy/quick-install.sh | bash
 ```
 
-The domain must resolve to this host and ports 80/443 must be reachable. The
-bootstrap downloads and retains the source under
+The bootstrap asks for the panel URL and administrator name (default `admin`),
+then obtains passwords and optional tokens privately from the terminal. The
+domain must resolve to this host and ports 80/443 must be reachable. It downloads
+and retains the source under
 `~/.local/share/papilio-proxy/source`, keeps private settings and database state
 under `~/papilio-state`, and can install Docker on supported Linux distributions.
-It reopens `/dev/tty` for the owner password and optional Telegram token, so the
-password is never placed in shell history or process arguments. Add `--enable-bot`
-to configure Telegram. For repeat deployment from the project checkout, continue
-using `install.sh` below.
+It reopens `/dev/tty` for setup values, the owner password and optional Telegram
+token, so secrets are never placed in shell history or process arguments. Append
+`--enable-bot` as `bash -s -- --enable-bot` to configure Telegram. For repeat
+deployment from the project checkout, continue using `install.sh` below.
 
 Point a domain at this machine and make HTTP port 80 reachable for certificate
 issuance. Then run:

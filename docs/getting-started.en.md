@@ -12,20 +12,22 @@ directory. Python and Node build tools run inside images.
 ## 2. Install the panel
 
 ```bash
-set -o pipefail; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/main/scripts/deploy/quick-install.sh | bash -s -- --public-url https://panel.example.com --owner-username admin
+set -o pipefail; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/main/scripts/deploy/quick-install.sh | bash
 ```
 
-Replace the example domain. The installer asks for the owner password privately,
-builds the application, initializes its database and prints the panel URL after
-readiness checks. Keep the displayed state path for service management. For
-loopback-only evaluation, use `--public-url http://127.0.0.1:8080` instead.
+The installer asks for the panel URL and administrator name (default `admin`),
+then asks for the owner password privately. It builds the application, initializes
+its database and prints the panel URL after readiness checks. Keep the displayed
+state path for service management. For non-interactive defaults, pass
+`--public-url` and `--owner-username` after `bash -s --`. For loopback-only
+evaluation, use `--public-url http://127.0.0.1:8080`.
 
 ## 3. Enable the optional Telegram bot
 
-Add `--enable-bot` to the same command to configure Telegram. Caddy handles
-certificate issuance and renewal; DNS and external reachability must be correct
-first. The installer requests the Telegram token privately. Omit the flag to
-keep Telegram disabled.
+End the command with `bash -s -- --enable-bot` to configure Telegram. Caddy
+handles certificate issuance and renewal; DNS and external reachability must be
+correct first. The installer requests the Telegram token privately. Omit the
+flag to keep Telegram disabled.
 Do not pass tokens or passwords in command arguments or commit installation state.
 
 ## 4. Set up your business
