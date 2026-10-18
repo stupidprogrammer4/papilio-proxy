@@ -322,16 +322,19 @@ def prepare_native_closed_installation(
 
 
 class ManagedAcknowledgementProxy:
-    """Hold one ACK before the real API, then forward its recovery replay."""
+    """Drop the first committed ACK response and forward its replay."""
 
     def __init__(self, upstream_url: str):
         self.upstream_url = upstream_url.rstrip("/")
         self.first_ack_received = threading.Event()
+        self.first_ack_upstream_completed = threading.Event()
         self.release_first_ack = threading.Event()
-        self.first_ack_rejected = threading.Event()
+        self.first_ack_response_dropped = threading.Event()
         self.replayed_ack_accepted = threading.Event()
         self.lock = threading.Lock()
         self.ack_payloads: list[bytes] = []
+        self.ack_upstream_errors: list[str] = []
+        self.ack_upstream_statuses: list[int] = []
         self.ack_statuses: list[int] = []
         self.ack_responses: list[dict] = []
         self.server = self._server()
@@ -378,19 +381,13 @@ class ManagedAcknowledgementProxy:
                     and "/managed-installations/" in self.path
                     and self.path.endswith("/acknowledge")
                 )
+                attempt = 0
                 if is_ack:
                     with owner.lock:
                         owner.ack_payloads.append(payload)
                         attempt = len(owner.ack_payloads)
                     if attempt == 1:
                         owner.first_ack_received.set()
-                        owner.release_first_ack.wait(timeout=20)
-                        self.send_response(503)
-                        self.send_header("Content-Length", "0")
-                        self.end_headers()
-                        self.wfile.flush()
-                        owner.first_ack_rejected.set()
-                        return
 
                 headers = {
                     name: value
@@ -417,11 +414,28 @@ class ManagedAcknowledgementProxy:
                             content=payload,
                             headers=headers,
                         )
-                except httpx.HTTPError:
+                except httpx.HTTPError as error:
+                    if is_ack:
+                        with owner.lock:
+                            owner.ack_upstream_errors.append(
+                                type(error).__name__
+                            )
                     self.send_response(502)
                     self.send_header("Content-Length", "0")
                     self.end_headers()
                     return
+
+                if is_ack:
+                    with owner.lock:
+                        owner.ack_upstream_statuses.append(
+                            response.status_code
+                        )
+                    if attempt == 1:
+                        owner.first_ack_upstream_completed.set()
+                        owner.release_first_ack.wait(timeout=20)
+                        self.close_connection = True
+                        owner.first_ack_response_dropped.set()
+                        return
 
                 self.send_response(response.status_code)
                 self.send_header("Content-Length", str(len(response.content)))
@@ -435,7 +449,8 @@ class ManagedAcknowledgementProxy:
                     with owner.lock:
                         owner.ack_statuses.append(response.status_code)
                         owner.ack_responses.append(response.json())
-                    owner.replayed_ack_accepted.set()
+                    if attempt > 1:
+                        owner.replayed_ack_accepted.set()
 
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         server.daemon_threads = True

@@ -450,7 +450,7 @@ class ManagedInstallationWorkflowTest(ManagedInstallationWorkflowFixture):
                 listener.close()
                 await asyncio.to_thread(runtime.__exit__, None, None, None)
 
-    async def test_actual_crash_before_ack_recovers_closed_receipt(
+    async def test_crash_after_api_commit_before_response_replays_receipt(
         self,
     ):
         runtime_binary = os.environ.get("PAPILIO_RUNTIME_TEST_BINARY")
@@ -559,11 +559,34 @@ class ManagedInstallationWorkflowTest(ManagedInstallationWorkflowFixture):
                         root / "agent-before-ack.log",
                         environment=environment,
                     )
-                    first_ack_reached = await asyncio.wait_for(
+                    first_ack_received = await asyncio.wait_for(
                         asyncio.to_thread(proxy.first_ack_received.wait, 30),
                         timeout=31,
                     )
-                    self.assertTrue(first_ack_reached)
+                    if not first_ack_received:
+                        agent_log = (root / "agent-before-ack.log").read_text(
+                            errors="replace"
+                        )
+                        self.fail(
+                            "managed_first_ack_not_received:"
+                            + agent_log[-1000:]
+                        )
+                    first_ack_committed = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            proxy.first_ack_upstream_completed.wait, 30
+                        ),
+                        timeout=31,
+                    )
+                    if not first_ack_committed:
+                        agent_log = (root / "agent-before-ack.log").read_text(
+                            errors="replace"
+                        )
+                        self.fail(
+                            "managed_first_ack_not_committed:"
+                            + f"proxy_statuses={proxy.ack_upstream_statuses}:"
+                            + f"proxy_errors={proxy.ack_upstream_errors}:"
+                            + agent_log[-1000:]
+                        )
                     state_path = (
                         Path(registry["registry"]["state_directory"])
                         / "managed-installation.json"
@@ -596,9 +619,24 @@ class ManagedInstallationWorkflowTest(ManagedInstallationWorkflowFixture):
                     self.assertNotIn(b"--resume-epoch", initial_arguments)
                     target_requests_before = runtime.target_request_count()
                     self.assertEqual(target_requests_before, 0)
+                    async with self.connection.uow() as fresh:
+                        acknowledged = await fresh.execute(
+                            text(
+                                "SELECT i.state,COUNT(e.id) "
+                                "FROM tbl_managed_installations i "
+                                "LEFT JOIN tbl_managed_epoches e "
+                                "ON e.installation_id=i.id WHERE i.id=:id "
+                                "GROUP BY i.id,i.state"
+                            ),
+                            {"id": installation_id},
+                        )
+                        self.assertEqual(
+                            tuple(acknowledged.one()),
+                            ("installed_closed", 1),
+                        )
                     await asyncio.to_thread(
                         runtime.exercise,
-                        "before-api-ack",
+                        "before-api-ack-response",
                         runtime.client(client_configuration["content"]),
                         False,
                     )
@@ -613,7 +651,7 @@ class ManagedInstallationWorkflowTest(ManagedInstallationWorkflowFixture):
                             ),
                             {"id": installation_id},
                         )
-                        self.assertEqual(epochs.scalar_one(), 0)
+                        self.assertEqual(epochs.scalar_one(), 1)
 
                     child_pidfd = os.pidfd_open(initial_child)
                     try:
@@ -627,11 +665,14 @@ class ManagedInstallationWorkflowTest(ManagedInstallationWorkflowFixture):
                     finally:
                         os.close(child_pidfd)
                     proxy.release_first_ack.set()
-                    first_rejected = await asyncio.wait_for(
-                        asyncio.to_thread(proxy.first_ack_rejected.wait, 5),
+                    first_response_dropped = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            proxy.first_ack_response_dropped.wait, 5
+                        ),
                         timeout=6,
                     )
-                    self.assertTrue(first_rejected)
+                    self.assertTrue(first_response_dropped)
+                    self.assertEqual(proxy.ack_upstream_statuses, [200])
                     self.assertEqual(len(proxy.ack_responses), 0)
 
                 restart_command, restart_environment = (
@@ -663,6 +704,7 @@ class ManagedInstallationWorkflowTest(ManagedInstallationWorkflowFixture):
                     self.assertEqual(
                         proxy.ack_statuses, [200], proxy.ack_responses
                     )
+                    self.assertEqual(proxy.ack_upstream_statuses, [200, 200])
                     self.assertTrue(
                         proxy.ack_responses[0]["success"],
                         proxy.ack_responses[0],
