@@ -1,6 +1,12 @@
 from dishka import Provider, Scope, provide
 
 from src.config.settings import PapilioSettings
+from src.modules.billing.receipts.app.annotation_interfaces import (
+    IReceiptAnnotationCommand,
+)
+from src.modules.billing.receipts.app.annotations import (
+    ReceiptAnnotationCommand,
+)
 from src.modules.billing.receipts.app.commands import PaymentReceiptCommand
 from src.modules.billing.receipts.app.images import ReceiptImages
 from src.modules.billing.receipts.app.ocr_commands import (
@@ -21,6 +27,7 @@ from src.modules.billing.receipts.infra.google_vision import (
     GoogleVisionReceiptOcr,
 )
 from src.modules.billing.receipts.infra.mysql import (
+    PaymentReceiptAnnotationRepository,
     PaymentReceiptOutboxRepository,
     PaymentReceiptRepository,
 )
@@ -49,8 +56,12 @@ class PaymentReceiptProvider(Provider):
 
     scope = Scope.REQUEST
     repo = provide(PaymentReceiptRepository)
+    annotation_repo = provide(PaymentReceiptAnnotationRepository)
     outbox_repo = provide(PaymentReceiptOutboxRepository)
     command = provide(PaymentReceiptCommand, provides=IPaymentReceiptCommand)
+    annotation_command = provide(
+        ReceiptAnnotationCommand, provides=IReceiptAnnotationCommand
+    )
     outbox_command = provide(
         PaymentReceiptOutboxCommand, provides=IPaymentReceiptOutboxCommand
     )

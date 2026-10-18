@@ -778,6 +778,23 @@
       "ocrReasonCodes": "دلیل‌های نیازمند بررسی",
       "ocrWarnings": "هشدارهای OCR",
       "ocrFieldEvidence": "شواهد فیلدهای OCR",
+      "annotationTitle": "سابقهٔ اصلاح اپراتور",
+      "annotationExplanation": "اصلاح‌ها یادداشت‌های خصوصی و نسخه‌دار برای بازبینی‌اند؛ نتیجهٔ اصلی OCR را تغییر نمی‌دهند و پرداخت را تأیید نمی‌کنند.",
+      "annotationLoading": "در حال بارگذاری سابقهٔ اصلاح…",
+      "annotationHistory": "اصلاح‌های قبلی",
+      "annotationRevision": "نسخهٔ {revision} · کارمند {staff}",
+      "annotationReason": "دلیل این اصلاح",
+      "annotationTime": "زمان انتقال (ورودی محلی، ذخیره به UTC)",
+      "annotationSave": "ثبت اصلاح",
+      "annotationSaved": "اصلاح به‌عنوان نسخهٔ جدید ثبت شد.",
+      "annotationAmountInvalid": "مبلغ صحیح و نامنفی وارد کنید.",
+      "currencyLabel": "واحد نمایش‌داده‌شده در رسید",
+      "destinationKind": "نوع مقصد",
+      "kind": {
+        "card": "کارت",
+        "iban": "شبا",
+        "account": "حساب"
+      },
       "ocrReasons": {
         "ambiguous_bank_reference": "چند شناسهٔ انتقال شناسایی شده است.",
         "ambiguous_destination": "چند مقصد پرداخت شناسایی شده است.",
@@ -799,7 +816,9 @@
       },
       "instructions": "دستور پرداخت",
       "wrongRequest": "جزئیات پرداخت با درخواست انتخاب‌شده مطابقت ندارد.",
-      "instructionMismatch": "دستور پرداخت ثبت‌شده با این درخواست مطابقت ندارد. پیش از انتقال، اطلاعات را تازه‌سازی کنید."
+      "instructionMismatch": "دستور پرداخت ثبت‌شده با این درخواست مطابقت ندارد. پیش از انتقال، اطلاعات را تازه‌سازی کنید.",
+      "annotationPrevious": "اصلاح‌های قدیمی‌تر",
+      "annotationNext": "اصلاح‌های تازه‌تر"
     },
     "rial": "ریال",
     "identifierCode": "شناسه",

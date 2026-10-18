@@ -778,6 +778,23 @@
       "ocrReasonCodes": "Review reasons",
       "ocrWarnings": "OCR warnings",
       "ocrFieldEvidence": "OCR field evidence",
+      "annotationTitle": "Operator correction history",
+      "annotationExplanation": "Corrections are private, revisioned review notes. They do not change the original OCR result or approve payment.",
+      "annotationLoading": "Loading correction history…",
+      "annotationHistory": "Previous corrections",
+      "annotationRevision": "Revision {revision} · Staff #{staff}",
+      "annotationReason": "Reason for this correction",
+      "annotationTime": "Transfer time (local input, stored as UTC)",
+      "annotationSave": "Save correction",
+      "annotationSaved": "Correction saved as a new revision.",
+      "annotationAmountInvalid": "Enter a whole, non-negative amount.",
+      "currencyLabel": "Currency shown on receipt",
+      "destinationKind": "Destination type",
+      "kind": {
+        "card": "Card",
+        "iban": "IBAN",
+        "account": "Account"
+      },
       "ocrReasons": {
         "ambiguous_bank_reference": "Multiple transfer references were found.",
         "ambiguous_destination": "Multiple payment destinations were found.",
@@ -799,7 +816,9 @@
       },
       "instructions": "Payment instructions",
       "wrongRequest": "Payment details do not match the selected request.",
-      "instructionMismatch": "Captured payment instructions do not match this payment. Refresh before transferring."
+      "instructionMismatch": "Captured payment instructions do not match this payment. Refresh before transferring.",
+      "annotationPrevious": "Previous corrections",
+      "annotationNext": "Next corrections"
     },
     "rial": "RIAL",
     "identifierCode": "Code",

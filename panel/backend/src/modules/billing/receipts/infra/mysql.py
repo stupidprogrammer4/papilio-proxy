@@ -12,7 +12,10 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import InstrumentedAttribute, defer
 from sqlmodel import col
 
-from src.modules.billing.receipts.domain.models import PaymentReceiptModel
+from src.modules.billing.receipts.domain.models import (
+    PaymentReceiptAnnotationModel,
+    PaymentReceiptModel,
+)
 from src.modules.billing.receipts.domain.outbox import ReceiptOcrOutboxClaim
 from src.modules.billing.receipts.domain.outbox_models import (
     ReceiptOcrOutboxModel,
@@ -20,7 +23,10 @@ from src.modules.billing.receipts.domain.outbox_models import (
 from src.modules.billing.receipts.infra.outbox_tables import (
     ReceiptOcrOutboxTable,
 )
-from src.modules.billing.receipts.infra.tables import PaymentReceiptTable
+from src.modules.billing.receipts.infra.tables import (
+    PaymentReceiptAnnotationTable,
+    PaymentReceiptTable,
+)
 
 
 class PaymentReceiptRepository(
@@ -86,6 +92,58 @@ class PaymentReceiptRepository(
                     )
                 )
             )
+        )
+        result = await fetch_page(self.uow, query, offset=offset, limit=limit)
+        return result
+
+    async def annotation_target(
+        self, topup_id: int, receipt_id: int
+    ) -> PaymentReceiptModel | None:
+        result = await self.uow.execute(
+            select(PaymentReceiptTable)
+            .where(
+                col(PaymentReceiptTable.id) == receipt_id,
+                col(PaymentReceiptTable.topup_id) == topup_id,
+            )
+            .options(
+                defer(
+                    cast(
+                        InstrumentedAttribute[str],
+                        PaymentReceiptTable.encrypted_payload,
+                    )
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def advance_annotation_revision(
+        self, receipt_id: int, expected_revision: int
+    ) -> bool:
+        result = await self.uow.execute(
+            update(PaymentReceiptTable)
+            .where(
+                col(PaymentReceiptTable.id) == receipt_id,
+                col(PaymentReceiptTable.annotation_revision)
+                == expected_revision,
+            )
+            .values(annotation_revision=expected_revision + 1)
+        )
+        changed = cast(CursorResult[object], result).rowcount
+        return changed == 1
+
+
+class PaymentReceiptAnnotationRepository(
+    MySQLPersistenceRepository[PaymentReceiptAnnotationModel]
+):
+    table = PaymentReceiptAnnotationTable
+
+    async def history(
+        self, receipt_id: int, offset: int, limit: int
+    ) -> PagedType[PaymentReceiptAnnotationModel]:
+        query = (
+            select(PaymentReceiptAnnotationTable)
+            .where(col(PaymentReceiptAnnotationTable.receipt_id) == receipt_id)
+            .order_by(col(PaymentReceiptAnnotationTable.revision).desc())
         )
         result = await fetch_page(self.uow, query, offset=offset, limit=limit)
         return result
