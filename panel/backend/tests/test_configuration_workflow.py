@@ -154,7 +154,10 @@ class ConfigurationWorkflowTest(IsolatedAsyncioTestCase):
                     )
                     await post(
                         f"/v1/admin/payments/topups/{topup['id']}/approve",
-                        {"bank_reference": "cfg_" + suffix},
+                        {
+                            "expected_revision": topup["revision"],
+                            "bank_reference": "cfg_" + suffix,
+                        },
                     )
                     purchase = await post(
                         "/v1/admin/subscriptions",
