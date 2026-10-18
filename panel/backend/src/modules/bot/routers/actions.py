@@ -84,6 +84,7 @@ class BotPresentationOut(BaseModel):
     welcome_message: str
     welcome_photo_url: str | None
     menu_buttons: list[BotMenuButtonOut]
+    message_catalog: dict[str, str]
 
 
 class HomeOut(BaseModel):

@@ -1,4 +1,6 @@
 import asyncio
+from collections import Counter
+from string import Formatter
 from types import SimpleNamespace
 from typing import cast
 
@@ -18,7 +20,7 @@ def test_bot_presentation_defaults_preserve_current_menu_and_greeting() -> (
 ):
     settings = BotPresentationSettings()
 
-    assert settings.catalog_version == 2
+    assert settings.catalog_version == 3
     assert len(settings.message_catalog["fa"]) >= 250
     assert settings.localized_texts["fa"].welcome_message == (
         "سلام {display_name} 🌿\n"
@@ -45,6 +47,63 @@ def test_bot_presentation_defaults_preserve_current_menu_and_greeting() -> (
             settings.show_support,
         )
     )
+
+
+def test_bot_presentation_has_complete_default_fixed_message_locales() -> None:
+    settings = BotPresentationSettings()
+    sources = settings.message_catalog["fa"]
+
+    assert set(settings.message_catalog) == {"fa", "en", "ru", "zh"}
+    assert all(
+        set(catalog) == set(sources)
+        for catalog in settings.message_catalog.values()
+    )
+    assert all(
+        translated.strip()
+        for locale, catalog in settings.message_catalog.items()
+        if locale != "fa"
+        for translated in catalog.values()
+    )
+    assert settings.message_catalog["en"]["درخواست انجام نشد."] == (
+        "Request failed."
+    )
+    assert settings.message_catalog["ru"]["درخواست انجام نشد."] == (
+        "Не удалось выполнить запрос."
+    )
+    assert settings.message_catalog["zh"]["درخواست انجام نشد."] == (
+        "请求未能完成。"
+    )
+    welcome = (
+        "سلام {display_name} 🌿\nبه {brand_title} خوش آمدید.\n"
+        "💰 موجودی کیف پول: {balance}"
+    )
+    assert all(
+        all(
+            token in settings.message_catalog[locale][welcome]
+            for token in ("{display_name}", "{brand_title}", "{balance}")
+        )
+        for locale in ("en", "ru", "zh")
+    )
+    for locale in ("en", "ru", "zh"):
+        for source, translated in settings.message_catalog[locale].items():
+            leading = source[: len(source) - len(source.lstrip())]
+            trailing = source[len(source.rstrip()) :]
+            source_fields = [
+                field
+                for _, field, _, _ in Formatter().parse(source)
+                if field is not None
+            ]
+            translated_fields = [
+                field
+                for _, field, _, _ in Formatter().parse(translated)
+                if field is not None
+            ]
+
+            assert translated.startswith(leading)
+            assert translated.endswith(trailing)
+            assert Counter(translated_fields) == Counter(source_fields)
+            assert translated.count("<b>") == source.count("<b>")
+            assert translated.count("</b>") == source.count("</b>")
 
 
 def test_bot_presentation_accepts_https_photo_and_known_placeholders() -> None:
@@ -83,8 +142,30 @@ def test_bot_presentation_migrates_legacy_persian_values() -> None:
     assert (
         settings.localized_texts["fa"].catalog_button_label == "فروشگاه تازه"
     )
-    assert settings.catalog_version == 2
-    assert settings.message_catalog["en"]["پلن دریافت نشد."] == ""
+    assert settings.catalog_version == 3
+    assert settings.message_catalog["en"]["پلن دریافت نشد."] == (
+        "Could not retrieve plans."
+    )
+
+
+def test_bot_presentation_migrates_blank_version_two_translations() -> None:
+    settings = BotPresentationSettings.model_validate(
+        {
+            "catalog_version": 2,
+            "message_catalog": {
+                "en": {"درخواست انجام نشد.": ""},
+                "ru": {"درخواست انجام نشد.": "Мой текст ошибки."},
+            },
+        }
+    )
+
+    assert settings.catalog_version == 3
+    assert settings.message_catalog["en"]["درخواست انجام نشد."] == (
+        "Request failed."
+    )
+    assert settings.message_catalog["ru"]["درخواست انجام نشد."] == (
+        "Мой текст ошибки."
+    )
 
 
 def test_presentation_query_reads_current_preferences() -> None:
@@ -137,7 +218,7 @@ def test_presentation_query_reads_current_preferences() -> None:
 @pytest.mark.parametrize(
     "payload",
     [
-        {"catalog_version": 3},
+        {"catalog_version": 4},
         {"localized_texts": {"en": {"welcome_message": "Hi {unknown}"}}},
         {"welcome_photo_url": "http://cdn.example.test/bot.jpg"},
         {"welcome_photo_url": "https://user:pass@cdn.example.test/bot.jpg"},

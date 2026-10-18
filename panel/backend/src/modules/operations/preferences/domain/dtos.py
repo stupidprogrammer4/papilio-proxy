@@ -15,6 +15,7 @@ from src.modules.network.qr_codes.domain.dtos import QrPolicy
 from src.modules.operations.notifications.domain.dtos import NotificationPolicy
 from src.modules.operations.preferences.domain.bot_messages import (
     BOT_MESSAGE_SOURCES,
+    BOT_MESSAGE_TRANSLATIONS,
 )
 from src.modules.sales.attention.domain.policies import SubscriptionAlertPolicy
 from src.modules.sales.catalog.domain.policies import (
@@ -35,6 +36,18 @@ class IpDefaults(BaseDTO):
 
 
 BotLocale = Literal["fa", "en", "ru", "zh"]
+
+
+def _localized_bot_message_catalog(locale: BotLocale) -> dict[str, str]:
+    translations = BOT_MESSAGE_TRANSLATIONS[locale]
+    messages = {}
+    for source, translation in zip(
+        BOT_MESSAGE_SOURCES, translations, strict=True
+    ):
+        leading = source[: len(source) - len(source.lstrip())]
+        trailing = source[len(source.rstrip()) :]
+        messages[source] = f"{leading}{translation.strip()}{trailing}"
+    return messages
 
 
 class BotLocaleTextSettings(BaseDTO):
@@ -142,14 +155,14 @@ def default_bot_locale_texts() -> dict[BotLocale, BotLocaleTextSettings]:
 def default_bot_message_catalog() -> dict[BotLocale, dict[str, str]]:
     return {
         "fa": {source: source for source in BOT_MESSAGE_SOURCES},
-        "en": {source: "" for source in BOT_MESSAGE_SOURCES},
-        "ru": {source: "" for source in BOT_MESSAGE_SOURCES},
-        "zh": {source: "" for source in BOT_MESSAGE_SOURCES},
+        "en": _localized_bot_message_catalog("en"),
+        "ru": _localized_bot_message_catalog("ru"),
+        "zh": _localized_bot_message_catalog("zh"),
     }
 
 
 class BotPresentationSettings(BaseDTO):
-    catalog_version: Literal[2] = 2
+    catalog_version: Literal[3] = 3
     welcome_photo_url: str | None = Field(default=None, max_length=2048)
     show_purchases: bool = True
     show_loyalty: bool = True
@@ -173,8 +186,10 @@ class BotPresentationSettings(BaseDTO):
             return value
 
         payload = dict(value)
-        if payload.get("catalog_version", 1) == 1:
-            payload["catalog_version"] = 2
+        catalog_version = payload.get("catalog_version", 1)
+        migrate_empty_translations = catalog_version in (1, 2)
+        if catalog_version in (1, 2, 3):
+            payload["catalog_version"] = 3
         catalog = default_bot_message_catalog()
         configured_catalog = payload.get("message_catalog") or {}
         unknown_locales = set(configured_catalog).difference(catalog)
@@ -186,7 +201,13 @@ class BotPresentationSettings(BaseDTO):
             unknown = set(entries).difference(BOT_MESSAGE_SOURCES)
             if unknown:
                 raise ValueError("Unknown bot message catalog key")
-            catalog[locale].update(entries)
+            catalog[locale].update(
+                {
+                    source: translation
+                    for source, translation in entries.items()
+                    if translation or not migrate_empty_translations
+                }
+            )
         payload["message_catalog"] = catalog
         localized = payload.get("localized_texts")
         defaults = default_bot_locale_texts()

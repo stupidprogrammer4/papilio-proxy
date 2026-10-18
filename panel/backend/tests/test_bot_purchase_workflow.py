@@ -192,6 +192,10 @@ class BotPurchaseWorkflowTest(IsolatedAsyncioTestCase):
                     presentation["welcome_photo_url"],
                     "https://cdn.example.test/panel-bot.webp",
                 )
+                self.assertEqual(
+                    presentation["message_catalog"]["درخواست انجام نشد."],
+                    "درخواست انجام نشد.",
+                )
                 self.assertFalse(
                     next(
                         button
@@ -246,6 +250,27 @@ class BotPurchaseWorkflowTest(IsolatedAsyncioTestCase):
                         "welcome_message"
                     ].startswith("Hello ")
                 )
+                locale_error_messages = {
+                    "en": "Request failed.",
+                    "ru": "Не удалось выполнить запрос.",
+                    "zh": "请求未能完成。",
+                }
+                for locale, expected_error in locale_error_messages.items():
+                    localized = await client.get(
+                        f"/v1/bot/presentation?locale={locale}",
+                        headers=headers,
+                    )
+                    self.assertEqual(localized.status_code, 200)
+                    localized_data = localized.json()["data"]
+                    self.assertEqual(
+                        localized_data["message_catalog"][
+                            "درخواست انجام نشد."
+                        ],
+                        expected_error,
+                    )
+                    self.assertTrue(
+                        all(localized_data["message_catalog"].values())
+                    )
                 customer_id = home.json()["data"]["customer_id"]
                 request_topup = await client.post(
                     "/v1/bot/topups",
