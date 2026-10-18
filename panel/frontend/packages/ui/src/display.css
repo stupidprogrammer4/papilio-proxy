@@ -135,6 +135,13 @@ main { max-width: 1536px; margin: 0 auto; padding: 36px 34px 50px; }
 .stat-footer { padding-top: 15px; border-top: 1px solid var(--border); }
 .stat .hint { display: block; color: var(--muted); font-size: 11px; }
 .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: 22px; align-items: start; }
+.unified-records { margin: 0 0 26px; }
+.unified-record-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.record-panel { min-width: 0; }
+.record-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.record-heading h3 { margin: 0; color: var(--ink); font-size: 15px; font-weight: 600; }
+.record-panel > .field { margin-bottom: 12px; }
+.record-panel .pager { padding-inline: 4px; }
 .dashboard-hero { display: flex; align-items: center; justify-content: space-between; gap: 28px; padding: 32px; margin-bottom: 26px; border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border)); border-radius: var(--radius); background: radial-gradient(ellipse at 95% 10%, var(--glow), transparent 65%), var(--glass); }
 .hero-kicker { margin: 0 0 12px; color: var(--accent); font-size: 10px; letter-spacing: 1.5px; font-weight: 600; }
 .dashboard-hero h2 { margin: 0; max-width: 560px; font-size: 30px; line-height: 1.35; font-weight: 550; letter-spacing: -.8px; color: var(--ink); }
@@ -277,7 +284,7 @@ code { color: var(--ink); }
   .topbar { padding-inline: 24px; }
   main { padding: 30px 24px 45px; }
   .operator > span:not(.avatar) { display: none; }
-  .dashboard-grid, .split { grid-template-columns: minmax(0, 1fr); }
+  .dashboard-grid, .split, .unified-record-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 900px) {
   .login-shell { grid-template-columns: .9fr 1.1fr; }

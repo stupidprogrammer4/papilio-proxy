@@ -6,15 +6,17 @@ const browser=await chromium.launch({headless:true,executablePath:process.env.CH
 const page=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'}),errors=[],reads=[];
 page.setDefaultTimeout(2500);
 const list={data:[],meta:{pager:{total_items:0,total_pages:1,current_page:1,per_page:20,has_prev:false,has_next:false}}};
+const customerList={data:[{id:7,display_name:'Unified customer',telegram_id:123,is_active:true,services_enabled:true,renewals_enabled:true,service_hold_pending:false,service_hold_clock:null}],meta:{pager:{total_items:21,total_pages:2,current_page:1,per_page:20,has_prev:false,has_next:true}}};
+const nodeList={data:[{id:9,code:'unified-node',label:'Unified node',public_host:'node.example.test',public_port:443,protocol:'vless_reality',is_enabled:true}],meta:{pager:{total_items:21,total_pages:2,current_page:1,per_page:20,has_prev:false,has_next:true}}};
 let currentLocale='en';
 const schedule={key:'payments',revision:1,mode:'interval',interval_seconds:60,enabled:true,cron:null,timezone:null,batch_size:20,recheck_seconds:30,capacity_valid:true,applied_revision:1,registered_at:'2026-10-13T00:00:00Z'};
 const routes=['/','/customers','/plans','/subscriptions','/loyalty','/payments','/network','/configurations','/connection-lab','/host-groups','/automation','/notifications','/support','/resellers','/roles','/staff','/settings','/customers/1/wallet','/network/1/cores','/network/1/cores/2/configurations','/reseller/customers'];
 const titles={'/loyalty':['Loyalty & discounts','وفاداری و تخفیف'],'/host-groups':['Delivery groups','گروه‌های تحویل'],'/notifications':['Notifications','اعلان‌ها'],'/resellers':['Resellers','نماینده‌ها'],'/roles':['Roles','نقش‌ها'],'/staff':['Team and access','تیم و دسترسی'],'/customers/1/wallet':['Wallet activity','گردش کیف پول']};
 page.on('pageerror',error=>errors.push(error.stack||error.message));
 await page.route(url=>url.pathname.startsWith('/api/'),route=>{
- const request=route.request(),path=new URL(request.url()).pathname.slice(4);
+ const request=route.request(),requestUrl=new URL(request.url()),path=requestUrl.pathname.slice(4);
  assert.equal(request.method(),'GET','The route appearance sweep must not write records');
- reads.push(path);
+ reads.push(path+requestUrl.search);
  const data=path==='/v1/reseller/auth/me'
   ? {reseller_id:1,account_id:1,title:'Test reseller',username:'test',scopes:['*'],csrf_token:'controlled-reseller-token'}
   : path==='/v1/reseller/profile'
@@ -35,9 +37,13 @@ await page.route(url=>url.pathname.startsWith('/api/'),route=>{
     ? {data:{revision:1,capabilities:{checkout_transient_conflict_modes:['retry_until_expiry','require_confirmation']},values:{brand_title:'Papilio',payment_instructions:null,support_handle:null,topup_options_rial:[120000],customer_creation_access:{is_active:true,services_enabled:true,renewals_enabled:true},customer_link_rotation:false,receipts:{enabled:false,max_per_topup:1,allowed_formats:['PNG']},checkout:{destination_mode:'required',allowed_methods:['card'],minimum_topup_rial:10000,maximum_topup_rial:500000},purchase_checkout:{enabled:false,admission_mode:'require_ready_bundle',default_expiry_seconds:900},qr_codes:{enabled:true,error_correction:'M',box_size:4,border_modules:2},quota_policy:{mode:'reported',grant_bytes:1024,grant_seconds:60,report_max_age_seconds:60,report_future_seconds:5},fulfillment:{renewal_trigger:'expiry',automatic:false,activation:'all',minimum_successes:1,expiry_start:'purchase',failure_action:'hold',max_attempts:3,claim_seconds:60,retry_seconds:60,deadline_minutes:5,renewal_quota:'reset',renewal_price:'purchased'},ip_defaults:{enabled:false,mode:'reject_new',max_ips:2,lease_seconds:60,ban_seconds:60},max_plan_duration_days:365,payment_stale_hours:24,node_health_stale_seconds:60,subscription_expiry_warning_hours:24,provisioning_attention_minutes:5}}}
     : path==='/v1/admin/network/nodes/1'
      ? {data:{id:1,code:'route-fixture-node',label:currentLocale==='fa'?'نود':'Node',public_host:'fixture.invalid',public_port:443,protocol:'vless_reality',is_enabled:true}}
-     : path==='/v1/admin/network/cores/2'
+      : path==='/v1/admin/network/cores/2'
       ? {data:{id:2,node_id:1,code:'route-fixture-core',label:'Route fixture core',kind:'xray',supported_protocols:['vless_reality'],application_status:'draft'}}
-      : list;
+      : path==='/v1/admin/customers'
+       ? {...customerList,data:[{...customerList.data[0],display_name:currentLocale==='fa'?'مشتری یکپارچه':'Unified customer'}]}
+       : path==='/v1/admin/network/nodes'
+        ? {...nodeList,data:[{...nodeList.data[0],label:currentLocale==='fa'?'سرور یکپارچه':'Unified node'}]}
+        : list;
  return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
 });
 try{
@@ -53,6 +59,34 @@ try{
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`Horizontal overflow at ${locale} ${path}`);
    assert.equal(await page.locator('html').getAttribute('lang'),locale,`Language mismatch at ${path}`);
    assert.equal(await page.locator('html').getAttribute('dir'),locale==='fa'?'rtl':'ltr',`Direction mismatch at ${path}`);
+   if(path==='/'){
+    if(locale==='en'){
+     await page.getByRole('heading',{name:'Customers and servers',exact:true}).waitFor();
+     await page.getByText('Unified customer',{exact:true}).waitFor();
+     await page.getByText('Unified node',{exact:true}).waitFor();
+     const customerSearch=page.waitForRequest(request=>request.url().includes('/v1/admin/customers?q=unified&page=1'));
+     await page.getByLabel('Search customers').fill('unified');
+     await customerSearch;
+     const serverSearch=page.waitForRequest(request=>request.url().includes('/v1/admin/network/nodes?q=edge&page=1'));
+     await page.getByLabel('Search servers').fill('edge');
+     await serverSearch;
+     const customerNext=page.waitForRequest(request=>request.url().includes('/v1/admin/customers?q=unified&page=2'));
+     await page.getByRole('button',{name:'Next customer page'}).click();
+     await customerNext;
+     const serverNext=page.waitForRequest(request=>request.url().includes('/v1/admin/network/nodes?q=edge&page=2'));
+     await page.getByRole('button',{name:'Next server page'}).click();
+     await serverNext;
+     assert(reads.some(value=>value.includes('/v1/admin/customers?q=unified&page=1')),`Dashboard customer search must use the customer API: ${reads.filter(value=>value.includes('/v1/admin/customers')).join(', ')}`);
+     assert(reads.some(value=>value.includes('/v1/admin/customers?q=unified&page=2')),'Dashboard customer pagination must stay independent');
+     assert(reads.some(value=>value.includes('/v1/admin/network/nodes?q=edge&page=1')),'Dashboard server search must use the node API');
+     assert(reads.some(value=>value.includes('/v1/admin/network/nodes?q=edge&page=2')),'Dashboard server pagination must stay independent');
+    }
+    if(locale==='fa'){
+     await page.getByRole('heading',{name:'مشتری‌ها و سرورها',exact:true}).waitFor();
+     await page.getByText('مشتری یکپارچه',{exact:true}).waitFor();
+     await page.getByText('سرور یکپارچه',{exact:true}).waitFor();
+    }
+   }
    if(path==='/network'){
     assert.equal(await page.locator('main h1').first().innerText(),locale==='fa'?'نودها و کیفیت اتصال':'Nodes and connection quality');
     await page.getByRole('heading',{name:locale==='fa'?'نودهای ثبت‌شده':'Registered nodes',exact:true}).waitFor();
