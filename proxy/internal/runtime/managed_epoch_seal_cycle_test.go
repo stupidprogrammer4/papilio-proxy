@@ -189,6 +189,132 @@ func TestManagedEpochSealCycleDurableProofFinalityAndDisabledRecovery(t *testing
 	}
 }
 
+func TestManagedEpochRecoverySealReplaysCommittedRequestAfterLostResponse(t *testing.T) {
+	p, policy, _, installation, _ := managedEpochSealTestFixture(t)
+	policy.MaxAttempts = 1
+	epoch := installation.Acceptance.ProcessEpoch
+	installationID := p.InstallationID
+	requestID := managedEpochRecoverySealRequestID(
+		policy.RequestID,
+		installationID,
+		*installation.Acceptance,
+	)
+	journal, err := OpenJournal(filepath.Join(t.TempDir(), "journal"), 65536)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer journal.Close()
+	var calls atomic.Int64
+	var committed *ManagedEpochSealAcceptance
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var input ManagedEpochSealRecoveryCreate
+		if r.Method != http.MethodPost ||
+			r.URL.Path != "/v1/nodes/owned/managed-epochs/"+epoch+"/recovery-seal" ||
+			r.Header.Get("X-Papilio-Node-Key") != "fixture-key" ||
+			json.NewDecoder(r.Body).Decode(&input) != nil || input.RequestID != requestID {
+			t.Error("recovery request identity or authentication changed")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		call := calls.Add(1)
+		if committed == nil {
+			committed = &ManagedEpochSealAcceptance{
+				ID: 23, Epoch: epoch, InstallationID: installationID,
+				RequestID: requestID, ReceiptSHA256: strings.Repeat("c", 64),
+				AcceptanceID: strings.Repeat("d", 32),
+				AcceptedAt:   time.Now().UTC().Truncate(time.Microsecond),
+			}
+		}
+		if call == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "data": *committed})
+	}))
+	defer api.Close()
+	client, err := NewClient(ClientConfig{api.URL, "owned", "fixture-key", time.Second, 65536, 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	if recovered, recoverErr := recoverManagedEpochSealCycle(
+		context.Background(), client, p, policy, journal, installation,
+	); recovered || recoverErr == nil || recoverErr.Error() != "managed_epoch_recovery_seal_api_unresolved" {
+		t.Fatal("lost recovery response became accepted", recovered, recoverErr)
+	}
+	path := filepath.Join(journal.root, managedEpochRecoverySealJournalName)
+	state := managedEpochRecoverySealJournal{}
+	raw, err := managedReadPrivate(path, journal.maxBytes)
+	if err != nil || json.Unmarshal(raw, &state) != nil || state.RequestID != requestID || state.Acceptance != nil {
+		t.Fatal("recovery intent was not durable before API replay", err)
+	}
+	recovered, err := recoverManagedEpochSealCycle(
+		context.Background(), client, p, policy, journal, installation,
+	)
+	if err != nil || !recovered {
+		t.Fatal("committed recovery seal was not accepted after replay", err)
+	}
+	raw, err = managedReadPrivate(path, journal.maxBytes)
+	if err != nil || json.Unmarshal(raw, &state) != nil || state.Acceptance == nil ||
+		*state.Acceptance != *committed || state.Acceptance.AdmissionAvailable {
+		t.Fatal("recovery acceptance was not durably stored closed", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm()&0077 != 0 {
+		t.Fatal("recovery journal is not private", err)
+	}
+	if recovered, err = recoverManagedEpochSealCycle(
+		context.Background(), client, p, policy, journal, installation,
+	); err != nil || !recovered || calls.Load() != 3 || *state.Acceptance != *committed {
+		t.Fatal("replaying a committed recovery changed acceptance", calls.Load(), err)
+	}
+}
+
+func TestManagedEpochRecoverySealRequiresDeterministicRequestIdentity(t *testing.T) {
+	p, policy, _, installation, _ := managedEpochSealTestFixture(t)
+	journal, err := OpenJournal(filepath.Join(t.TempDir(), "journal"), 65536)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer journal.Close()
+	current := *installation.Acceptance
+	expectedRequestID := managedEpochRecoverySealRequestID(
+		policy.RequestID,
+		p.InstallationID,
+		current,
+	)
+	client := &Client{config: ClientConfig{APIURL: "https://api.example", NodeCode: "owned"}}
+	acceptance := ManagedEpochSealAcceptance{
+		ID: 23, Epoch: current.ProcessEpoch, InstallationID: p.InstallationID,
+		RequestID: strings.Repeat("e", 32), ReceiptSHA256: strings.Repeat("c", 64),
+		AcceptanceID: strings.Repeat("d", 32), AcceptedAt: time.Now().UTC(),
+	}
+	state := managedEpochRecoverySealJournal{
+		Version: 1, APIURL: client.config.APIURL, NodeCode: client.config.NodeCode,
+		InstallationID: p.InstallationID, Epoch: current.ProcessEpoch,
+		RequestID: acceptance.RequestID, Acceptance: &acceptance,
+	}
+	if err = saveManagedEpochRecoverySeal(journal, state); err != nil {
+		t.Fatal(err)
+	}
+	if applied, readErr := managedEpochRecoverySealApplied(
+		journal, client, p.InstallationID, current.ProcessEpoch, expectedRequestID,
+	); readErr == nil || applied {
+		t.Fatal("unrelated deterministic recovery identity was accepted", applied, readErr)
+	}
+	acceptance.RequestID = expectedRequestID
+	state.RequestID = expectedRequestID
+	state.Acceptance = &acceptance
+	if err = saveManagedEpochRecoverySeal(journal, state); err != nil {
+		t.Fatal(err)
+	}
+	if applied, readErr := managedEpochRecoverySealApplied(
+		journal, client, p.InstallationID, current.ProcessEpoch, expectedRequestID,
+	); readErr != nil || !applied {
+		t.Fatal("valid deterministic recovery identity was rejected", applied, readErr)
+	}
+}
+
 func TestManagedEpochSealCycleRejectsUnpaidAnchorAndPolicyCapacities(t *testing.T) {
 	p, policy, initial, installation, _ := managedEpochSealTestFixture(t)
 	if validateManagedEpochSealPolicyBeforeLaunch(p, nil) != nil || validateManagedEpochSealPolicyBeforeLaunch(p, &ManagedEpochSealPolicy{}) != nil {

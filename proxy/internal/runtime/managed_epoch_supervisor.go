@@ -181,6 +181,7 @@ func managedEpochSealApplied(
 	client *Client,
 	installationID int64,
 	epoch string,
+	recoveryRequestID string,
 ) (bool, error) {
 	raw, err := managedReadPrivate(
 		filepath.Join(journal.root, managedEpochSealJournalName),
@@ -192,6 +193,7 @@ func managedEpochSealApplied(
 			client,
 			installationID,
 			epoch,
+			recoveryRequestID,
 		)
 	}
 	var state managedEpochSealJournal
@@ -221,6 +223,7 @@ func managedEpochRecoverySealApplied(
 	client *Client,
 	installationID int64,
 	epoch string,
+	requestID string,
 ) (bool, error) {
 	raw, err := managedReadPrivate(
 		filepath.Join(journal.root, managedEpochRecoverySealJournalName),
@@ -234,7 +237,7 @@ func managedEpochRecoverySealApplied(
 		recovery.Version != 1 || recovery.APIURL != client.config.APIURL ||
 		recovery.NodeCode != client.config.NodeCode ||
 		recovery.InstallationID != installationID || recovery.Epoch != epoch ||
-		!epochPattern.MatchString(recovery.RequestID) ||
+		recovery.RequestID != requestID ||
 		recovery.Acceptance == nil || recovery.Acceptance.ID <= 0 ||
 		recovery.Acceptance.Epoch != epoch ||
 		recovery.Acceptance.InstallationID != installationID ||
@@ -314,6 +317,11 @@ func validateManagedEpochHistory(
 			client,
 			state.InstallationID,
 			entry.Previous.ProcessEpoch,
+			managedEpochRecoverySealRequestID(
+				policy.RequestID,
+				state.InstallationID,
+				entry.Previous,
+			),
 		)
 		if closeJournal {
 			_ = priorJournal.Close()
@@ -496,7 +504,15 @@ func runManagedEpochSupervisor(
 			return err
 		}
 		sealApplied, sealErr := managedEpochSealApplied(
-			currentJournal, client, state.InstallationID, current.ProcessEpoch,
+			currentJournal,
+			client,
+			state.InstallationID,
+			current.ProcessEpoch,
+			managedEpochRecoverySealRequestID(
+				sealPolicy.RequestID,
+				state.InstallationID,
+				current,
+			),
 		)
 		if closeCurrentJournal {
 			defer currentJournal.Close()
@@ -509,6 +525,11 @@ func runManagedEpochSupervisor(
 			client,
 			state.InstallationID,
 			current.ProcessEpoch,
+			managedEpochRecoverySealRequestID(
+				sealPolicy.RequestID,
+				state.InstallationID,
+				current,
+			),
 		)
 		if recoveryErr != nil {
 			return recoveryErr
