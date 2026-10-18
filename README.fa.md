@@ -69,6 +69,8 @@
 [آموزش فارسی](docs/getting-started.fa.md) و [English guide](docs/getting-started.en.md) را ببینید.
 نصب‌کننده API، پنل و سرویس‌های وظایف را اجرا می‌کند؛ تلگرام اختیاری است.
 هسته‌های پروکسی به تنظیم و پذیرش جداگانه نیاز دارند.
+پس از نصب، `scripts/deploy/doctor.sh` را برای بررسی healthcheckهای Compose اجرا کنید.
+این دستور اجرای jobهای worker/scheduler و سرویس‌های بیرونی مثل OCR، پرداخت و runtime نود را نمی‌آزماید.
 
 ## مسیر محصول
 
