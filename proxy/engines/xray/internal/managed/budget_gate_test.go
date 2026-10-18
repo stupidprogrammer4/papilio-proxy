@@ -120,6 +120,24 @@ func TestStrictGateDeadlineClosesWithoutMintingConsumption(t *testing.T) {
 		t.Fatal("expired admission")
 	}
 }
+
+func TestStrictGrantDeadlineStartsAtAPIResponseReceipt(t *testing.T) {
+	m, g, policy := strictFixture(t)
+	grant := strictGrant(policy, 1, "1", 100)
+	grant.IssuedAt = time.Now().UTC().Add(-time.Hour).Truncate(time.Microsecond)
+	grant.ValidUntil = grant.IssuedAt.Add(400 * time.Millisecond)
+	if err := m.Admit(grant); err != nil {
+		t.Fatal("valid API response was rejected by local wall clock", err)
+	}
+	if _, err := g.Register(1, &testResources{cancel: make(chan struct{})}); err != nil {
+		t.Fatal("fresh API grant did not open profile", err)
+	}
+	_ = waitStrictFrozen(t, g, 1)
+	if _, err := g.Register(1, &testResources{cancel: make(chan struct{})}); err == nil {
+		t.Fatal("grant remained usable after monotonic response deadline")
+	}
+}
+
 func TestStrictGrantRequiresExactPolicyBinding(t *testing.T) {
 	m, _, policy := strictFixture(t)
 	grant := strictGrant(policy, 1, "1", 100)

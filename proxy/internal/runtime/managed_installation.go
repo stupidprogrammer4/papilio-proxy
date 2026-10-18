@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"syscall"
@@ -243,6 +244,34 @@ func managedSave(journal *Journal, state managedInstallationJournal) error {
 	}
 	return atomicPrivate(journal.root, "managed-installation.json", payload)
 }
+
+func startAcceptedManagedChild(
+	journal *Journal,
+	policy ManagedInstallationPolicy,
+	state managedInstallationJournal,
+) (*managedChild, error) {
+	if state.Acknowledgement == nil || state.Acceptance == nil ||
+		state.Acceptance.ProcessEpoch != state.Acknowledgement.Receipt.Epoch ||
+		state.Acceptance.ReceiptSHA256 != state.Acknowledgement.Receipt.SHA256 {
+		return nil, errors.New("managed_installation_recovery_unresolved")
+	}
+	binary, err := openVerifiedManagedBinary(policy, state.Claim.Expectation.Installation.ExecutableSHA256)
+	if err != nil {
+		return nil, err
+	}
+	defer binary.Close()
+	if err = verifyManagedSettingsFile(journal, policy, state.Claim); err != nil {
+		return nil, err
+	}
+	child, err := startManagedChild(
+		binary,
+		filepath.Join(journal.root, "managed-settings.json"),
+		policy,
+		&state.Acknowledgement.Receipt,
+	)
+	return child, err
+}
+
 func managedFetchClosed(ctx context.Context, p ManagedInstallationPolicy) (ManagedAcknowledgement, error) {
 	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "unix", filepath.Join(p.ControlRoot, "control.sock"))
@@ -269,8 +298,70 @@ func managedFetchClosed(ctx context.Context, p ManagedInstallationPolicy) (Manag
 	return ManagedAcknowledgement{Receipt: receipt, OriginalReceipt: string(payload)}, nil
 }
 
+func managedInspectClosedStartup(
+	ctx context.Context,
+	binary *os.File,
+	settingsPath string,
+	policy ManagedInstallationPolicy,
+) (ManagedAcknowledgement, error) {
+	if binary == nil || settingsPath == "" || policy.MaxReceiptBytes <= 0 ||
+		policy.MaxReceiptBytes > math.MaxInt64-4096 || policy.StartupTimeoutMS <= 0 {
+		return ManagedAcknowledgement{}, errors.New("managed_closed_receipt_inspection_invalid")
+	}
+	operation, cancel := context.WithTimeout(ctx, time.Duration(policy.StartupTimeoutMS)*time.Millisecond)
+	defer cancel()
+	command := exec.CommandContext(operation, "/proc/self/fd/3", []string{
+		"--inspect-closed-startup", "--config", settingsPath,
+		"--max-config-bytes", strconv.FormatInt(policy.MaxSettingsBytes, 10),
+		"--max-config-depth", strconv.Itoa(policy.MaxSettingsDepth),
+	}...)
+	command.ExtraFiles = []*os.File{binary}
+	command.Env = managedChildEnvironment(os.Environ())
+	command.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
+	maximumOutput := policy.MaxReceiptBytes + 4096
+	bounded := &managedBoundedBuffer{maximum: maximumOutput}
+	command.Stdout = bounded
+	command.Stderr = io.Discard
+	if err := command.Run(); err != nil || bounded.exceeded {
+		return ManagedAcknowledgement{}, errors.New("managed_closed_receipt_inspection_failed")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(bounded.payload.Bytes()))
+	decoder.DisallowUnknownFields()
+	var result struct {
+		State           string               `json:"state"`
+		Epoch           string               `json:"epoch"`
+		Receipt         ManagedClosedReceipt `json:"closed_startup_receipt"`
+		OriginalReceipt json.RawMessage      `json:"original_receipt"`
+	}
+	if decoder.Decode(&result) != nil || decoder.Decode(new(any)) != io.EOF ||
+		result.State != "closed_startup_validated" || !epochPattern.MatchString(result.Epoch) ||
+		result.Receipt.Epoch != result.Epoch || !digestPattern.MatchString(result.Receipt.SHA256) ||
+		result.Receipt.Bytes <= 0 || result.Receipt.Bytes > policy.MaxReceiptBytes ||
+		int64(len(result.OriginalReceipt)) != result.Receipt.Bytes ||
+		checksum(result.OriginalReceipt) != result.Receipt.SHA256 {
+		return ManagedAcknowledgement{}, errors.New("managed_closed_receipt_inspection_invalid")
+	}
+	return ManagedAcknowledgement{
+		Receipt: result.Receipt, OriginalReceipt: string(result.OriginalReceipt),
+	}, nil
+}
+
+type managedBoundedBuffer struct {
+	payload  bytes.Buffer
+	maximum  int64
+	exceeded bool
+}
+
+func (buffer *managedBoundedBuffer) Write(payload []byte) (int, error) {
+	if int64(buffer.payload.Len())+int64(len(payload)) > buffer.maximum {
+		buffer.exceeded = true
+		return 0, errors.New("managed_output_capacity")
+	}
+	return buffer.payload.Write(payload)
+}
+
 // RunManagedInstallation persists intent before launch and receipt before ACK.
-// Recovery retries only an exact durable receipt; it never resumes an old child.
+// Recovery validates a closed receipt and resumes only after API acknowledgement.
 func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstallationPolicy, once bool) (result error) {
 	if !p.Enabled {
 		return nil
@@ -312,6 +403,10 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 		if p.WindowBatch != nil && p.WindowBatch.validate(p, state) != nil {
 			return errors.New("managed_window_batch_policy_invalid")
 		}
+		if state.Claim.InstallationID != p.InstallationID || state.Claim.ClaimToken == "" ||
+			!digestPattern.MatchString(state.Claim.Expectation.Installation.ExecutableSHA256) {
+			return errors.New("managed_installation_recovery_unresolved")
+		}
 		if managedEpochSupervisorEnabled(p) {
 			binary, verifyErr := openVerifiedManagedBinary(p, state.Claim.Expectation.Installation.ExecutableSHA256)
 			if verifyErr != nil {
@@ -323,7 +418,24 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 			}
 			if state.Acceptance == nil {
 				if state.Acknowledgement == nil {
-					return errors.New("managed_installation_recovery_unresolved")
+					acknowledgement, inspectErr := managedInspectClosedStartup(
+						ctx,
+						binary,
+						filepath.Join(journal.root, "managed-settings.json"),
+						p,
+					)
+					if inspectErr != nil {
+						if ctx.Err() != nil {
+							return ctx.Err()
+						}
+						return errors.New("managed_installation_recovery_unresolved")
+					}
+					acknowledgement.ClaimToken = state.Claim.ClaimToken
+					state.Acknowledgement = &acknowledgement
+					state.InitialProcessEpoch = acknowledgement.Receipt.Epoch
+					if err = managedSave(journal, state); err != nil {
+						return err
+					}
 				}
 				acceptance, ackErr := client.AcknowledgeManagedInstallation(ctx, p.InstallationID, *state.Acknowledgement)
 				if ackErr != nil {
@@ -336,7 +448,24 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 			}
 			return runManagedEpochSupervisor(ctx, client, p, journal, state, binary, nil, once)
 		}
+		binary, verifyErr := openVerifiedManagedBinary(p, state.Claim.Expectation.Installation.ExecutableSHA256)
+		if verifyErr != nil {
+			return verifyErr
+		}
+		defer binary.Close()
+		if verifyErr = verifyManagedSettingsFile(journal, p, state.Claim); verifyErr != nil {
+			return verifyErr
+		}
 		if state.Acceptance != nil {
+			child, childErr := startAcceptedManagedChild(journal, p, state)
+			if childErr != nil {
+				return childErr
+			}
+			defer func() {
+				if stopErr := child.stop(p.StopTimeoutMS); stopErr != nil {
+					result = stopErr
+				}
+			}()
 			if err = runManagedWindowBatchCycle(ctx, client, p, journal, state); err != nil {
 				return err
 			}
@@ -348,10 +477,29 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 					return err
 				}
 			}
-			return replayManagedEpochSealCycle(ctx, client, p, p.EpochSeal, journal, state)
+			if err = replayManagedEpochSealCycle(ctx, client, p, p.EpochSeal, journal, state); err != nil {
+				return err
+			}
+			return waitForManagedInstallationChild(ctx, child, p, once)
 		}
 		if state.Acknowledgement == nil {
-			return errors.New("managed_installation_recovery_unresolved")
+			acknowledgement, inspectErr := managedInspectClosedStartup(
+				ctx,
+				binary,
+				filepath.Join(journal.root, "managed-settings.json"),
+				p,
+			)
+			if inspectErr != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				return errors.New("managed_installation_recovery_unresolved")
+			}
+			acknowledgement.ClaimToken = state.Claim.ClaimToken
+			state.Acknowledgement = &acknowledgement
+			if err = managedSave(journal, state); err != nil {
+				return err
+			}
 		}
 		acceptance, ackErr := client.AcknowledgeManagedInstallation(ctx, p.InstallationID, *state.Acknowledgement)
 		if ackErr != nil {
@@ -361,6 +509,15 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 		if err = managedSave(journal, state); err != nil {
 			return err
 		}
+		child, childErr := startAcceptedManagedChild(journal, p, state)
+		if childErr != nil {
+			return childErr
+		}
+		defer func() {
+			if stopErr := child.stop(p.StopTimeoutMS); stopErr != nil {
+				result = stopErr
+			}
+		}()
 		if err = runManagedWindowBatchCycle(ctx, client, p, journal, state); err != nil {
 			return err
 		}
@@ -372,7 +529,10 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 				return err
 			}
 		}
-		return replayManagedEpochSealCycle(ctx, client, p, p.EpochSeal, journal, state)
+		if err = replayManagedEpochSealCycle(ctx, client, p, p.EpochSeal, journal, state); err != nil {
+			return err
+		}
+		return waitForManagedInstallationChild(ctx, child, p, once)
 	}
 	if !os.IsNotExist(err) {
 		return errors.New("managed_journal_unavailable")
@@ -480,7 +640,16 @@ func RunManagedInstallation(ctx context.Context, client *Client, p ManagedInstal
 	if err = runManagedEpochSealCycle(ctx, client, p, p.EpochSeal, journal, state); err != nil {
 		return err
 	}
-	if once || p.SuccessorCycles != nil && p.SuccessorCycles.Enabled {
+	return waitForManagedInstallationChild(ctx, child, p, once)
+}
+
+func waitForManagedInstallationChild(
+	ctx context.Context,
+	child *managedChild,
+	policy ManagedInstallationPolicy,
+	once bool,
+) error {
+	if once || policy.SuccessorCycles != nil && policy.SuccessorCycles.Enabled {
 		return nil
 	}
 	select {

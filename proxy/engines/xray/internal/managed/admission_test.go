@@ -265,6 +265,29 @@ func TestOriginalAdmissionExpiryPreservesHistoricalReceipt(t *testing.T) {
 		t.Fatal("expired original receipt reopened window")
 	}
 }
+
+func TestOriginalAdmissionUsesAPIIntervalDespiteLocalClockSkew(t *testing.T) {
+	m, g, policy := originalAdmissionFixture(t, 1)
+	grant := strictGrant(policy, 1, "1", 100)
+	grant.IssuedAt = time.Now().UTC().Add(-time.Hour).Truncate(time.Microsecond)
+	grant.ValidUntil = grant.IssuedAt.Add(500 * time.Millisecond)
+	payload, err := json.Marshal(grant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admission, err := m.AdmitOriginal(payload)
+	if err != nil || admission.Admission.Window != grant {
+		t.Fatal("valid API original admission was rejected by local wall clock", err)
+	}
+	if _, err = g.Register(1, &testResources{cancel: make(chan struct{})}); err != nil {
+		t.Fatal("fresh API original grant did not open profile", err)
+	}
+	_ = waitStrictFrozen(t, g, 1)
+	if _, err = g.Register(1, &testResources{cancel: make(chan struct{})}); err == nil {
+		t.Fatal("original grant remained usable after monotonic deadline")
+	}
+}
+
 func TestOriginalAdmissionDisabledMetadataStartupAndRequestRejection(t *testing.T) {
 	metadata, g, _, _ := windowFixture(t)
 	raw, _ := json.Marshal(windowGrant(1, "1"))

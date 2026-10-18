@@ -136,10 +136,82 @@ func (m *WindowManager) ResumeClosedEpoch(receipt ClosedStartupReceipt) error {
 		m.mu.Unlock()
 		return errors.New("managed_epoch_resume_admission_exists")
 	}
+	m.gate.mu.Lock()
 	epoch := m.gate.epoch
 	installation := m.gate.installation
+	build := BuildEvidence{
+		AdapterRevision:  AdapterRevision,
+		SourceCommit:     SourceCommit,
+		Module:           UpstreamModule,
+		ExecutableSHA256: installation.ExecutableSHA256,
+	}
+	valid := m.gate.windowMode && m.gate.enforcement != nil &&
+		len(m.profiles) == len(m.gate.profiles)
+	if valid {
+		valid = receipt.Epoch == epoch
+	}
+	if valid {
+		valid = m.snapshots.policy == m.gate.policy &&
+			len(m.gate.sessions) == 0 && m.gate.active == 0
+	}
+	if valid {
+		for id, profile := range m.gate.profiles {
+			if profile.phase != Closed || profile.active != 0 || len(profile.kinds) != 0 ||
+				profile.window != nil || profile.budget != nil || profile.admission != 0 ||
+				profile.totals.Binding != m.profiles[id].expected.Binding ||
+				profile.totals.UploadBytes != 0 || profile.totals.DownloadBytes != 0 ||
+				profile.totals.UnadmittedUploadBytes != 0 ||
+				profile.totals.UnadmittedDownloadBytes != 0 {
+				valid = false
+				break
+			}
+		}
+	}
+	expectedProfiles := make([]ClosedStartupProfile, 0, len(m.profiles))
+	if valid {
+		ids := make([]int64, 0, len(m.profiles))
+		for id := range m.profiles {
+			ids = append(ids, id)
+		}
+		sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+		for _, id := range ids {
+			profile := m.profiles[id].expected
+			expectedProfiles = append(expectedProfiles, ClosedStartupProfile{
+				Binding:          profile.Binding,
+				MembershipSHA256: profile.MembershipSHA256,
+				ProfileSHA256:    profile.ProfileSHA256,
+				Phase:            Closed,
+			})
+		}
+	}
+	enforcementSHA256 := ""
+	if m.gate.enforcement != nil {
+		enforcementSHA256 = enforcementHash(*m.gate.enforcement)
+	}
+	windowSHA256 := windowPolicyHash(m.policy)
+	m.gate.mu.Unlock()
 	m.mu.Unlock()
-	err := m.snapshots.ResumeClosedEpoch(epoch, installation, receipt)
+	if !valid {
+		return errors.New("managed_epoch_resume_settings_mismatch")
+	}
+	payload, actual, err := m.snapshots.ClosedStartupBytes()
+	if err != nil || actual != receipt || len(payload) == 0 {
+		return errors.New("managed_epoch_resume_receipt_mismatch")
+	}
+	var startup ClosedStartup
+	if json.Unmarshal(payload, &startup) != nil || startup.Epoch != epoch ||
+		startup.Installation != installation || startup.AdapterRevision != build.AdapterRevision ||
+		startup.SourceCommit != build.SourceCommit || startup.Module != build.Module ||
+		startup.AccountingScope != AccountingScope || startup.AccountingMode != "window_component" ||
+		startup.EnforcementMode != "strict_decoded" ||
+		startup.EnforcementSHA256 != enforcementSHA256 ||
+		startup.WindowPolicySHA256 != windowSHA256 || startup.Profiles == nil ||
+		!startup.HistoricalOnly || startup.APIAuthority || startup.BudgetEnforced ||
+		startup.DeadlineEnforced || startup.ObservedAt.IsZero() ||
+		!reflect.DeepEqual(startup.Profiles, expectedProfiles) {
+		return errors.New("managed_epoch_resume_settings_mismatch")
+	}
+	err = m.snapshots.ResumeClosedEpoch(epoch, installation, receipt)
 	return err
 }
 

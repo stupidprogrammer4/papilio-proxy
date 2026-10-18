@@ -196,6 +196,69 @@ func TestClosedEpochResumeRequiresOriginalReceiptAndFreshWindowStore(t *testing.
 	}
 }
 
+func TestClosedEpochResumeRejectsDifferentEnforcementSettings(t *testing.T) {
+	manager, gate, _ := strictFixture(t)
+	windows := manager.store
+	snapshots := manager.snapshots
+	if err := snapshots.BeginEpoch(gate.epoch, gate.installation); err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := manager.RecordClosedStartup(startupTestBuild())
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := snapshots.root
+	epoch := gate.epoch
+	policy := gate.policy
+	installation := gate.installation
+	windowPolicy := windows.policy
+	if err = manager.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err = windows.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err = snapshots.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	nextGate, err := NewWindowGate(policy, epoch, testBindings(), installation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	enforcement := EnforcementPolicy{
+		MaxReadReservationBytes: 8, MaxResidualBytes: 32,
+		MaxConcurrentReservations: 4, ReadLeaseMS: 50,
+		ReservationWaitMS: 100, MaxClockSkewMS: 100,
+		ContentionMode: "close_profile",
+	}
+	if err = nextGate.ConfigureStrict(enforcement); err != nil {
+		t.Fatal(err)
+	}
+	nextWindows, err := OpenWindowStore(windows.journal.root, policy, windowPolicy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer nextWindows.Close()
+	nextSnapshots, err := OpenSnapshotStore(root, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer nextSnapshots.Close()
+	bindings := []WindowBinding{
+		{testBindings()[0], strings.Repeat("c", 64), strings.Repeat("d", 64)},
+		{testBindings()[1], strings.Repeat("c", 64), strings.Repeat("d", 64)},
+	}
+	nextManager, err := NewWindowManager(nextGate, nextWindows, nextSnapshots, bindings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer nextManager.Close()
+	if err = nextManager.ResumeClosedEpoch(receipt); err == nil {
+		t.Fatal("receipt from different enforcement settings authorized resume")
+	}
+}
+
 func TestClosedEpochResumeRejectsPersistedAdmissionWindow(t *testing.T) {
 	root := t.TempDir()
 	if err := os.Chmod(root, 0700); err != nil {

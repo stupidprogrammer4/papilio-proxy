@@ -148,6 +148,7 @@ func cloneWindow(a WindowGrant) WindowGrant {
 // Admit records budget/deadline metadata; it deliberately does not claim strict
 // byte/expiry enforcement. A caller supplies local component authorization only.
 func (m *WindowManager) Admit(grant WindowGrant) error {
+	receivedAt := time.Now()
 	if err := m.validate(grant); err != nil {
 		return err
 	}
@@ -159,10 +160,10 @@ func (m *WindowManager) Admit(grant WindowGrant) error {
 		return err
 	}
 	defer owner.release()
-	return m.admitOwned(grant, owner, bounded)
+	return m.admitOwned(grant, owner, bounded, receivedAt)
 }
 
-func (m *WindowManager) admitOwned(grant WindowGrant, owner *windowProfile, bounded context.Context) error {
+func (m *WindowManager) admitOwned(grant WindowGrant, owner *windowProfile, bounded context.Context, receivedAt time.Time) error {
 	if m.epochSealBlocked() {
 		return errors.New("managed_epoch_sealed")
 	}
@@ -242,13 +243,13 @@ func (m *WindowManager) admitOwned(grant WindowGrant, owner *windowProfile, boun
 	p.admission++
 	p.window = &grant
 	if m.gate.enforcement != nil {
-		now := time.Now()
-		remaining := grant.ValidUntil.Sub(now.UTC())
-		if remaining <= 0 || grant.IssuedAt.After(now.UTC().Add(time.Duration(m.gate.enforcement.MaxClockSkewMS)*time.Millisecond)) {
+		deadline := receivedAt.Add(grant.ValidUntil.Sub(grant.IssuedAt))
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
 			p.phase = Unknown
 			return errors.New("managed_window_expired")
 		}
-		ledger, err := newBudgetLedger(grant.WindowID, grant.AllocatedBytes, now.Add(remaining), m.gate.enforcement.MaxConcurrentReservations)
+		ledger, err := newBudgetLedger(grant.WindowID, grant.AllocatedBytes, deadline, m.gate.enforcement.MaxConcurrentReservations)
 		if err != nil {
 			p.phase = Unknown
 			return err

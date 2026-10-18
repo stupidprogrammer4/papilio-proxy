@@ -18,6 +18,9 @@ class TrafficTarget(BaseHTTPRequestHandler):
     payload = b"papilio-real-core-traffic-verified\n"
 
     def do_GET(self):
+        assert isinstance(self.server, TrafficTargetServer)
+        with self.server.request_lock:
+            self.server.request_count += 1
         self.send_response(200)
         self.send_header("Content-Length", str(len(self.payload)))
         self.end_headers()
@@ -25,6 +28,13 @@ class TrafficTarget(BaseHTTPRequestHandler):
 
     def log_message(self, format: str, *args: object):
         pass
+
+
+class TrafficTargetServer(ThreadingHTTPServer):
+    def __init__(self, address):
+        self.request_count = 0
+        self.request_lock = threading.Lock()
+        super().__init__(address, TrafficTarget)
 
 
 class OwnedTlsTarget(ThreadingHTTPServer):
@@ -115,11 +125,12 @@ class RealCoreRuntime:
         return self
 
     def prepare_targets(self):
-        target = ThreadingHTTPServer(("127.0.0.1", 0), TrafficTarget)
+        target = TrafficTargetServer(("127.0.0.1", 0))
         self.resources.callback(target.server_close)
         threading.Thread(target=target.serve_forever, daemon=True).start()
         self.resources.callback(target.shutdown)
         self.target_port = target.server_port
+        self.target = target
         certificate = self.root / "localhost.crt"
         key = self.root / "localhost.key"
         assert os.getloadavg()[0] <= 8, "owned_core_load_preflight"
@@ -180,6 +191,10 @@ class RealCoreRuntime:
         path.write_text(content)
         path.chmod(0o600)
         return path
+
+    def target_request_count(self):
+        with self.target.request_lock:
+            return self.target.request_count
 
     @staticmethod
     def stop(process):

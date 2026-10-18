@@ -41,6 +41,87 @@ func windowGrant(profile int64, id string) WindowGrant {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	return WindowGrant{GrantID: profile, WindowID: strings.Repeat(id, 32), Epoch: strings.Repeat("a", 32), Installation: testInstallation(), Binding: testBindings()[profile-1], MembershipSHA256: strings.Repeat("c", 64), ProfileSHA256: strings.Repeat("d", 64), AllocatedBytes: 1000, IssuedAt: now, ValidUntil: now.Add(30 * time.Second)}
 }
+
+func TestWindowRestartRejectsPersistedGrantWithoutFreshAuthority(
+	t *testing.T,
+) {
+	root := t.TempDir()
+	if err := os.Chmod(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	basePolicy := testPolicy()
+	windowPolicy := WindowPolicy{
+		MaxWindows: 4, MaxRecords: 8, MaxRecordBytes: 8192,
+		MaxValidityMS: 60000, TransactionTimeoutMS: 2000,
+	}
+	bindings := []WindowBinding{
+		{testBindings()[0], strings.Repeat("c", 64), strings.Repeat("d", 64)},
+		{testBindings()[1], strings.Repeat("c", 64), strings.Repeat("d", 64)},
+	}
+	gate, err := NewWindowGate(
+		basePolicy, strings.Repeat("a", 32), testBindings(), testInstallation(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	windowRoot := filepath.Join(root, "windows")
+	snapshotRoot := filepath.Join(root, "snapshots")
+	store, err := OpenWindowStore(windowRoot, basePolicy, windowPolicy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshots, err := OpenSnapshotStore(snapshotRoot, basePolicy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager, err := NewWindowManager(gate, store, snapshots, bindings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = manager.Admit(windowGrant(1, "1")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = gate.Register(1, &testResources{cancel: make(chan struct{})}); err != nil {
+		t.Fatal("fresh API grant did not open the profile", err)
+	}
+	if err = manager.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err = snapshots.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	restartedGate, err := NewWindowGate(
+		basePolicy, strings.Repeat("a", 32), testBindings(), testInstallation(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restartedStore, err := OpenWindowStore(windowRoot, basePolicy, windowPolicy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restartedStore.Close()
+	restartedSnapshots, err := OpenSnapshotStore(snapshotRoot, basePolicy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restartedSnapshots.Close()
+	if _, err = NewWindowManager(
+		restartedGate, restartedStore, restartedSnapshots, bindings,
+	); err == nil || err.Error() != "managed_window_recovery_unresolved" {
+		t.Fatal("persisted grant reopened without fresh API authority", err)
+	}
+	if _, err = restartedGate.Register(
+		1, &testResources{cancel: make(chan struct{})},
+	); err == nil {
+		t.Fatal("restart admitted traffic without a fresh API grant")
+	}
+}
+
 func TestWindowLifecycleClosedAdmissionReplayRotationAndSessionFence(t *testing.T) {
 	m, g, _, _ := windowFixture(t)
 	a := &testResources{cancel: make(chan struct{})}

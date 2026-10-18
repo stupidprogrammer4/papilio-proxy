@@ -23,6 +23,7 @@ type localResult struct {
 	Epoch                string                        `json:"epoch,omitempty"`
 	Error                string                        `json:"error,omitempty"`
 	ClosedStartupReceipt *managed.ClosedStartupReceipt `json:"closed_startup_receipt,omitempty"`
+	OriginalReceipt      json.RawMessage               `json:"original_receipt,omitempty"`
 }
 
 func main() {
@@ -47,12 +48,13 @@ func run(arguments []string, output io.Writer) error {
 	resumeEpoch := flags.String("resume-epoch", "", "supervisor-selected closed epoch to resume")
 	resumeReceiptSHA := flags.String("resume-startup-sha256", "", "exact persisted closed-startup receipt digest")
 	resumeReceiptBytes := flags.Int64("resume-startup-bytes", 0, "exact persisted closed-startup receipt byte length")
+	inspectClosedStartup := flags.Bool("inspect-closed-startup", false, "validate an existing closed startup receipt without starting runtime")
 	start := flags.Bool("run", false, "explicitly start one owned isolated prototype")
 	check := flags.Bool("check", false, "validate local settings/build evidence without core/journal/listeners")
-	if flags.Parse(arguments) != nil || flags.NArg() != 0 || (*start && *check) || (*check && (*resumeEpoch != "" || *resumeReceiptSHA != "" || *resumeReceiptBytes != 0)) || (*resumeEpoch == "") != (*resumeReceiptSHA == "") || (*resumeEpoch == "") != (*resumeReceiptBytes == 0) {
+	if flags.Parse(arguments) != nil || flags.NArg() != 0 || (*start && *check) || (*inspectClosedStartup && (*start || *check || *resumeEpoch != "" || *resumeReceiptSHA != "" || *resumeReceiptBytes != 0)) || (*check && (*resumeEpoch != "" || *resumeReceiptSHA != "" || *resumeReceiptBytes != 0)) || (*resumeEpoch == "") != (*resumeReceiptSHA == "") || (*resumeEpoch == "") != (*resumeReceiptBytes == 0) {
 		return errors.New("managed_cli_invalid")
 	}
-	if !*start && !*check {
+	if !*start && !*check && !*inspectClosedStartup {
 		return json.NewEncoder(output).Encode(localResult{State: "disabled"})
 	}
 	settings, err := managed.ReadSettings(*path, *maximumBytes, *maximumDepth)
@@ -71,6 +73,9 @@ func run(arguments []string, output io.Writer) error {
 	}
 	if *check {
 		return json.NewEncoder(output).Encode(localResult{State: "local_policy_validated"})
+	}
+	if *inspectClosedStartup {
+		return inspectClosedStartupReceipt(settings, output)
 	}
 	epoch := *resumeEpoch
 	if epoch == "" {
@@ -211,4 +216,43 @@ func run(arguments []string, output io.Writer) error {
 		return errors.New("managed_shutdown_unresolved")
 	}
 	return json.NewEncoder(output).Encode(localResult{State: "stopped_without_finalizing", Epoch: epoch})
+}
+
+func inspectClosedStartupReceipt(settings managed.Settings, output io.Writer) error {
+	if settings.AccountingMode != "window_component" || settings.EnforcementPolicy == nil || settings.WindowPolicy == nil {
+		return errors.New("managed_epoch_resume_policy_invalid")
+	}
+	snapshots, err := managed.OpenSnapshotStore(settings.ControlRoot, settings.Policy)
+	if err != nil {
+		return err
+	}
+	defer snapshots.Close()
+	payload, receipt, err := snapshots.ClosedStartupBytes()
+	if err != nil {
+		return err
+	}
+	gate, err := managed.NewWindowGate(settings.Policy, receipt.Epoch, settings.Bindings, settings.Installation)
+	if err != nil {
+		return err
+	}
+	if err = gate.ConfigureStrict(*settings.EnforcementPolicy); err != nil {
+		return err
+	}
+	windowStore, err := managed.OpenWindowStore(settings.ControlRoot+".windows-"+receipt.Epoch, settings.Policy, *settings.WindowPolicy)
+	if err != nil {
+		return err
+	}
+	defer windowStore.Close()
+	windows, err := managed.NewWindowManager(gate, windowStore, snapshots, settings.WindowBindings)
+	if err != nil {
+		return err
+	}
+	defer windows.Close()
+	if err = windows.ResumeClosedEpoch(receipt); err != nil {
+		return err
+	}
+	return json.NewEncoder(output).Encode(localResult{
+		State: "closed_startup_validated", Epoch: receipt.Epoch,
+		ClosedStartupReceipt: &receipt, OriginalReceipt: payload,
+	})
 }

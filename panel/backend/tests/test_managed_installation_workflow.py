@@ -4,8 +4,11 @@ import asyncio
 import hashlib
 import json
 import os
+import re
+import signal
 import socket
 import tempfile
+from contextlib import ExitStack
 from contextvars import Context
 from datetime import UTC, datetime
 from pathlib import Path
@@ -444,6 +447,334 @@ class ManagedInstallationWorkflowTest(ManagedInstallationWorkflowFixture):
             finally:
                 server.should_exit = True
                 await serving
+                listener.close()
+                await asyncio.to_thread(runtime.__exit__, None, None, None)
+
+    async def test_actual_crash_before_ack_recovers_closed_receipt(
+        self,
+    ):
+        runtime_binary = os.environ.get("PAPILIO_RUNTIME_TEST_BINARY")
+        managed_binary = os.environ.get("PAPILIO_MANAGED_TEST_BINARY")
+        binaries = os.environ.get("PAPILIO_CORE_BIN_DIR")
+        if not runtime_binary or not managed_binary or not binaries:
+            self.skipTest(
+                "Explicit owned fresh managed/runtime binaries required"
+            )
+        assert runtime_binary and managed_binary and binaries
+        with tempfile.TemporaryDirectory(
+            prefix="papilio-native-closed-recovery-"
+        ) as name:
+            root = Path(name)
+            root.chmod(0o700)
+            runtime = await asyncio.to_thread(
+                RealCoreRuntime(root / "targets", Path(binaries), 15).__enter__
+            )
+            listener = socket.socket()
+            listener.bind(("127.0.0.1", 0))
+            api_server = uvicorn.Server(
+                uvicorn.Config(
+                    self.app,
+                    lifespan="off",
+                    access_log=False,
+                    log_level="error",
+                )
+            )
+            api_serving = asyncio.create_task(
+                api_server.serve(sockets=[listener])
+            )
+            proxy = None
+            try:
+                inputs = root / "inputs"
+                inputs.mkdir(mode=0o700)
+                (inputs / "cert.pem").write_bytes(
+                    runtime.certificate.read_bytes()
+                )
+                (inputs / "key.pem").write_bytes(runtime.key.read_bytes())
+                (inputs / "cert.pem").chmod(0o600)
+                (inputs / "key.pem").chmod(0o600)
+                port = runtime.port()
+                (
+                    _,
+                    subscription,
+                    node,
+                    configuration,
+                ) = await self.setup_installation(inputs, port)
+                from tests.managed_installation_agent import (
+                    ManagedAcknowledgementProxy,
+                    actual_registry,
+                    launch,
+                    managed_child_pid,
+                    prepare_native_closed_installation,
+                    wait_for_managed_child_pid,
+                    wait_for_process_exit_handle,
+                )
+
+                registry = await asyncio.to_thread(
+                    actual_registry, root, inputs, Path(managed_binary)
+                )
+                policy = self.settings.managed_adapter
+                assert policy is not None
+                self.settings.managed_adapter = policy.model_copy(
+                    update=registry["trusted_api_policy"]
+                )
+                issued = await self.issue()
+                self.assertEqual(issued.status_code, 200, issued.text)
+                installation_id = issued.json()["data"]["id"]
+                async with self.connection.uow() as fresh:
+                    profile_result = await fresh.execute(
+                        text(
+                            "SELECT id FROM tbl_profiles "
+                            "WHERE configuration_id=:configuration_id "
+                            "AND subscription_id=:subscription_id"
+                        ),
+                        {
+                            "configuration_id": configuration["id"],
+                            "subscription_id": subscription["id"],
+                        },
+                    )
+                    profile_id = profile_result.scalar_one()
+                client_configuration = await self.post(
+                    f"/v1/admin/network/configurations/profiles/{profile_id}"
+                    "/client-download"
+                )
+
+                proxy = ManagedAcknowledgementProxy(
+                    f"http://127.0.0.1:{listener.getsockname()[1]}"
+                )
+                proxy.start()
+                command, environment = prepare_native_closed_installation(
+                    root,
+                    Path(runtime_binary),
+                    registry["registry"],
+                    installation_id,
+                    proxy.url,
+                    node,
+                    "before-ack",
+                    once=False,
+                )
+                with ExitStack() as first_stack:
+                    first = launch(
+                        command,
+                        first_stack,
+                        root / "agent-before-ack.log",
+                        environment=environment,
+                    )
+                    first_ack_reached = await asyncio.wait_for(
+                        asyncio.to_thread(proxy.first_ack_received.wait, 30),
+                        timeout=31,
+                    )
+                    self.assertTrue(first_ack_reached)
+                    state_path = (
+                        Path(registry["registry"]["state_directory"])
+                        / "managed-installation.json"
+                    )
+                    initial_state = json.loads(state_path.read_bytes())
+                    self.assertIsNotNone(initial_state["acknowledgement"])
+                    self.assertIsNone(initial_state["acceptance"])
+                    original_receipt = json.loads(
+                        initial_state["acknowledgement"]["original_receipt"]
+                    )
+                    self.assertTrue(original_receipt["historical_only"])
+                    self.assertFalse(original_receipt["api_authority"])
+                    self.assertTrue(
+                        all(
+                            profile["phase"] == "enrolled_closed"
+                            and profile["resources"] == 0
+                            and profile["active_operations"] == 0
+                            for profile in original_receipt["profiles"]
+                        )
+                    )
+                    initial_child = managed_child_pid(
+                        first.pid, Path(managed_binary)
+                    )
+                    initial_arguments = (
+                        Path(f"/proc/{initial_child}/cmdline")
+                        .read_bytes()
+                        .split(b"\0")
+                    )
+                    self.assertIn(b"--run", initial_arguments)
+                    self.assertNotIn(b"--resume-epoch", initial_arguments)
+                    target_requests_before = runtime.target_request_count()
+                    self.assertEqual(target_requests_before, 0)
+                    await asyncio.to_thread(
+                        runtime.exercise,
+                        "before-api-ack",
+                        runtime.client(client_configuration["content"]),
+                        False,
+                    )
+                    self.assertEqual(
+                        runtime.target_request_count(), target_requests_before
+                    )
+                    async with self.connection.uow() as fresh:
+                        epochs = await fresh.execute(
+                            text(
+                                "SELECT COUNT(*) FROM tbl_managed_epoches "
+                                "WHERE installation_id=:id"
+                            ),
+                            {"id": installation_id},
+                        )
+                        self.assertEqual(epochs.scalar_one(), 0)
+
+                    child_pidfd = os.pidfd_open(initial_child)
+                    try:
+                        first.send_signal(signal.SIGKILL)
+                        exit_code = await asyncio.to_thread(first.wait, 10)
+                        self.assertEqual(exit_code, -signal.SIGKILL)
+                        child_stopped = await asyncio.to_thread(
+                            wait_for_process_exit_handle, child_pidfd, 5
+                        )
+                        self.assertTrue(child_stopped)
+                    finally:
+                        os.close(child_pidfd)
+                    proxy.release_first_ack.set()
+                    first_rejected = await asyncio.wait_for(
+                        asyncio.to_thread(proxy.first_ack_rejected.wait, 5),
+                        timeout=6,
+                    )
+                    self.assertTrue(first_rejected)
+                    self.assertEqual(len(proxy.ack_responses), 0)
+
+                restart_command, restart_environment = (
+                    prepare_native_closed_installation(
+                        root,
+                        Path(runtime_binary),
+                        registry["registry"],
+                        installation_id,
+                        proxy.url,
+                        node,
+                        "after-ack",
+                        once=False,
+                    )
+                )
+                with ExitStack() as restart_stack:
+                    restarted = launch(
+                        restart_command,
+                        restart_stack,
+                        root / "agent-after-ack.log",
+                        environment=restart_environment,
+                    )
+                    accepted = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            proxy.replayed_ack_accepted.wait, 30
+                        ),
+                        timeout=31,
+                    )
+                    self.assertTrue(accepted)
+                    self.assertEqual(
+                        proxy.ack_statuses, [200], proxy.ack_responses
+                    )
+                    self.assertTrue(
+                        proxy.ack_responses[0]["success"],
+                        proxy.ack_responses[0],
+                    )
+                    try:
+                        child_pid = await asyncio.to_thread(
+                            wait_for_managed_child_pid,
+                            restarted.pid,
+                            Path(managed_binary),
+                            10,
+                        )
+                    except AssertionError:
+                        restart_log = (root / "agent-after-ack.log").read_text(
+                            errors="replace"
+                        )
+                        error_codes = re.findall(
+                            r"managed_[a-z0-9_]+", restart_log
+                        )
+                        reason = error_codes[-1] if error_codes else "no_child"
+                        children_path = Path(
+                            f"/proc/{restarted.pid}/task/"
+                            f"{restarted.pid}/children"
+                        )
+                        children = (
+                            children_path.read_text().split()
+                            if children_path.exists()
+                            else []
+                        )
+                        restart_state = json.loads(state_path.read_bytes())
+                        scheduler = Path(f"/proc/{restarted.pid}/wchan")
+                        wait_channel = (
+                            scheduler.read_text().strip()
+                            if scheduler.exists()
+                            else "exited"
+                        )
+                        raise AssertionError(
+                            "managed_restart_child_unavailable:"
+                            + reason
+                            + f":exit={restarted.poll()}:"
+                            + f"children={len(children)}"
+                            + ":accepted="
+                            + str(restart_state["acceptance"] is not None)
+                            + f":wait={wait_channel}"
+                        ) from None
+                    resumed_arguments = (
+                        Path(f"/proc/{child_pid}/cmdline")
+                        .read_bytes()
+                        .split(b"\0")
+                    )
+                    receipt = initial_state["acknowledgement"]["receipt"]
+                    self.assertIn(b"--resume-epoch", resumed_arguments)
+                    self.assertIn(receipt["epoch"].encode(), resumed_arguments)
+                    self.assertIn(
+                        b"--resume-startup-sha256", resumed_arguments
+                    )
+                    self.assertIn(
+                        receipt["receipt_sha256"].encode(),
+                        resumed_arguments,
+                    )
+                    self.assertEqual(len(proxy.ack_payloads), 2)
+                    self.assertEqual(
+                        proxy.ack_payloads[0], proxy.ack_payloads[1]
+                    )
+                    ack_data = proxy.ack_responses[0]["data"]
+                    self.assertFalse(ack_data["admission_available"])
+                    self.assertEqual(
+                        ack_data["process_epoch"], receipt["epoch"]
+                    )
+
+                    async with self.connection.uow() as fresh:
+                        installation = await fresh.execute(
+                            text(
+                                "SELECT state FROM tbl_managed_installations "
+                                "WHERE id=:id"
+                            ),
+                            {"id": installation_id},
+                        )
+                        self.assertEqual(
+                            installation.scalar_one(), "installed_closed"
+                        )
+                        epochs = await fresh.execute(
+                            text(
+                                "SELECT COUNT(*),MIN(receipt_sha256) "
+                                "FROM tbl_managed_epoches "
+                                "WHERE installation_id=:id"
+                            ),
+                            {"id": installation_id},
+                        )
+                        epoch_count, receipt_sha256 = epochs.one()
+                        self.assertEqual(epoch_count, 1)
+                        self.assertEqual(
+                            receipt_sha256, receipt["receipt_sha256"]
+                        )
+                        runtime_state = await fresh.execute(
+                            text(
+                                "SELECT applied_revision_id,observed_status "
+                                "FROM tbl_core_runtime_states "
+                                "WHERE core_id=:id"
+                            ),
+                            {"id": configuration["core_id"]},
+                        )
+                        self.assertEqual(
+                            tuple(runtime_state.one()), (None, "unknown")
+                        )
+                    restarted.send_signal(signal.SIGTERM)
+                    stopped = await asyncio.to_thread(restarted.wait, 12)
+                    self.assertEqual(stopped, 0)
+            finally:
+                if proxy is not None:
+                    proxy.close()
+                api_server.should_exit = True
+                await api_serving
                 listener.close()
                 await asyncio.to_thread(runtime.__exit__, None, None, None)
 

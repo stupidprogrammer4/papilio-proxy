@@ -3,11 +3,18 @@
 import hashlib
 import json
 import os
+import re
+import select
 import subprocess
+import threading
+import time
 from contextlib import ExitStack
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from tests.managed_ip_agent import launch
+import httpx
+
+from tests.managed_ip_agent import launch, private_write
 
 
 def compact(value, *, canonical=False):
@@ -188,7 +195,12 @@ def run_native_closed_installation(
         }
         raise AssertionError(
             "native_closed_agent_failed:"
-            + (safe_error if safe_error in known else "unclassified")
+            + (
+                safe_error
+                if safe_error in known
+                or re.fullmatch(r"managed_[a-z0-9_]{1,90}", safe_error)
+                else "unclassified"
+            )
         )
     journal = root / "managed-agent" / "managed-installation.json"
     state = json.loads(journal.read_bytes())
@@ -221,3 +233,210 @@ def run_native_closed_installation(
         "historical_only": True,
         "paid_activation_unavailable": True,
     }
+
+
+def managed_child_pid(runtime_pid: int, executable: Path) -> int:
+    """Find the managed child directly owned by one runtime process."""
+    tasks_path = Path(f"/proc/{runtime_pid}/task")
+    expected = executable.resolve()
+    for task in tasks_path.iterdir():
+        try:
+            children = (task / "children").read_text().split()
+        except FileNotFoundError:
+            continue
+        for child in children:
+            child_path = Path(f"/proc/{child}")
+            try:
+                actual = (child_path / "exe").resolve()
+                arguments = (child_path / "cmdline").read_bytes().split(b"\0")
+            except FileNotFoundError:
+                continue
+            if actual == expected and b"--run" in arguments:
+                return int(child)
+    raise AssertionError("managed_runtime_child_not_found")
+
+
+def wait_for_managed_child_pid(
+    runtime_pid: int, executable: Path, timeout_seconds: float
+) -> int:
+    """Wait for a specific owned child to appear under its runtime process."""
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        try:
+            return managed_child_pid(runtime_pid, executable)
+        except (AssertionError, FileNotFoundError):
+            time.sleep(0.01)
+    raise AssertionError("managed_runtime_child_start_timeout")
+
+
+def wait_for_process_exit(process_id: int, timeout_seconds: float) -> bool:
+    """Wait on the kernel process handle instead of inferring from a delay."""
+    process_fd = os.pidfd_open(process_id)
+    try:
+        return wait_for_process_exit_handle(process_fd, timeout_seconds)
+    finally:
+        os.close(process_fd)
+
+
+def wait_for_process_exit_handle(
+    process_fd: int, timeout_seconds: float
+) -> bool:
+    """Wait for exit on a pidfd opened before a deliberately induced crash."""
+    poller = select.poll()
+    poller.register(process_fd, select.POLLIN)
+    return bool(poller.poll(round(timeout_seconds * 1000)))
+
+
+def prepare_native_closed_installation(
+    root: Path,
+    runtime_binary: Path,
+    registry: dict,
+    id: int,
+    api_url: str,
+    node: dict,
+    run_id: str,
+    *,
+    once: bool,
+):
+    """Prepare one isolated native runtime process for recovery acceptance."""
+    config = {
+        "enabled": True,
+        "api_url": api_url,
+        "node_code": node["node"]["code"],
+        "state_directory": str(root / "unused-stock-state"),
+        "managed_installation": {**registry, "installation_id": id},
+        "poll_interval_ms": 300,
+        "http_timeout_ms": 15000,
+        "max_response_bytes": 2097152,
+        "max_idle_connections": 2,
+        "page_size": 8,
+        "max_pages_per_poll": 2,
+    }
+    path = root / f"agent-config-{run_id}.json"
+    private_write(path, compact(config))
+    command = [str(runtime_binary), "-config", str(path)]
+    if once:
+        command.append("-once")
+    environment = {**os.environ, "PAPILIO_NODE_KEY": node["agent_key"]}
+    return command, environment
+
+
+class ManagedAcknowledgementProxy:
+    """Hold one ACK before the real API, then forward its recovery replay."""
+
+    def __init__(self, upstream_url: str):
+        self.upstream_url = upstream_url.rstrip("/")
+        self.first_ack_received = threading.Event()
+        self.release_first_ack = threading.Event()
+        self.first_ack_rejected = threading.Event()
+        self.replayed_ack_accepted = threading.Event()
+        self.lock = threading.Lock()
+        self.ack_payloads: list[bytes] = []
+        self.ack_statuses: list[int] = []
+        self.ack_responses: list[dict] = []
+        self.server = self._server()
+        self.thread = threading.Thread(
+            target=self.server.serve_forever,
+            name="managed-ack-proxy",
+            daemon=True,
+        )
+
+    @property
+    def url(self) -> str:
+        return f"http://127.0.0.1:{self.server.server_port}"
+
+    def start(self) -> None:
+        self.thread.start()
+
+    def close(self) -> None:
+        self.release_first_ack.set()
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=5)
+        assert not self.thread.is_alive(), "managed_ack_proxy_cleanup_failed"
+
+    def _server(self) -> ThreadingHTTPServer:
+        owner = self
+
+        class Handler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def log_message(self, format: str, *args: object) -> None:
+                pass
+
+            def do_GET(self) -> None:
+                self.forward()
+
+            def do_POST(self) -> None:
+                self.forward()
+
+            def forward(self) -> None:
+                length = int(self.headers.get("Content-Length", "0"))
+                payload = self.rfile.read(length)
+                is_ack = (
+                    self.command == "POST"
+                    and "/managed-installations/" in self.path
+                    and self.path.endswith("/acknowledge")
+                )
+                if is_ack:
+                    with owner.lock:
+                        owner.ack_payloads.append(payload)
+                        attempt = len(owner.ack_payloads)
+                    if attempt == 1:
+                        owner.first_ack_received.set()
+                        owner.release_first_ack.wait(timeout=20)
+                        self.send_response(503)
+                        self.send_header("Content-Length", "0")
+                        self.end_headers()
+                        self.wfile.flush()
+                        owner.first_ack_rejected.set()
+                        return
+
+                headers = {
+                    name: value
+                    for name, value in self.headers.items()
+                    if name.lower()
+                    not in {
+                        "connection",
+                        "content-length",
+                        "host",
+                        "keep-alive",
+                        "proxy-authorization",
+                        "proxy-connection",
+                        "te",
+                        "trailers",
+                        "transfer-encoding",
+                        "upgrade",
+                    }
+                }
+                try:
+                    with httpx.Client(timeout=15, trust_env=False) as client:
+                        response = client.request(
+                            self.command,
+                            owner.upstream_url + self.path,
+                            content=payload,
+                            headers=headers,
+                        )
+                except httpx.HTTPError:
+                    self.send_response(502)
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
+
+                self.send_response(response.status_code)
+                self.send_header("Content-Length", str(len(response.content)))
+                content_type = response.headers.get("content-type")
+                if content_type:
+                    self.send_header("Content-Type", content_type)
+                self.end_headers()
+                self.wfile.write(response.content)
+                self.wfile.flush()
+                if is_ack:
+                    with owner.lock:
+                        owner.ack_statuses.append(response.status_code)
+                        owner.ack_responses.append(response.json())
+                    owner.replayed_ack_accepted.set()
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        server.daemon_threads = True
+        return server
