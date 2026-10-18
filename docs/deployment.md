@@ -134,6 +134,32 @@ not delete volumes or restore old financial records automatically. Verify an
 encrypted native backup before upgrading a populated older schema; unsupported
 in-place upgrade is refused by bootstrap.
 
+## Encrypted database backup
+
+Create a private recovery key once and keep it somewhere separate from the
+server and backup files:
+
+```bash
+umask 077
+openssl rand -hex 32 > "$HOME/papilio-recovery.key"
+mkdir -p "$HOME/papilio-backups"
+bash "$HOME/.local/share/papilio-proxy/source/scripts/deploy/backup.sh" \
+  --state-dir "$HOME/papilio-state" \
+  --key-file "$HOME/papilio-recovery.key" \
+  --output "$HOME/papilio-backups/papilio-$(date -u +%Y%m%dT%H%M%SZ).encrypted"
+```
+
+The recovery key must be owned by and readable to the user who installed the
+deployment. The command snapshots InnoDB tables online, encrypts the database
+and private application configuration, then verifies the archive with the
+supplied key.
+The output directory must already exist and be writable by the deployment user;
+existing archives are never overwritten. Copy the verified archive off this
+host, and keep the recovery key separately. Losing that key makes the archive
+unreadable. This archive does not contain Redis, NATS, Caddy certificate, or
+other Docker volumes; it is database recovery material, not a complete machine
+image. Do not run schema migrations at the same time as a backup.
+
 Additional installer options include `--network-subnet`, `--worker-count`,
 `--worker-concurrency`, `--scheduler-interval`, `--start-timeout`, `--no-start`,
 `--http-port` and `--https-port`. Choose another network subnet if it conflicts

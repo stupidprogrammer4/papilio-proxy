@@ -11,6 +11,8 @@ DEPLOY_INSTALL_DOCKER=false
 DEPLOY_NO_START=false
 DEPLOY_DOCKER_SUDO=false
 DEPLOY_DOCKER_COMMAND=(docker)
+DEPLOY_RECOVERY_KEY_FILE=""
+DEPLOY_BACKUP_OUTPUT=""
 
 deploy_fail() {
     printf 'Error: %s\n' "$*" >&2
@@ -20,6 +22,7 @@ deploy_fail() {
 deploy_help() {
     printf '%s\n' \
         'Usage: scripts/deploy/<install|start|stop|status>.sh [--state-dir PATH]' \
+        '       scripts/deploy/backup.sh --key-file PATH --output PATH' \
         'All entrypoints: --docker-sudo (explicit Linux sudo access to Docker)' \
         'Install options: --install-docker --no-start --project-name NAME' \
         'Configure options: --public-url URL --owner-username NAME --enable-bot' \
@@ -42,6 +45,18 @@ deploy_parse_args() {
             --state-dir)
                 [ "$#" -ge 2 ] || deploy_fail '--state-dir requires a path.'
                 DEPLOY_STATE_DIR="$2"
+                shift 2
+                ;;
+            --key-file)
+                [ "$operation" = backup ] || deploy_fail '--key-file belongs to backup.'
+                [ "$#" -ge 2 ] || deploy_fail '--key-file requires a path.'
+                DEPLOY_RECOVERY_KEY_FILE="$2"
+                shift 2
+                ;;
+            --output)
+                [ "$operation" = backup ] || deploy_fail '--output belongs to backup.'
+                [ "$#" -ge 2 ] || deploy_fail '--output requires a path.'
+                DEPLOY_BACKUP_OUTPUT="$2"
                 shift 2
                 ;;
             --project-name)
@@ -88,6 +103,10 @@ deploy_parse_args() {
     fi
     [ -d "$DEPLOY_STATE_DIR" ] || deploy_fail 'State directory is missing; run install.sh first.'
     DEPLOY_STATE_DIR="$(cd "$DEPLOY_STATE_DIR" && pwd -P)"
+    if [ "$operation" = backup ]; then
+        [ -n "$DEPLOY_RECOVERY_KEY_FILE" ] || deploy_fail 'Backup requires --key-file.'
+        [ -n "$DEPLOY_BACKUP_OUTPUT" ] || deploy_fail 'Backup requires --output.'
+    fi
 }
 
 deploy_docker() {
