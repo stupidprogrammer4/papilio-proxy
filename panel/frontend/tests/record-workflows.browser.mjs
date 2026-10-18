@@ -23,7 +23,7 @@ await page.route(url=>url.pathname.startsWith('/api/'),async route=>{
  if(path==='/v1/admin/staff/scope-catalog')return response(route,{data:{areas:['staff','payments','subscriptions'],levels:['read','create','update','manage']}});
  if(path==='/v1/admin/roles'&&method==='POST'){roleAttempts++;if(roleAttempts===1)return response(route,{error:{message_code:'request_failed'}},409);return response(route,{data:{...role,...req.postDataJSON()}});}
  if(path==='/v1/admin/roles')return response(route,list([role]));
- if(path==='/v1/admin/payments/topups')return response(route,list(url.searchParams.get('status')==='approved'?[{id:88,customer_id:101,amount_rial:1000,status:'approved',bank_reference:'fixture-credit',approved_by_staff_id:null,approved_by_device_id:71,approved_by_sms_id:78}]:[]));
+ if(path==='/v1/admin/payments/topups')return response(route,list(url.searchParams.get('status')==='approved'?[{id:88,revision:2,customer_id:101,amount_rial:1000,status:'approved',bank_reference:'fixture-credit',approved_by_staff_id:null,approved_by_device_id:71,approved_by_sms_id:78}]:[]));
  if(path==='/v1/admin/payments/sms')return response(route,list([{id:78,device_id:71,event_id:'fixture-sms',sender:'FixtureBank',amount_rial:1000,bank_reference:'fixture-credit',sent_at:expiry}]));
  if(path==='/v1/admin/payments/destinations')return response(route,list([destination]));
  if(path==='/v1/admin/payments/sms-devices'&&method==='POST'){
