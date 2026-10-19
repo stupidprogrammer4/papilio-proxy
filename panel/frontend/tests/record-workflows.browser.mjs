@@ -31,6 +31,7 @@ await page.route(url=>url.pathname.startsWith('/api/'),async route=>{
   const data=req.postDataJSON();assert.equal(data.destination_id,51);assert.equal(data.approval_mode,'unique_sms');assert(new Date(data.expires_at).getTime()>Date.now());
   const device={...data,id:72,revision:1};devices.push(device);visibleKey=randomBytes(32).toString('hex');return response(route,{data:{device,api_key:visibleKey}});
  }
+ if(path==='/v1/admin/payments/sms-devices/71'&&method==='GET')return response(route,{data:devices.find(device=>device.id===71)});
  if(path==='/v1/admin/payments/sms-devices')return response(route,list(devices.filter(device=>device.label.includes(url.searchParams.get('q')??''))));
  if(path==='/v1/admin/payments/sms-devices/71'&&method==='PUT'){
   editAttempts++;const data=req.postDataJSON(),device=devices.find(row=>row.id===71);if(editAttempts===1){device.revision=2;return response(route,{error:{message_code:'sms_device_revision_conflict'}},409);}assert.equal(data.expected_revision,2);assert.equal(data.label,'Retained revised phone');Object.assign(device,data,{revision:3});return response(route,{data:device});
@@ -77,7 +78,10 @@ try{
  await page.getByRole('row',{name:/^Fixture phone Device 71/}).click();await page.getByRole('button',{name:'Edit device',exact:true}).click();
  const editDialog=page.getByRole('dialog',{name:'Edit SMS device',exact:true});await editDialog.getByLabel('Device name').fill('Retained revised phone');await editDialog.getByRole('button',{name:'Save device',exact:true}).click();await editDialog.getByRole('alert').waitFor();
  assert.equal(await editDialog.getByLabel('Device name').inputValue(),'Retained revised phone');await editDialog.getByRole('button',{name:'Close dialog',exact:true}).click();
- await page.getByRole('button',{name:'Refresh devices',exact:true}).click();await page.getByRole('row',{name:/^Fixture phone Device 71/}).click();await page.getByRole('button',{name:'Edit device',exact:true}).click();await editDialog.getByRole('button',{name:'Use latest selected revision',exact:true}).click();
+ const deviceRefresh=page.waitForResponse(value=>new URL(value.url()).pathname.endsWith('/v1/admin/payments/sms-devices')&&value.request().method()==='GET');
+ const selectedDeviceRefresh=page.waitForResponse(value=>new URL(value.url()).pathname.endsWith('/v1/admin/payments/sms-devices/71')&&value.request().method()==='GET');
+ await page.getByRole('button',{name:'Refresh devices',exact:true}).click();await Promise.all([deviceRefresh,selectedDeviceRefresh]);
+ await page.getByRole('row',{name:/^Fixture phone Device 71/}).click();await page.getByRole('button',{name:'Edit device',exact:true}).click();await editDialog.getByRole('button',{name:'Use latest selected revision',exact:true}).click();
  assert.equal(await editDialog.getByLabel('Device name').inputValue(),'Retained revised phone');await editDialog.getByRole('button',{name:'Save device',exact:true}).click();await editDialog.waitFor({state:'hidden'});assert.equal(editAttempts,2);
  await page.goto(origin+'/subscriptions?customer_id=101&subscription_id=999');await page.getByText('Subscription details',{exact:true}).waitFor();await page.getByRole('button',{name:'Check expiry and quota'}).waitFor();
  assert(requests.some(row=>row.path==='/v1/admin/subscriptions/999'));
