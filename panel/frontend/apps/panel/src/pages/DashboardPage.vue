@@ -93,15 +93,18 @@ async function loadNodes(): Promise<void> {
 async function load(): Promise<void> {
   loading.value = true;
   const visible = metrics.value.filter(row => auth.can(row.scope));
-  const outcomes = await Promise.allSettled(
-    visible.map(row => request<Page<unknown>>(row.path)),
+  const outcomes = await Promise.all(
+    visible.map(metric =>
+      request<Page<unknown>>(metric.path).then(
+        result => ({ metric, status: "fulfilled" as const, result }),
+        () => ({ metric, status: "rejected" as const }),
+      ),
+    ),
   );
-  outcomes.forEach((result, index) => {
-    const metric = visible[index];
-    if (!metric) return;
-    metric.error = result.status === "rejected";
-    metric.value = result.status === "fulfilled"
-      ? result.value.meta.pager?.total_items ?? 0
+  outcomes.forEach(outcome => {
+    outcome.metric.error = outcome.status === "rejected";
+    outcome.metric.value = outcome.status === "fulfilled"
+      ? outcome.result.meta.pager?.total_items ?? 0
       : null;
   });
   loading.value = false;
