@@ -168,6 +168,29 @@ unreadable. This archive does not contain Redis, NATS, Caddy certificate, or
 other Docker volumes; it is database recovery material, not a complete machine
 image. Do not run schema migrations at the same time as a backup.
 
+## Restore an encrypted database backup
+
+Restore only into an empty MySQL database belonging to the same deployment
+configuration and encryption keys. The command verifies the archive first,
+stops the API, event consumer, task workers, scheduler, web gateway and optional
+bot, restores through the native recovery CLI, then starts the deployment and
+runs its normal readiness check. It never drops existing tables. If a restore
+fails after it begins, leave the services stopped and retry only against a new
+empty database.
+
+```bash
+bash "$HOME/.local/share/papilio-proxy/source/scripts/deploy/restore.sh" \
+  --state-dir "$HOME/papilio-state" \
+  --key-file "$HOME/papilio-recovery.key" \
+  --archive "$HOME/papilio-backups/papilio-20261019T120000Z.encrypted"
+```
+
+Keep the key private and available on the deployment host. This restores the
+database into the current deployment's configured MySQL target; it does not
+recreate Docker volumes or recover Redis, NATS, Caddy certificates, or the
+deployment's separate Compose secrets. A migration to a new independent host
+still needs those materials and a separately validated procedure.
+
 Additional installer options include `--network-subnet`, `--worker-count`,
 `--worker-concurrency`, `--scheduler-interval`, `--start-timeout`, `--no-start`,
 `--http-port` and `--https-port`. Choose another network subnet if it conflicts

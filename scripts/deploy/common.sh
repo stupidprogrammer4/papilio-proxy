@@ -13,6 +13,7 @@ DEPLOY_DOCKER_SUDO=false
 DEPLOY_DOCKER_COMMAND=(docker)
 DEPLOY_RECOVERY_KEY_FILE=""
 DEPLOY_BACKUP_OUTPUT=""
+DEPLOY_ARCHIVE_FILE=""
 
 deploy_fail() {
     printf 'Error: %s\n' "$*" >&2
@@ -23,6 +24,7 @@ deploy_help() {
     printf '%s\n' \
         'Usage: scripts/deploy/<install|start|stop|status|doctor>.sh [--state-dir PATH]' \
         '       scripts/deploy/backup.sh --key-file PATH --output PATH' \
+        '       scripts/deploy/restore.sh --key-file PATH --archive PATH' \
         'All entrypoints: --docker-sudo (explicit Linux sudo access to Docker)' \
         'Install options: --install-docker --no-start --project-name NAME' \
         'Configure options: --public-url URL --owner-username NAME --enable-bot --enable-ocr' \
@@ -48,7 +50,8 @@ deploy_parse_args() {
                 shift 2
                 ;;
             --key-file)
-                [ "$operation" = backup ] || deploy_fail '--key-file belongs to backup.'
+                [ "$operation" = backup ] || [ "$operation" = restore ] \
+                    || deploy_fail '--key-file belongs to backup or restore.'
                 [ "$#" -ge 2 ] || deploy_fail '--key-file requires a path.'
                 DEPLOY_RECOVERY_KEY_FILE="$2"
                 shift 2
@@ -57,6 +60,12 @@ deploy_parse_args() {
                 [ "$operation" = backup ] || deploy_fail '--output belongs to backup.'
                 [ "$#" -ge 2 ] || deploy_fail '--output requires a path.'
                 DEPLOY_BACKUP_OUTPUT="$2"
+                shift 2
+                ;;
+            --archive)
+                [ "$operation" = restore ] || deploy_fail '--archive belongs to restore.'
+                [ "$#" -ge 2 ] || deploy_fail '--archive requires a path.'
+                DEPLOY_ARCHIVE_FILE="$2"
                 shift 2
                 ;;
             --project-name)
@@ -111,6 +120,10 @@ deploy_parse_args() {
     if [ "$operation" = backup ]; then
         [ -n "$DEPLOY_RECOVERY_KEY_FILE" ] || deploy_fail 'Backup requires --key-file.'
         [ -n "$DEPLOY_BACKUP_OUTPUT" ] || deploy_fail 'Backup requires --output.'
+    fi
+    if [ "$operation" = restore ]; then
+        [ -n "$DEPLOY_RECOVERY_KEY_FILE" ] || deploy_fail 'Restore requires --key-file.'
+        [ -n "$DEPLOY_ARCHIVE_FILE" ] || deploy_fail 'Restore requires --archive.'
     fi
 }
 

@@ -125,7 +125,12 @@ archive unreadable. It contains the MySQL database and private application
 configuration; it is not a full server backup and does not include Redis, NATS,
 or Caddy certificate volumes. The recovery tool requires a new empty target for
 a restore; a partial restore must also be retried against a new empty target.
-Review the deployment guide and recovery procedure before restoring data.
+For the same deployment and its existing encryption keys, restore with the
+command in the [deployment guide](deployment.md#restore-an-encrypted-database-backup).
+The command verifies the archive, stops database writers, restores only to an
+empty MySQL target, and starts the services after success. It does not recover
+other Docker volumes or separate Compose secrets; migration to a new host needs
+an independently validated procedure.
 
 ## Configuration editing and troubleshooting
 
