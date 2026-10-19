@@ -142,7 +142,8 @@ class CheckoutNoticeConsumerTest(IsolatedAsyncioTestCase):
                     json={"notification_id": 17, "claim_token": "b" * 64},
                     headers={"X-Papilio-Delivery-Key": delivery_key},
                 ) as response:
-                    return await response.json()
+                    result = await response.json()
+                    return result
 
         async def callback(chat_type, identifier):
             update = Update.model_validate(

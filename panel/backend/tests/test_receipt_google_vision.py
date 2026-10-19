@@ -283,7 +283,8 @@ def test_google_vision_auth_failures_are_terminal(monkeypatch, status):
                 ocr_api_key=SecretStr("sensitive-key"),
                 ocr_timeout_seconds=5,
             )
-            return await GoogleVisionReceiptOcr(settings).recognize(b"image")
+            result = await GoogleVisionReceiptOcr(settings).recognize(b"image")
+            return result
 
     result = asyncio.run(run_request())
 
@@ -317,7 +318,8 @@ def test_google_vision_rejects_oversized_provider_response(monkeypatch):
                 ocr_api_key=SecretStr("sensitive-key"),
                 ocr_timeout_seconds=5,
             )
-            return await GoogleVisionReceiptOcr(settings).recognize(b"image")
+            result = await GoogleVisionReceiptOcr(settings).recognize(b"image")
+            return result
 
     result = asyncio.run(run_request())
 

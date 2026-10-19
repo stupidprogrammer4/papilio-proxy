@@ -977,7 +977,7 @@ class CheckoutWorkflowTest(CheckoutWorkflowFixture):
         async def purchase():
             async with self.app.state.dishka_container() as scope:
                 command = await scope.get(ISubscriptionCommand)
-                return await command.purchase(
+                result = await command.purchase(
                     SubscriptionCreate(
                         customer_id=customer["id"],
                         plan_id=plan["id"],
@@ -987,6 +987,7 @@ class CheckoutWorkflowTest(CheckoutWorkflowFixture):
                         expected_offer_sha256=offer.offer_sha256,
                     )
                 )
+                return result
 
         async with self.connection.uow() as holder:
             async with transaction(holder):

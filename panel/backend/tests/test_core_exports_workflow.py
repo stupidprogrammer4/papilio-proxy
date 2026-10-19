@@ -37,11 +37,12 @@ class CoreExportsWorkflowTest(
         return first, second, nodes
 
     async def export_core(self, core_id, mode):
-        return await self.client.post(
+        result = await self.client.post(
             f"/v1/admin/network/cores/{core_id}/export",
             headers=self.headers,
             json={"mode": mode},
         )
+        return result
 
     async def test_native_multi_inbound_export_conflict_and_isolated_recovery(
         self,
