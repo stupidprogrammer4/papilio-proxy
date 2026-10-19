@@ -7,6 +7,7 @@ import os
 import re
 import signal
 import socket
+import subprocess
 import tempfile
 from contextlib import ExitStack
 from contextvars import Context
@@ -503,15 +504,19 @@ class ManagedInstallationWorkflowTest(ManagedInstallationWorkflowFixture):
                     ManagedAcknowledgementProxy,
                     actual_registry,
                     launch,
-                    managed_child_pid,
+                    managed_child_pids,
                     prepare_native_closed_installation,
                     wait_for_managed_child_pid,
+                    wait_for_private_file,
                     wait_for_process_exit_handle,
                 )
 
                 registry = await asyncio.to_thread(
                     actual_registry, root, inputs, Path(managed_binary)
                 )
+                # Hold the real parent while the child publishes its durable
+                # receipt to expose the crash-before-journal gap.
+                registry["registry"]["poll_interval_ms"] = 10000
                 policy = self.settings.managed_adapter
                 assert policy is not None
                 self.settings.managed_adapter = policy.model_copy(
@@ -542,6 +547,129 @@ class ManagedInstallationWorkflowTest(ManagedInstallationWorkflowFixture):
                     f"http://127.0.0.1:{listener.getsockname()[1]}"
                 )
                 proxy.start()
+
+                unacknowledged_command, unacknowledged_environment = (
+                    prepare_native_closed_installation(
+                        root,
+                        Path(runtime_binary),
+                        registry["registry"],
+                        installation_id,
+                        proxy.url,
+                        node,
+                        "before-ack-journal",
+                        once=False,
+                    )
+                )
+                with ExitStack() as unacknowledged_stack:
+                    unacknowledged = launch(
+                        unacknowledged_command,
+                        unacknowledged_stack,
+                        root / "agent-before-ack-journal.log",
+                        environment=unacknowledged_environment,
+                    )
+                    try:
+                        unacknowledged_child = await asyncio.to_thread(
+                            wait_for_managed_child_pid,
+                            unacknowledged.pid,
+                            Path(managed_binary),
+                            10,
+                        )
+                    except AssertionError:
+                        agent_log = (
+                            root / "agent-before-ack-journal.log"
+                        ).read_text(errors="replace")
+                        self.fail(
+                            "managed_child_missing_before_ack_journal:"
+                            + agent_log[-1000:]
+                        )
+                    child_pidfd = os.pidfd_open(unacknowledged_child)
+                    try:
+                        os.kill(unacknowledged_child, signal.SIGSTOP)
+                        unacknowledged.send_signal(signal.SIGSTOP)
+                        os.kill(unacknowledged_child, signal.SIGCONT)
+                        control_root = Path(
+                            registry["registry"]["control_root"]
+                        )
+                        closed_receipt_path = (
+                            control_root / "closed-startup.json"
+                        )
+                        await asyncio.wait_for(
+                            asyncio.to_thread(
+                                wait_for_private_file,
+                                closed_receipt_path,
+                                10,
+                            ),
+                            timeout=11,
+                        )
+                        journal_path = (
+                            Path(registry["registry"]["state_directory"])
+                            / "managed-installation.json"
+                        )
+                        unacknowledged_state = json.loads(
+                            journal_path.read_bytes()
+                        )
+                        self.assertIsNone(
+                            unacknowledged_state.get("acknowledgement")
+                        )
+                        self.assertEqual(proxy.ack_payloads, [])
+                        self.assertEqual(runtime.target_request_count(), 0)
+                        await asyncio.to_thread(
+                            runtime.exercise,
+                            "before-recovered-ack",
+                            runtime.client(client_configuration["content"]),
+                            False,
+                        )
+                        self.assertEqual(runtime.target_request_count(), 0)
+                        unacknowledged.send_signal(signal.SIGKILL)
+                        self.assertEqual(
+                            await asyncio.to_thread(unacknowledged.wait, 10),
+                            -signal.SIGKILL,
+                        )
+                        self.assertTrue(
+                            await asyncio.to_thread(
+                                wait_for_process_exit_handle, child_pidfd, 5
+                            )
+                        )
+                    finally:
+                        os.close(child_pidfd)
+
+                settings_path = (
+                    Path(registry["registry"]["state_directory"])
+                    / "managed-settings.json"
+                )
+                inspected = await asyncio.to_thread(
+                    subprocess.run,
+                    [
+                        str(managed_binary),
+                        "--inspect-closed-startup",
+                        "--config",
+                        str(settings_path),
+                        "--max-config-bytes",
+                        str(registry["registry"]["max_settings_bytes"]),
+                        "--max-config-depth",
+                        str(registry["registry"]["max_settings_depth"]),
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+                self.assertEqual(inspected.returncode, 0, inspected.stderr)
+                closed_startup = json.loads(inspected.stdout)
+                self.assertEqual(
+                    closed_startup["state"], "closed_startup_validated"
+                )
+                self.assertEqual(proxy.ack_payloads, [])
+                async with self.connection.uow() as fresh:
+                    epochs = await fresh.execute(
+                        text(
+                            "SELECT COUNT(*) FROM tbl_managed_epoches "
+                            "WHERE installation_id=:id"
+                        ),
+                        {"id": installation_id},
+                    )
+                    self.assertEqual(epochs.scalar_one(), 0)
+
                 command, environment = prepare_native_closed_installation(
                     root,
                     Path(runtime_binary),
@@ -597,6 +725,13 @@ class ManagedInstallationWorkflowTest(ManagedInstallationWorkflowFixture):
                     original_receipt = json.loads(
                         initial_state["acknowledgement"]["original_receipt"]
                     )
+                    self.assertEqual(
+                        initial_state["acknowledgement"]["receipt"],
+                        closed_startup["closed_startup_receipt"],
+                    )
+                    self.assertEqual(
+                        original_receipt, closed_startup["original_receipt"]
+                    )
                     self.assertTrue(original_receipt["historical_only"])
                     self.assertFalse(original_receipt["api_authority"])
                     self.assertTrue(
@@ -607,16 +742,11 @@ class ManagedInstallationWorkflowTest(ManagedInstallationWorkflowFixture):
                             for profile in original_receipt["profiles"]
                         )
                     )
-                    initial_child = managed_child_pid(
-                        first.pid, Path(managed_binary)
+                    self.assertEqual(
+                        managed_child_pids(first.pid, Path(managed_binary)),
+                        [],
+                        "managed child resumed before the ACK response",
                     )
-                    initial_arguments = (
-                        Path(f"/proc/{initial_child}/cmdline")
-                        .read_bytes()
-                        .split(b"\0")
-                    )
-                    self.assertIn(b"--run", initial_arguments)
-                    self.assertNotIn(b"--resume-epoch", initial_arguments)
                     target_requests_before = runtime.target_request_count()
                     self.assertEqual(target_requests_before, 0)
                     async with self.connection.uow() as fresh:
@@ -643,6 +773,11 @@ class ManagedInstallationWorkflowTest(ManagedInstallationWorkflowFixture):
                     self.assertEqual(
                         runtime.target_request_count(), target_requests_before
                     )
+                    self.assertEqual(
+                        managed_child_pids(first.pid, Path(managed_binary)),
+                        [],
+                        "managed child resumed while ACK response was held",
+                    )
                     async with self.connection.uow() as fresh:
                         epochs = await fresh.execute(
                             text(
@@ -653,17 +788,9 @@ class ManagedInstallationWorkflowTest(ManagedInstallationWorkflowFixture):
                         )
                         self.assertEqual(epochs.scalar_one(), 1)
 
-                    child_pidfd = os.pidfd_open(initial_child)
-                    try:
-                        first.send_signal(signal.SIGKILL)
-                        exit_code = await asyncio.to_thread(first.wait, 10)
-                        self.assertEqual(exit_code, -signal.SIGKILL)
-                        child_stopped = await asyncio.to_thread(
-                            wait_for_process_exit_handle, child_pidfd, 5
-                        )
-                        self.assertTrue(child_stopped)
-                    finally:
-                        os.close(child_pidfd)
+                    first.send_signal(signal.SIGKILL)
+                    exit_code = await asyncio.to_thread(first.wait, 10)
+                    self.assertEqual(exit_code, -signal.SIGKILL)
                     proxy.release_first_ack.set()
                     first_response_dropped = await asyncio.wait_for(
                         asyncio.to_thread(

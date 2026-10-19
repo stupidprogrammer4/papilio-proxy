@@ -237,8 +237,17 @@ def run_native_closed_installation(
 
 def managed_child_pid(runtime_pid: int, executable: Path) -> int:
     """Find the managed child directly owned by one runtime process."""
+    children = managed_child_pids(runtime_pid, executable)
+    if len(children) == 1:
+        return children[0]
+    raise AssertionError("managed_runtime_child_not_found")
+
+
+def managed_child_pids(runtime_pid: int, executable: Path) -> list[int]:
+    """List managed children directly owned by one runtime process."""
     tasks_path = Path(f"/proc/{runtime_pid}/task")
     expected = executable.resolve()
+    managed_children = []
     for task in tasks_path.iterdir():
         try:
             children = (task / "children").read_text().split()
@@ -252,8 +261,8 @@ def managed_child_pid(runtime_pid: int, executable: Path) -> int:
             except FileNotFoundError:
                 continue
             if actual == expected and b"--run" in arguments:
-                return int(child)
-    raise AssertionError("managed_runtime_child_not_found")
+                managed_children.append(int(child))
+    return managed_children
 
 
 def wait_for_managed_child_pid(
@@ -285,6 +294,21 @@ def wait_for_process_exit_handle(
     poller = select.poll()
     poller.register(process_fd, select.POLLIN)
     return bool(poller.poll(round(timeout_seconds * 1000)))
+
+
+def wait_for_private_file(path: Path, timeout_seconds: float) -> None:
+    """Wait until an owned child has durably published a private receipt."""
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        try:
+            metadata = path.stat()
+        except FileNotFoundError:
+            time.sleep(0.01)
+            continue
+        if metadata.st_mode & 0o077 == 0 and metadata.st_size > 0:
+            return
+        raise AssertionError("managed_closed_receipt_file_unsafe")
+    raise AssertionError("managed_closed_receipt_file_timeout")
 
 
 def prepare_native_closed_installation(
