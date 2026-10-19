@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import unittest
 from pathlib import Path
 
 import pymysql
@@ -332,6 +333,11 @@ def _exercise_native_runtime(
     *,
     owned_namespace=None,
 ):
+    nats_url = os.environ.get("NATS_TEST_URL")
+    if not nats_url:
+        raise unittest.SkipTest(
+            "Set NATS_TEST_URL to an isolated NATS JetStream server"
+        )
     url = make_url(raw["db"]["dsn"])
     assert url.database is not None and "test" in url.database
     assert url.username is not None and url.password is not None
@@ -339,6 +345,7 @@ def _exercise_native_runtime(
         directory = Path(name)
         directory.chmod(0o700)
         config = yaml.safe_load(yaml.safe_dump(raw))
+        config["events"]["nats_url"] = nats_url
         prefix = "papilio:test:" + directory.name
         if owned_namespace is not None:
             import re

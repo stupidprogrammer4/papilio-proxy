@@ -450,7 +450,7 @@ Before starting a recovered application, review its database/Redis destinations,
 
 ## Verification
 
-Run `ruff check src tests scripts migrations`, `ruff format --check src tests scripts migrations`, `pyright --pythonpath ../../.venv/bin/python src tests scripts`, and `pytest -q` from `panel/backend`; integration tests require `PAPILIO_TEST_DATABASE_URL` pointing to a disposable MySQL database and `PAPILIO_TEST_REDIS_URL` pointing to isolated Redis. The scheduler workflow starts native worker/beat subprocesses and waits up to 90 seconds for committed outcomes, then removes its own Redis namespace. Run `pnpm --filter @papilio/panel build` from `panel/frontend`, and `go test ./...` plus `go vet ./...` from `proxy`.
+Run `ruff check src tests scripts migrations`, `ruff format --check src tests scripts migrations`, `pyright --pythonpath ../../.venv/bin/python src tests scripts`, and `pytest -q` from `panel/backend`; integration tests require `PAPILIO_TEST_DATABASE_URL` pointing to a disposable MySQL database and `PAPILIO_TEST_REDIS_URL` pointing to isolated Redis. Native scheduled workflows also require `NATS_TEST_URL` pointing to isolated NATS JetStream. The scheduler workflow starts native worker/beat subprocesses and waits up to 90 seconds for committed outcomes, then removes its own Redis namespace. Run `pnpm --filter @papilio/panel build` from `panel/frontend`, and `go test ./...` plus `go vet ./...` from `proxy`.
 
 ## Customer accounts and payment review
 

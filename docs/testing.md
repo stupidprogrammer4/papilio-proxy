@@ -32,7 +32,8 @@ that have not declared them.
 
 Real database tests need `PAPILIO_TEST_DATABASE_URL` for disposable MySQL data.
 Native scheduled workflows additionally need `PAPILIO_TEST_REDIS_URL` for isolated
-Redis. Missing infrastructure may skip tests: a skip is not acceptance evidence.
+Redis and `NATS_TEST_URL` for isolated NATS JetStream. Missing infrastructure may
+skip tests: a skip is not acceptance evidence.
 Some network tests launch isolated cores or require kernel facilities; select them
 only in an environment authorized for that execution. Collection runs no tests.
 
