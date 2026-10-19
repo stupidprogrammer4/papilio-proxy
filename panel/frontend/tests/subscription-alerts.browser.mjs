@@ -87,7 +87,7 @@ try{
  assert.equal(await page.getByRole('link',{name:'Related record'}).getAttribute('href'),'/account?checkout_id=71');
  await page.getByRole('link',{name:'Related record'}).click();
  const checkoutDialog=page.getByRole('dialog',{name:'Plan checkout'});await checkoutDialog.getByRole('heading',{name:'Checkout #71'}).waitFor();
- await checkoutDialog.getByText('Cancelled',{exact:true}).waitFor();
+ await checkoutDialog.getByRole('status').getByText('Cancelled',{exact:true}).waitFor();
  assert.equal(await checkoutDialog.getByRole('button',{name:'Confirm updated offer',exact:true}).count(),0,'stale review notice overrode current cancellation');
  assert.deepEqual(errors,[]);
  console.log('Checkout recovery mode and optional notice capability gates (settings-only scope), retained failed save and current owned checkout navigation passed; controlled HTTP.');

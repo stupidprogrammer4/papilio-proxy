@@ -97,7 +97,7 @@ try{
   await dialog.getByRole('button',{name:'Confirm updated offer',exact:true}).click();
   await dialog.getByRole('button',{name:'Retry confirmation',exact:true}).waitFor();
   await dialog.getByRole('button',{name:'Refresh checkout',exact:true}).click();
-  await dialog.getByText('Ready for purchase processing',{exact:true}).waitFor();
+  await dialog.getByRole('status').getByText('Ready for purchase processing',{exact:true}).waitFor();
   const resolver=dialog.getByRole('button',{name:/Retry.*confirmation|Resolve.*confirmation/i});
   assert.equal(await resolver.count(),1,'refresh hid the only retained confirmation resolver');
   await resolver.click();assert.deepEqual(state.actions[1],state.actions[0]);
