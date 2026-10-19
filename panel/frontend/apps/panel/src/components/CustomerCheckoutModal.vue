@@ -10,6 +10,9 @@ import TopupEvidence from "./TopupEvidence.vue";
 const { t } = useI18n();
 const props=defineProps<{open:boolean;plan:Plan|null;checkoutId:number|null;preferences:AccountPreferences|null}>();
 const emit=defineEmits<{close:[];saved:[value:CheckoutIntent]}>();
+type CheckoutProgressRead=
+ |{kind:"subscription";value:Subscription|null}
+ |{kind:"delivery";value:AccountDelivery|null};
 const offer=ref<CheckoutOffer|null>(null),intent=ref<CheckoutIntent|null>(null);
 const progressSubscription=ref<Subscription|null>(null),progressDelivery=ref<AccountDelivery|null>(null);
 const busy=ref(false),error=ref(""),readState=ref<"loading"|"ready"|"error">("loading");
@@ -28,7 +31,53 @@ const deliveryProgress=computed(()=>{const status=progressDelivery.value?.status
 function fail(cause:unknown):void{error.value=cause instanceof Error?cause.message:t("checkoutModal.requestRetained");}
 function retain(row:CheckoutIntent):void{intent.value=row;emit("saved",row);}
 async function loadOffer(planId:number):Promise<CheckoutOffer>{return item<CheckoutOffer>(`/v1/customer/checkouts/offers/${planId}`);}
-async function refresh():Promise<void>{const stamp=++version;busy.value=true;error.value="";readState.value="loading";try{const id=intent.value?.id??props.checkoutId;if(id!==null){const row=await item<CheckoutIntent>(`/v1/customer/checkouts/${id}`);if(stamp!==version)return;intent.value=row;progressSubscription.value=null;progressDelivery.value=null;if(row.subscription_id!==null){const outcomes=await Promise.allSettled([item<Subscription>(`/v1/customer/subscriptions/${row.subscription_id}`),item<AccountDelivery>(`/v1/customer/subscriptions/${row.subscription_id}/delivery`)]);if(stamp!==version)return;if(outcomes[0].status==="fulfilled")progressSubscription.value=outcomes[0].value;if(outcomes[1].status==="fulfilled")progressDelivery.value=outcomes[1].value;}if(row.state==="action_required"){const current=await loadOffer(row.plan_id);if(stamp!==version)return;offer.value=current;}}else if(props.plan){const current=await loadOffer(props.plan.id);if(stamp!==version)return;offer.value=current;}if(stamp===version)readState.value="ready";}catch(cause){if(stamp===version){readState.value="error";fail(cause);}}finally{if(stamp===version)busy.value=false;}}
+async function refresh():Promise<void>{
+ const stamp=++version;busy.value=true;error.value="";readState.value="loading";
+ try{
+  const id=intent.value?.id??props.checkoutId;
+  if(id!==null){
+   const row=await item<CheckoutIntent>(`/v1/customer/checkouts/${id}`);
+   if(stamp!==version)return;
+   intent.value=row;progressSubscription.value=null;progressDelivery.value=null;
+   if(row.subscription_id!==null){
+    const subscriptionPath=`/v1/customer/subscriptions/${row.subscription_id}`;
+    const reads:Array<Promise<CheckoutProgressRead>>=[
+     item<Subscription>(subscriptionPath).then(
+      value=>({kind:"subscription",value}),
+      ()=>({kind:"subscription",value:null}),
+     ),
+     item<AccountDelivery>(`${subscriptionPath}/delivery`).then(
+      value=>({kind:"delivery",value}),
+      ()=>({kind:"delivery",value:null}),
+     ),
+    ];
+    const outcomes=await Promise.all(reads);
+    if(stamp!==version)return;
+    outcomes.forEach(outcome=>{
+     if(outcome.kind==="subscription"){
+      progressSubscription.value=outcome.value;
+      return;
+     }
+     progressDelivery.value=outcome.value;
+    });
+   }
+   if(row.state==="action_required"){
+    const current=await loadOffer(row.plan_id);
+    if(stamp!==version)return;
+    offer.value=current;
+   }
+  }else if(props.plan){
+   const current=await loadOffer(props.plan.id);
+   if(stamp!==version)return;
+   offer.value=current;
+  }
+  if(stamp===version)readState.value="ready";
+ }catch(cause){
+  if(stamp===version){readState.value="error";fail(cause);}
+ }finally{
+  if(stamp===version)busy.value=false;
+ }
+}
 async function loadDestinations():Promise<void>{const stamp=++destinationVersion;destinationState.value="loading";try{const result=await request<Page<PaymentDestination>>(`/v1/customer/payment-destinations?${query({page:page.value,q:destinationQuery.value})}`);if(stamp!==destinationVersion)return;destinations.value=result.data;pages.value=result.meta.pager?.total_pages??1;destinationState.value="ready";}catch(cause){if(stamp===destinationVersion){destinationState.value="error";fail(cause);}}}
 async function create():Promise<void>{if(!offer.value||retirementPending.value)return;const stamp=version;error.value="";retirementMessage.value="";try{if(!createAttempt.value){if(!Number.isSafeInteger(offer.value.default_expiry_seconds)||Number(offer.value.default_expiry_seconds)<=0)throw new Error(t("checkoutModal.errors.lifetimeUnavailable"));let rial:number|null=null;if(funding.value==="approved_topup"){if(!props.preferences)throw new Error(t("checkoutModal.errors.paymentSettingsUnavailable"));const normalized=asciiDigits(amount.value);if(!/^\d+(?:\.\d)?$/.test(normalized))throw new Error(t("checkoutModal.errors.enterAmount"));rial=Math.round(Number(normalized)*10);if(!Number.isSafeInteger(rial)||rial<=0)throw new Error(t("checkoutModal.errors.invalidAmount"));if(props.preferences?.checkout.destination_mode==="required"&&!destination.value)throw new Error(t("checkoutModal.errors.selectDestination"));}createAttempt.value={request_key:crypto.randomUUID(),plan_id:offer.value.plan_id,funding_mode:funding.value,expected_offer_sha256:offer.value.offer_sha256,expected_price_rial:offer.value.price_rial,auto_renew:autoRenew.value,expiry_seconds:Number(offer.value.default_expiry_seconds),changed_offer_action:changeAction.value,topup_amount_rial:rial,destination_id:funding.value==="approved_topup"&&props.preferences?.checkout.destination_mode!=="legacy"?destination.value?.destination_id??null:null};}busy.value=true;const row=await item<CheckoutIntent>("/v1/customer/checkouts","POST",createAttempt.value);if(stamp!==version)return;retain(row);createAttempt.value=null;createUncertain.value=false;}catch(cause){if(stamp!==version)return;if(createAttempt.value){if(cause instanceof ApiError&&cause.status>=400&&cause.status<500&&!createUncertain.value)createAttempt.value=null;else createUncertain.value=true;}fail(cause);}finally{if(stamp===version)busy.value=false;}}
 async function retire():Promise<void>{
