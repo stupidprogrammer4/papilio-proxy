@@ -77,8 +77,21 @@ works. Recover an existing paid attempt instead of charging for another purchase
 
 ## Manual review and SMS approval
 
-For manual approval, verify funds against the receiving account, then review the
-corresponding request. A receipt image alone does not establish settlement.
+Authorized staff can find a request in **Payments** by status and page through the
+queue. Select it and check the exact rial amount, any payment identifier and the
+captured destination instructions for that request. Use **View receipt** to open
+the private image. OCR is a clue: compare its ambiguity reasons, warnings and
+recognized fields with the image and the actual credit in the receiving account.
+Older receipts may have no OCR result; inspect the image manually when OCR fails.
+
+If needed, record observed values and a reason in operator correction history.
+This saves a new private revision; it does not change the original OCR text or
+approve payment. Before manual approval, independently verify the bank credit,
+enter the real bank transaction reference and approve the request. A bank reference
+can settle only one request; an image or OCR value alone is not proof of payment.
+
+If the request revision has changed, reload and review its current details before
+retrying. Staff permissions separately control approval and evidence corrections.
 
 To receive SMS evidence, enroll a phone for a particular destination and configure
 exact sender filters and a parser for the bank's credit format. Test a new incoming
