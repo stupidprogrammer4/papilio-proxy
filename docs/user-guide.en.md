@@ -99,6 +99,34 @@ their respective settings; they are business choices, not fixed pricing.
 In Automation, review enabled or paused state, cadence, capacity and recent
 outcomes. Queue publication is not completion: check committed business results.
 
+## Support tickets
+
+Customers can open **Support** from their account at `/account/support`, or use
+the help link on a selected payment or subscription. Enter a short subject and
+describe the issue. A ticket can refer to one payment or one subscription. Open
+the ticket later to read the conversation and reply; ticket creation, replies,
+closure and reopening depend on the saved support policy and available capacity.
+The displayed status shows whether support or the customer has the next response,
+or whether the ticket is closed.
+
+Staff with the support scope can open **Support inbox**. Search by subject, filter
+by status and use the page controls to find a ticket. Open it to review its linked
+customer/payment/subscription context, messages and status history. Staff with the
+required create scope can start a ticket from a customer, payment or subscription
+record; staff with update scope can reply or change its status. Add a reason when
+changing status. Keep payment credentials and other secrets out of ticket messages.
+
+## Back up deployment data
+
+Use the encrypted backup command in [deployment](deployment.md#encrypted-database-backup).
+Keep the recovery key in a private location separate from both the server and the
+archive, and copy the verified archive off the server. Losing the key makes the
+archive unreadable. It contains the MySQL database and private application
+configuration; it is not a full server backup and does not include Redis, NATS,
+or Caddy certificate volumes. The recovery tool requires a new empty target for
+a restore; a partial restore must also be retried against a new empty target.
+Review the deployment guide and recovery procedure before restoring data.
+
 ## Configuration editing and troubleshooting
 
 Review saved-settings JSON and full server JSON in their respective editors.
