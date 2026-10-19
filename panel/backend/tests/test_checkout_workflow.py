@@ -1073,6 +1073,7 @@ class CheckoutWorkflowTest(CheckoutWorkflowFixture):
         self.assertEqual(wallet["balance_rial"], 50000)
 
     async def test_changed_offer_owned_history_lookup_and_reconfirmation(self):
+        from src.modules.billing.destinations.domain.dtos import CheckoutPolicy
         from tests.scheduler_runtime import _exercise_native_runtime
 
         await self.enable_manual_checkout(default_expiry_seconds=7200)
@@ -1094,8 +1095,11 @@ class CheckoutWorkflowTest(CheckoutWorkflowFixture):
             "/v1/bot/checkouts/funding", headers=headers, json=identity
         )
         self.assertEqual(funding.status_code, 200, funding.text)
+        expected_funding = CheckoutPolicy.model_validate(
+            self.raw["checkout"]["policy"]
+        )
         self.assertEqual(
-            funding.json()["data"], self.raw["checkout"]["policy"]
+            funding.json()["data"], expected_funding.model_dump(mode="json")
         )
         destinations = await self.client.post(
             "/v1/bot/checkouts/destinations?per_page=1",
