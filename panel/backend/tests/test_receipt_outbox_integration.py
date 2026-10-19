@@ -2,7 +2,13 @@ import asyncio
 import base64
 import json
 import os
+import signal
+import subprocess
+import sys
+import tempfile
+import time
 from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 from unittest import IsolatedAsyncioTestCase, skipUnless
@@ -10,6 +16,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import nats
+import pymysql
 import yaml
 from aiohttp import web
 from aiohttp.test_utils import TestServer
@@ -26,6 +33,7 @@ from papilio_tasks.infra.faststream.brokers.backends.nats import NatsBroker
 from PIL import Image
 from pydantic import SecretStr
 from sqlalchemy import func, select, text, update
+from sqlalchemy.engine import make_url
 from sqlmodel import col
 
 from src.config.settings import PapilioSettings
@@ -80,6 +88,91 @@ def configured_settings() -> PapilioSettings:
     return PapilioSettings.model_validate(raw)
 
 
+def wait_for_production_events_worker(
+    environment: dict[str, str], worker: subprocess.Popen[str], log_path: Path
+) -> None:
+    deadline = time.monotonic() + 30
+    last_error = "healthcheck has not run"
+    while time.monotonic() < deadline:
+        if worker.poll() is not None:
+            raise AssertionError(
+                "Production events worker exited before readiness:\n"
+                + log_path.read_text(encoding="utf-8")
+            )
+        result = subprocess.run(
+            [sys.executable, "-m", "src.apps.events_health"],
+            env=environment,
+            capture_output=True,
+            check=False,
+            timeout=5,
+            text=True,
+        )
+        if result.returncode == 0:
+            return
+        last_error = result.stderr
+        time.sleep(0.2)
+    raise AssertionError(
+        f"Production events healthcheck timed out: {last_error}\n"
+        + log_path.read_text(encoding="utf-8")
+    )
+
+
+def wait_for_production_ocr(
+    database_url: str, receipt_id: int
+) -> tuple[str, str]:
+    database = make_url(database_url)
+    assert database.username is not None
+    assert database.password is not None
+    assert database.database is not None
+    connection = pymysql.connect(
+        host=database.host or "127.0.0.1",
+        port=database.port or 3306,
+        user=database.username,
+        password=database.password,
+        database=database.database,
+        autocommit=True,
+        cursorclass=pymysql.cursors.DictCursor,
+    )
+    deadline = time.monotonic() + 30
+    try:
+        with connection.cursor() as cursor:
+            while time.monotonic() < deadline:
+                cursor.execute(
+                    "SELECT ocr_status, encrypted_extraction "
+                    "FROM tbl_payment_receipts WHERE id=%s",
+                    (receipt_id,),
+                )
+                row = cursor.fetchone()
+                if (
+                    row
+                    and row["ocr_status"] == "complete"
+                    and row["encrypted_extraction"]
+                ):
+                    return row["ocr_status"], row["encrypted_extraction"]
+                time.sleep(0.2)
+    finally:
+        connection.close()
+    raise AssertionError(
+        "Production events worker did not persist OCR within 30 seconds"
+    )
+
+
+def stop_production_events_worker(worker: subprocess.Popen[str]) -> None:
+    if worker.poll() is not None:
+        returncode = worker.returncode
+    else:
+        os.killpg(worker.pid, signal.SIGINT)
+        try:
+            returncode = worker.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            os.killpg(worker.pid, signal.SIGKILL)
+            returncode = worker.wait(timeout=5)
+    if returncode not in (0, -signal.SIGINT, 130):
+        raise AssertionError(
+            f"Production events worker exited unexpectedly: {returncode}"
+        )
+
+
 @skipUnless(
     TEST_DATABASE_URL and REDIS_TEST_URL and NATS_TEST_URL,
     "Requires isolated MySQL, Redis, and NATS test services",
@@ -103,6 +196,217 @@ class ReceiptOutboxIntegrationTest(IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.connection.dispose()
+
+    async def test_production_events_worker_processes_ocr_event(self):
+        suffix = uuid4().hex
+        settings = configured_settings()
+        image = b"private-production-worker-receipt"
+        encrypted_payload = await asyncio.to_thread(
+            encrypt,
+            base64.b64encode(image).decode("ascii"),
+            settings.configuration_encryption_key,
+        )
+        async with self.connection.uow() as unit:
+            await unit.execute(text("SET FOREIGN_KEY_CHECKS=0"))
+            async with unit.transaction():
+                receipt = await PaymentReceiptRepository(unit).create(
+                    PaymentReceiptModel(
+                        topup_id=2_000_000_000,
+                        content_hash=suffix[:64],
+                        media_type="image/jpeg",
+                        size_bytes=len(image),
+                        encrypted_payload=encrypted_payload,
+                    )
+                )
+            await unit.execute(text("SET FOREIGN_KEY_CHECKS=1"))
+
+        calls: list[bytes] = []
+
+        async def recognize(request: web.Request) -> web.Response:
+            self.assertEqual(
+                request.headers.get("X-Goog-Api-Key"),
+                "controlled-test-api-key",
+            )
+            payload = await request.json()
+            encoded = payload["requests"][0]["image"]["content"]
+            calls.append(base64.b64decode(encoded, validate=True))
+            words = []
+            for value, break_type in (
+                ("Payment", "LINE_BREAK"),
+                ("100000", "SPACE"),
+                ("rial", "LINE_BREAK"),
+            ):
+                symbols: list[dict[str, object]] = [
+                    {"text": character} for character in value
+                ]
+                symbols[-1]["property"] = {
+                    "detectedBreak": {"type": break_type}
+                }
+                words.append({"symbols": symbols, "confidence": 0.99})
+            return web.json_response(
+                {
+                    "responses": [
+                        {
+                            "fullTextAnnotation": {
+                                "pages": [
+                                    {
+                                        "blocks": [
+                                            {"paragraphs": [{"words": words}]}
+                                        ]
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            )
+
+        application = web.Application()
+        application.router.add_post("/v1/images:annotate", recognize)
+        server = TestServer(application)
+        durable = "receipt-ocr-v1"
+        worker = None
+        publisher_app = None
+        client = None
+        try:
+            await server.start_server()
+            endpoint = str(server.make_url("/v1/images:annotate"))
+            with tempfile.TemporaryDirectory(
+                prefix="papilio-receipt-production-worker-"
+            ) as temporary:
+                directory = Path(temporary)
+                directory.chmod(0o700)
+                raw = yaml.safe_load(
+                    Path("config.yml.sample").read_text(encoding="utf-8")
+                )
+                raw["db"]["dsn"] = TEST_DATABASE_URL
+                raw["db"]["test_dsn"] = TEST_DATABASE_URL
+                raw["redis"]["url"] = REDIS_TEST_URL
+                raw["tasks"]["scheduler"]["url"] = REDIS_TEST_URL
+                raw["tasks"]["scheduler"]["queue_name"] = (
+                    "papilio:test:receipt-production-worker:jobs"
+                )
+                raw["tasks"]["scheduler"]["schedule_prefix"] = (
+                    "papilio:test:receipt-production-worker:schedules"
+                )
+                raw["tasks"]["scheduler"]["result_prefix"] = (
+                    "papilio:test:receipt-production-worker:results"
+                )
+                raw["rate_limit"]["enabled"] = False
+                raw["events"]["nats_url"] = NATS_TEST_URL
+                raw["receipts"]["ocr_api_key"] = "controlled-test-api-key"
+                config_path = directory / "config.yml"
+                config_path.write_text(
+                    yaml.safe_dump(raw, allow_unicode=True), encoding="utf-8"
+                )
+                config_path.chmod(0o600)
+                (directory / "sitecustomize.py").write_text(
+                    "from src.modules.billing.receipts.infra import "
+                    "google_vision\n"
+                    "import os\n"
+                    "google_vision._ENDPOINT = "
+                    "os.environ['PAPILIO_TEST_OCR_ENDPOINT']\n",
+                    encoding="utf-8",
+                )
+                environment = {
+                    **os.environ,
+                    "PAPILIO_CONFIG": str(config_path),
+                    "PAPILIO_TEST_OCR_ENDPOINT": endpoint,
+                    "PYTHONPATH": os.pathsep.join(
+                        [
+                            str(directory),
+                            os.environ.get("PYTHONPATH", ""),
+                        ]
+                    ),
+                }
+                worker_log = directory / "events-worker.log"
+                with worker_log.open("w", encoding="utf-8") as output:
+                    worker = subprocess.Popen(
+                        [
+                            sys.executable,
+                            "-m",
+                            "papilio_tasks",
+                            "events",
+                            "run",
+                            "src.apps.events:app",
+                            "--log-level",
+                            "info",
+                        ],
+                        env=environment,
+                        stdout=output,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        start_new_session=True,
+                    )
+                await asyncio.to_thread(
+                    wait_for_production_events_worker,
+                    environment,
+                    worker,
+                    worker_log,
+                )
+
+                broker = NatsBroker(NativeNatsBroker(str(NATS_TEST_URL)))
+                registrar = JetRegistrar(broker)
+                registrar.publisher(ReceiptOcrRequested)
+                publisher_app = events_app(registrar=registrar)
+                await publisher_app.start()
+                client = await nats.connect(str(NATS_TEST_URL))
+                await ReceiptOcrRequested.publish(
+                    ReceiptOcrRequest(receipt_id=receipt.id)
+                )
+                status, ciphertext = await asyncio.to_thread(
+                    wait_for_production_ocr,
+                    str(TEST_DATABASE_URL),
+                    receipt.id,
+                )
+                assert worker is not None
+                self.assertIsNone(worker.poll())
+                extraction = ReceiptExtractionFields.model_validate_json(
+                    decrypt(
+                        ciphertext,
+                        settings.configuration_encryption_key,
+                    )
+                )
+                consumer = await client.jetstream().consumer_info(
+                    "receipt-ocr", durable
+                )
+                self.assertEqual(status, "complete")
+                self.assertEqual(extraction.amount_rial, 100_000)
+                self.assertEqual(extraction.currency, "rial")
+                self.assertEqual(calls, [image])
+                self.assertEqual(consumer.num_ack_pending, 0)
+        finally:
+            if worker is not None:
+                await asyncio.to_thread(stop_production_events_worker, worker)
+            if publisher_app is not None:
+                await publisher_app.stop()
+            if client is not None:
+                try:
+                    await client.jetstream().delete_consumer(
+                        ReceiptOcrRequested.stream.name, durable
+                    )
+                except NotFoundError:
+                    pass
+                await client.jetstream().purge_stream(
+                    ReceiptOcrRequested.stream.name
+                )
+                await client.close()
+            await server.close()
+            async with self.connection.uow() as unit:
+                await unit.execute(text("SET FOREIGN_KEY_CHECKS=0"))
+                async with unit.transaction():
+                    await unit.execute(
+                        text(
+                            "DELETE FROM tbl_receipt_ocr_outboxes "
+                            "WHERE receipt_id=:id"
+                        ),
+                        {"id": receipt.id},
+                    )
+                    await unit.execute(
+                        text("DELETE FROM tbl_payment_receipts WHERE id=:id"),
+                        {"id": receipt.id},
+                    )
+                await unit.execute(text("SET FOREIGN_KEY_CHECKS=1"))
 
     async def test_committed_outbox_claim_recovers_and_publishes_once(self):
         suffix = uuid4().hex
