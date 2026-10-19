@@ -1869,6 +1869,8 @@
   },
   "customerPortal": {
     "allowedAmount": "Allowed amount",
+    "amountPrecisionError": "Enter the amount in toman with at most one decimal place.",
+    "amountInvalidError": "Enter a valid amount.",
     "paymentExactAmount": "Create the request before transferring. Follow its saved exact RIAL amount, including any identifier digits.",
     "chooseDestination": "Choose a payment destination",
     "selected": "Selected",

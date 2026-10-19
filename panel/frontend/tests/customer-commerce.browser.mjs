@@ -5,6 +5,7 @@ const {chromium}=await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE).href)
 const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_EXECUTABLE});
 const page=await browser.newPage(),errors=[],writes=[];
 let quoteFailed=true,purchaseFailed=true,renewalFailed=true,renewalOther=false;
+const topupWrites=[];
 const quota=1024**3;
 const tier={id:1,code:'silver',title:'Silver',minimum_bytes:200*quota,discount_bps:500,is_enabled:true,revision:1};
 const plan={id:42,title:'Selected volume plan',code:'volume',price_rial:111,quota_bytes:5*quota,duration_days:null,is_active:true};
@@ -16,6 +17,7 @@ await page.route(url=>url.pathname.startsWith('/api/'),route=>{
  const request=route.request(),path=new URL(request.url()).pathname.slice(4);
  if(path==='/v1/customer/auth/me')return respond(route,{customer_id:31,display_name:'Customer',csrf_token:'controlled'});
  if(path==='/v1/customer/wallet')return respond(route,{data:{balance_rial:10000}});
+ if(path==='/v1/customer/topups'&&request.method()==='POST'){topupWrites.push(request.postDataJSON());return respond(route,{data:{id:501,customer_id:31,amount_rial:10,status:'pending'}});}
  if(path==='/v1/customer/preferences')return respond(route,{data:{brand_title:'Papilio',topup_options_rial:[],checkout:{destination_mode:'legacy',minimum_topup_rial:1,maximum_topup_rial:10000},receipts:{enabled:false}}});
  if(path==='/v1/customer/loyalty')return respond(route,{data:{customer_id:31,purchased_bytes:250*quota,purchase_count:4,lifetime_purchase_count:5,tier,next_tier:{...tier,id:2,title:'Gold',minimum_bytes:700*quota}}});
  if(path==='/v1/customer/plans')return respond(route,paged([plan]));
@@ -44,7 +46,10 @@ try{
  await page.getByRole('heading',{name:'درخواست شارژ کیف پول',exact:true}).waitFor();
  await page.getByRole('heading',{name:'پرداخت‌های من',exact:true}).waitFor();
  await page.getByRole('button',{name:'ایجاد درخواست شارژ',exact:true}).waitFor();
- await page.getByLabel('مبلغ شارژ').waitFor();
+ await page.getByLabel('مبلغ شارژ').fill('0');
+ await page.getByRole('button',{name:'ایجاد درخواست شارژ',exact:true}).click();
+ await page.getByRole('alert').getByText('مبلغ معتبر وارد کنید.',{exact:true}).waitFor();
+ assert.equal(topupWrites.length,0,'Invalid amount reached the payment API');
  await page.getByRole('button',{name:'خرید سرویس',exact:true}).click();
  await page.getByRole('heading',{name:'خرید با کیف پول',exact:true}).waitFor();
  await page.getByRole('heading',{name:'سرویس آزمایشی',exact:true}).waitFor();
@@ -83,7 +88,7 @@ try{
  await page.getByRole('button',{name:'خرید سرویس',exact:true}).click();
  const persianLoyalty=page.getByRole('region',{name:'وفاداری مشتری'});
  await persianLoyalty.getByRole('heading',{name:'سطح و پیشرفت خرید من',exact:true}).waitFor();
- assert.deepEqual(writes[0],writes[1]);assert.equal(writes[1].plan_id,42);assert.equal(writes[1].auto_renew,true);
+ assert.deepEqual(writes[0],writes[1]);assert.equal(writes[1].plan_id,42);assert.equal(writes[1].auto_renew,true);assert.equal(topupWrites.length,0);
  await page.getByTestId('locale-selector').selectOption('en');
  await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'Service purchase',exact:true}).click();await loyalty.getByRole('heading',{name:'Silver',exact:true}).waitFor();
  assert(await loyalty.evaluate(el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth;}));assert.deepEqual(errors,[]);

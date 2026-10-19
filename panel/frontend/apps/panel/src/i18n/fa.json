@@ -1869,6 +1869,8 @@
   },
   "customerPortal": {
     "allowedAmount": "مبلغ مجاز",
+    "amountPrecisionError": "مبلغ را به تومان با حداکثر یک رقم اعشار وارد کنید.",
+    "amountInvalidError": "مبلغ معتبر وارد کنید.",
     "paymentExactAmount": "پیش از واریز درخواست را بسازید و مبلغ دقیق ریالی ثبت‌شده، شامل رقم‌های شناسه را واریز کنید.",
     "chooseDestination": "انتخاب مقصد پرداخت",
     "selected": "انتخاب‌شده",
