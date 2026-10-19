@@ -228,6 +228,97 @@ class SmsDevicesWorkflowTest(StaffAdministrationWorkflowTest):
         )
         self.assertNotIn(rotated["api_key"], ciphertext)
 
+    async def test_signed_device_status_and_stale_state(self):
+        enrollment = await self.post(
+            "/v1/admin/payments/sms-devices", self.device_data()
+        )
+        device = enrollment["device"]
+        device_id = device["id"]
+        initial = await self.get(f"/v1/admin/payments/sms-devices/{device_id}")
+        self.assertEqual(initial["data"]["connection_state"], "unknown")
+        self.assertIsNone(initial["data"]["status_received_at"])
+
+        payload = {
+            "pending_event_count": 3,
+            "permission_granted": False,
+            "delivery_state": "paused",
+            "last_acknowledged_event_id": "a" * 64,
+            "last_error_code": "api_rejected",
+        }
+        raw = json.dumps(payload).encode()
+        timestamp = str(int(time.time()))
+        signature = hmac.new(
+            enrollment["api_key"].encode(),
+            f"{device_id}.{timestamp}.".encode() + raw,
+            hashlib.sha256,
+        ).hexdigest()
+        reported = await self.client.post(
+            f"/v1/webhooks/sms-devices/{device_id}/status",
+            content=raw,
+            headers={
+                "Content-Type": "application/json",
+                "X-Papilio-Timestamp": timestamp,
+                "X-Papilio-Signature": signature,
+            },
+        )
+        self.assertEqual(reported.status_code, 200)
+        current = await self.get(f"/v1/admin/payments/sms-devices/{device_id}")
+        current_device = current["data"]
+        self.assertEqual(current_device["connection_state"], "recent")
+        self.assertTrue(current_device["permission_granted"] is False)
+        self.assertEqual(current_device["pending_event_count"], 3)
+        self.assertEqual(current_device["delivery_state"], "paused")
+        self.assertEqual(
+            current_device["last_acknowledged_event_id"], "a" * 64
+        )
+        self.assertEqual(current_device["last_error_code"], "api_rejected")
+
+        rejected = await self.client.post(
+            f"/v1/webhooks/sms-devices/{device_id}/status",
+            content=raw,
+            headers={
+                "Content-Type": "application/json",
+                "X-Papilio-Timestamp": timestamp,
+                "X-Papilio-Signature": "0" * 64,
+            },
+        )
+        self.assertEqual(rejected.status_code, 401)
+        async with self.connection.uow() as fresh:
+            await fresh.execute(
+                text(
+                    "UPDATE tbl_sms_devices SET status_received_at=:old "
+                    "WHERE id=:id"
+                ),
+                {
+                    "old": datetime.now(UTC).replace(tzinfo=None)
+                    - timedelta(hours=2),
+                    "id": device_id,
+                },
+            )
+            await fresh.commit()
+        stale = await self.get(f"/v1/admin/payments/sms-devices/{device_id}")
+        self.assertEqual(stale["data"]["connection_state"], "stale")
+        disabled = await self.client.put(
+            f"/v1/admin/payments/sms-devices/{device_id}",
+            headers=self.headers,
+            json={
+                **self.device_data(),
+                "is_active": False,
+                "expected_revision": device["revision"],
+            },
+        )
+        self.assertEqual(disabled.status_code, 200)
+        revoked = await self.client.post(
+            f"/v1/webhooks/sms-devices/{device_id}/status",
+            content=raw,
+            headers={
+                "Content-Type": "application/json",
+                "X-Papilio-Timestamp": timestamp,
+                "X-Papilio-Signature": signature,
+            },
+        )
+        self.assertEqual(revoked.status_code, 401)
+
     async def test_native_sender_signature_clock_expiry_and_scopes(self):
         data = self.device_data()
         enrollment = await self.post("/v1/admin/payments/sms-devices", data)

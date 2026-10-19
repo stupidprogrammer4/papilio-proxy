@@ -450,6 +450,7 @@ class SmsDeviceSettings(BaseModel):
     enabled: bool
     max_senders_per_device: int = Field(gt=0)
     max_key_validity_days: int = Field(gt=0)
+    status_stale_after_seconds: int = Field(default=3600, gt=0)
 
 
 class LoyaltySettings(BaseModel):

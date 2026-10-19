@@ -33,9 +33,10 @@ public final class BankSmsReceiver extends BroadcastReceiver {
                         .put("original_sender", sender);
                 JSONObject payload = new JSONObject().put("event_id", event.toString()).put("sender", sender).put("message", body.toString()).put("sent_at", Instant.ofEpochMilli(sentAt).toString()).put("origin", origin);
                 try (SmsOutbox outbox = new SmsOutbox(context)) { outbox.enqueue(payload, settings.queueCapacity); }
-                UploadJob.schedule(context, settings);
+                UploadJob.scheduleUpload(context, settings);
                 BridgeSettings.preferences(context).edit().putString("status", "Bank SMS queued").apply();
-            } catch (Exception error) { BridgeSettings.preferences(context).edit().putString("status", "Could not queue SMS; inspect settings and storage").apply(); }
+            } catch (SmsOutbox.CapacityException error) { BridgeSettings.preferences(context).edit().putString("delivery_state", "queue_full").putString("last_error_code", "queue_capacity").putString("status", "Local queue is full; inspect the connection").apply(); }
+            catch (Exception error) { BridgeSettings.preferences(context).edit().putString("delivery_state", "storage_error").putString("last_error_code", "local_storage").putString("status", "Could not queue SMS; inspect settings and storage").apply(); }
             finally { pending.finish(); }
         }, "papilio-sms-receive").start();
     }

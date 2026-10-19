@@ -5,6 +5,7 @@ from src.config.pagination import ServicePage
 from src.modules.billing.sms.domain.dtos import SmsReceived
 from src.modules.billing.sms_devices.domain.dtos import (
     SmsDeviceSearch,
+    SmsDeviceStatusReport,
     SmsDeviceWrite,
 )
 from src.modules.billing.sms_devices.domain.results import (
@@ -34,6 +35,14 @@ class ISmsDeviceService(Protocol):
         signature: str,
         raw: bytes,
         sms: SmsReceived,
+    ) -> Awaitable[None]: ...
+    def report_status(
+        self,
+        id: int,
+        timestamp: str,
+        signature: str,
+        raw: bytes,
+        data: SmsDeviceStatusReport,
     ) -> Awaitable[None]: ...
 
 

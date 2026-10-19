@@ -30,6 +30,9 @@ public final class MainActivity extends Activity {
         storage.execute(() -> {
             try {
                 JSONObject enrollment = BridgeSettings.editable(this);
+                if (enrollment.has("device_id") && enrollment.has("api_key")) {
+                    UploadJob.schedule(this, new BridgeSettings(enrollment));
+                }
                 String configuredOrigin = BridgeSettings.defaults(this).optString("origin");
                 runOnUiThread(() -> {
                     if (!destroyed) {
@@ -133,7 +136,16 @@ public final class MainActivity extends Activity {
     }
     @Override public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(code, permissions, results);
-        if (code == 1 && current != null) showStatus();
+        if (code == 1 && current != null) {
+            storage.execute(() -> {
+                try {
+                    UploadJob.schedule(this, BridgeSettings.load(this));
+                    refreshStatus();
+                } catch (Exception error) {
+                    display("Save a valid enrollment before reporting device status.");
+                }
+            });
+        }
     }
     @Override public void onResume() {
         super.onResume();

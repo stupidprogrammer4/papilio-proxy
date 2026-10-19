@@ -5,6 +5,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from src.modules.billing.sms.domain.dtos import SmsReceived
 from src.modules.billing.sms.interfaces import ISmsService
+from src.modules.billing.sms_devices.domain.dtos import SmsDeviceStatusReport
 from src.modules.billing.sms_devices.interfaces import (
     ISmsDeviceService,
     ISmsSettlementCommand,
@@ -47,4 +48,26 @@ async def receive(
     topup_id = await settlement.approved_topup_for_event(data.event_id, id)
     if topup_id is not None:
         await publisher.publish(topup_id)
+    return {"accepted": True}
+
+
+@router.post("/{id:int}/status")
+async def report_status(
+    id: int,
+    request: Request,
+    devices: FromDishka[ISmsDeviceService],
+) -> dict[str, bool]:
+    """Store a signed, bounded device delivery and permission snapshot."""
+    raw = await request.body()
+    try:
+        data = TypeAdapter(SmsDeviceStatusReport).validate_json(raw)
+    except ValidationError as exc:
+        raise RequestValidationError(exc.errors(include_input=False)) from None
+    await devices.report_status(
+        id,
+        request.headers.get("X-Papilio-Timestamp", ""),
+        request.headers.get("X-Papilio-Signature", ""),
+        raw,
+        data,
+    )
     return {"accepted": True}

@@ -29,3 +29,9 @@ class SmsDeviceModel(PersistenceEntity):
     settlement_identity_mode: str = CharField(
         32, default="bank_reference_required"
     )
+    status_received_at: datetime | None = TimestampField(default=None)
+    pending_event_count: int | None = IntField(default=None)
+    permission_granted: bool | None = BoolField(default=None)
+    delivery_state: str | None = CharField(32, default=None)
+    last_acknowledged_event_id: str | None = CharField(128, default=None)
+    last_error_code: str | None = CharField(32, default=None)

@@ -249,7 +249,7 @@ export function setCsrf(value: string): void { csrf = value }
 export interface RequestOptions { signal?: AbortSignal }
 
 export type SmsApprovalMode = "manual" | "unique_sms";
-export interface SmsDevice { id: number; label: string; senders: string[]; is_active: boolean; revision: number; expires_at: string; approval_mode: string; destination_id: number | null; parser_profile_id?:number|null; settlement_identity_mode?:import("./smsOrigins").SmsIdentityMode }
+export interface SmsDevice { id: number; label: string; senders: string[]; is_active: boolean; revision: number; expires_at: string; approval_mode: string; destination_id: number | null; parser_profile_id?:number|null; settlement_identity_mode?:import("./smsOrigins").SmsIdentityMode; connection_state:"unknown"|"recent"|"stale"|"disabled"|"expired"; status_received_at:string|null; pending_event_count:number|null; permission_granted:boolean|null; delivery_state:string|null; last_acknowledged_event_id:string|null; last_error_code:string|null }
 export interface SmsDeviceWrite { label: string; senders: string[]; is_active: boolean; expires_at: string; approval_mode: SmsApprovalMode; destination_id: number | null; expected_revision?: number; parser_profile_id?:number|null; settlement_identity_mode?:import("./smsOrigins").SmsIdentityMode }
 export interface SmsDeviceEnrollment { device: SmsDevice; api_key: string }
 

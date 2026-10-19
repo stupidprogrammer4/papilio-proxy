@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from typing import Literal
 
@@ -52,3 +53,33 @@ class SmsDeviceSearch(BaseQuery):
 
 class SmsDeviceRevision(BaseDTO):
     expected_revision: int = Field(gt=0)
+
+
+class SmsDeviceStatusReport(BaseDTO):
+    pending_event_count: int | None = Field(default=None, ge=0, le=10000)
+    permission_granted: bool
+    delivery_state: Literal[
+        "ready", "paused", "retrying", "storage_error", "queue_full"
+    ]
+    last_acknowledged_event_id: str | None = Field(
+        default=None, min_length=8, max_length=128
+    )
+    last_error_code: (
+        Literal[
+            "api_rejected",
+            "network_unavailable",
+            "api_unavailable",
+            "local_storage",
+            "queue_capacity",
+            "settings_invalid",
+            "job_schedule_failed",
+        ]
+        | None
+    ) = None
+
+    @field_validator("last_acknowledged_event_id")
+    @classmethod
+    def safe_event_id(cls, value: str | None) -> str | None:
+        if value is not None and not re.fullmatch(r"[A-Za-z0-9_-]+", value):
+            raise ValueError("Acknowledged event ID has an invalid format")
+        return value

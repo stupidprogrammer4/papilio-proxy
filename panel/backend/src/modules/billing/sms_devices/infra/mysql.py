@@ -29,6 +29,13 @@ class SmsDeviceRepository(MySQLPersistenceRepository[SmsDeviceModel]):
         await self.uow.refresh(row)
         return row
 
+    async def report_status(
+        self, row: SmsDeviceModel, data: SmsDeviceModel
+    ) -> SmsDeviceModel:
+        await self.update_row_by_id(row.id, data)
+        await self.uow.refresh(row)
+        return row
+
     async def page(
         self, offset: int, limit: int, q: str | None
     ) -> PagedType[SmsDeviceModel]:

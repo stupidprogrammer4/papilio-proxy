@@ -11,7 +11,7 @@ import java.util.List;
 final class BridgeSettings {
     final String origin, apiKey; final long deviceId;
     final List<String> senders, creditKeywords;
-    final int connectTimeout, readTimeout, retrySeconds, batchSize, queueCapacity, responseLimit, responseChunk;
+    final int connectTimeout, readTimeout, retrySeconds, batchSize, queueCapacity, responseLimit, responseChunk, statusIntervalMinutes;
     BridgeSettings(JSONObject source) throws Exception {
         origin = source.getString("origin"); deviceId = source.getLong("device_id"); apiKey = source.getString("api_key");
         URI uri = URI.create(origin);
@@ -19,8 +19,8 @@ final class BridgeSettings {
         if (uri.getHost().equalsIgnoreCase("example") || uri.getHost().toLowerCase(java.util.Locale.ROOT).endsWith(".example")) throw new IllegalArgumentException("Replace the sample API address with your deployed HTTPS address");
         if (deviceId <= 0 || apiKey.length() < 32) throw new IllegalArgumentException("Device ID and enrollment API key are required");
         senders = strings(source.getJSONArray("senders")); creditKeywords = strings(source.getJSONArray("credit_keywords"));
-        connectTimeout = source.getInt("connect_timeout_ms"); readTimeout = source.getInt("read_timeout_ms"); retrySeconds = source.getInt("retry_seconds"); batchSize = source.getInt("batch_size"); queueCapacity = source.getInt("queue_capacity"); responseLimit = source.getInt("response_limit_bytes"); responseChunk = source.getInt("response_chunk_bytes");
-        if (senders.isEmpty() || creditKeywords.isEmpty() || connectTimeout <= 0 || readTimeout <= 0 || retrySeconds <= 0 || batchSize <= 0 || queueCapacity <= 0 || responseLimit <= 0 || responseChunk <= 0) throw new IllegalArgumentException("Sender, credit filters and positive delivery capacities are required");
+        connectTimeout = source.getInt("connect_timeout_ms"); readTimeout = source.getInt("read_timeout_ms"); retrySeconds = source.getInt("retry_seconds"); batchSize = source.getInt("batch_size"); queueCapacity = source.getInt("queue_capacity"); responseLimit = source.getInt("response_limit_bytes"); responseChunk = source.getInt("response_chunk_bytes"); statusIntervalMinutes = source.optInt("status_interval_minutes", 15);
+        if (senders.isEmpty() || creditKeywords.isEmpty() || connectTimeout <= 0 || readTimeout <= 0 || retrySeconds <= 0 || batchSize <= 0 || queueCapacity <= 0 || queueCapacity > 10000 || responseLimit <= 0 || responseChunk <= 0 || statusIntervalMinutes < 15 || statusIntervalMinutes > 1440) throw new IllegalArgumentException("Sender, credit filters and bounded delivery capacities are required");
     }
     static List<String> strings(JSONArray values) throws Exception {
         java.util.ArrayList<String> result = new java.util.ArrayList<>();

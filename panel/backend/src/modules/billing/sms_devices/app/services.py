@@ -19,6 +19,7 @@ from src.modules.billing.destinations.interfaces import (
 from src.modules.billing.sms.domain.dtos import SmsReceived
 from src.modules.billing.sms_devices.domain.dtos import (
     SmsDeviceSearch,
+    SmsDeviceStatusReport,
     SmsDeviceWrite,
 )
 from src.modules.billing.sms_devices.domain.models import SmsDeviceModel
@@ -49,8 +50,24 @@ class SmsDeviceService:
         self.destinations = destinations
         self.profiles, self.aliases, self.realms = profiles, aliases, realms
 
-    @staticmethod
-    def read(row: SmsDeviceModel) -> SmsDeviceRead:
+    def read(self, row: SmsDeviceModel) -> SmsDeviceRead:
+        now = datetime.now(UTC).replace(tzinfo=None)
+        status_policy = self.settings.sms_devices
+        stale_after = (
+            status_policy.status_stale_after_seconds
+            if status_policy is not None
+            else 3600
+        )
+        connection_state = "unknown"
+        if not row.is_active:
+            connection_state = "disabled"
+        elif row.expires_at <= now:
+            connection_state = "expired"
+        elif row.status_received_at is not None:
+            age = now - row.status_received_at
+            connection_state = (
+                "stale" if age.total_seconds() > stale_after else "recent"
+            )
         return SmsDeviceRead(
             parser_profile_id=row.parser_profile_id,
             settlement_identity_mode=row.settlement_identity_mode,
@@ -62,6 +79,17 @@ class SmsDeviceService:
             is_active=row.is_active,
             revision=row.revision,
             expires_at=row.expires_at.replace(tzinfo=UTC),
+            connection_state=connection_state,
+            status_received_at=(
+                row.status_received_at.replace(tzinfo=UTC)
+                if row.status_received_at is not None
+                else None
+            ),
+            pending_event_count=row.pending_event_count,
+            permission_granted=row.permission_granted,
+            delivery_state=row.delivery_state,
+            last_acknowledged_event_id=row.last_acknowledged_event_id,
+            last_error_code=row.last_error_code,
         )
 
     async def get(self, id: int) -> SmsDeviceRead:
@@ -274,10 +302,47 @@ class SmsDeviceService:
         raw: bytes,
         sms: SmsReceived,
     ) -> None:
+        row = await self.validate_signed_device(
+            await self.repo.get_by_id(id), id, timestamp, signature, raw
+        )
+        if sms.sender not in json.loads(row.senders_json):
+            raise HTTPException(403, "Sender is not enrolled for this device")
+
+    @transactional
+    async def report_status(
+        self,
+        id: int,
+        timestamp: str,
+        signature: str,
+        raw: bytes,
+        data: SmsDeviceStatusReport,
+    ) -> None:
+        row = await self.validate_signed_device(
+            await self.repo.locked(id), id, timestamp, signature, raw
+        )
+        await self.repo.report_status(
+            row,
+            SmsDeviceModel.patch(
+                status_received_at=datetime.now(UTC).replace(tzinfo=None),
+                pending_event_count=data.pending_event_count,
+                permission_granted=data.permission_granted,
+                delivery_state=data.delivery_state,
+                last_acknowledged_event_id=data.last_acknowledged_event_id,
+                last_error_code=data.last_error_code,
+            ),
+        )
+
+    async def validate_signed_device(
+        self,
+        row: SmsDeviceModel | None,
+        id: int,
+        timestamp: str,
+        signature: str,
+        raw: bytes,
+    ) -> SmsDeviceModel:
         policy = self.settings.sms_devices
         if policy is None or not policy.enabled:
             raise HTTPException(401, "Device intake is disabled")
-        row = await self.repo.get_by_id(id)
         now = datetime.now(UTC).replace(tzinfo=None)
         valid_time = (
             timestamp.isascii()
@@ -307,5 +372,4 @@ class SmsDeviceService:
             mac.hexdigest(), signature
         ):
             raise HTTPException(401, "Invalid device authentication")
-        if sms.sender not in json.loads(row.senders_json):
-            raise HTTPException(403, "Sender is not enrolled for this device")
+        return row

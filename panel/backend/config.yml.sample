@@ -397,6 +397,7 @@ sms_devices:
   enabled: true
   max_senders_per_device: 32
   max_key_validity_days: 365
+  status_stale_after_seconds: 3600
 
 # Enable management to enroll actual receiving-account and SMS metadata.
 sms_origins:

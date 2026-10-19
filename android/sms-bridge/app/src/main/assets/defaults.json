@@ -8,5 +8,6 @@
   "queue_capacity": 500,
   "credit_keywords": ["واریز", "دریافت", "بستانکار", "انتقال:"],
   "response_limit_bytes": 4096,
-  "response_chunk_bytes": 8192
+  "response_chunk_bytes": 8192,
+  "status_interval_minutes": 15
 }

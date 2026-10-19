@@ -71,9 +71,27 @@ It makes only health requests and does not create or approve payments. USB
 forwarding requires the phone to remain connected and may need reinstalling
 after a reboot or disconnect.
 
+## Device status reporting
+
+The app sends a signed status snapshot over the same HTTPS origin every time it
+processes an upload job, then schedules a separate periodic status job. Its
+interval is configurable from 15 minutes to 24 hours in the delivery settings
+(default 15 minutes), matching Android's 15-minute minimum. The snapshot includes
+the local encrypted queue depth, `RECEIVE_SMS` permission state, delivery state
+and most recently acknowledged event ID. The panel records server receipt time
+and labels reports as unknown, recent or stale; the default stale threshold is
+one hour.
+
+Android may delay periodic jobs because of battery, connectivity or system policy.
+A recent report proves that the app contacted the API and reported its own local
+state. It does not prove that every bank SMS reached the phone, that a message was
+authentic at the bank, or that a payment was settled. A missing report stays
+unknown/stale instead of being shown as healthy.
+
 ## Interface
 
-Version 0.3.0 adds an original vector butterfly mark, an adaptive launcher icon,
+Version 0.4.0 adds signed device-status reports and delivery visibility to the
+operator panel. Version 0.3.0 added an original vector butterfly mark, an adaptive launcher icon,
 a gradient status card and explicit API defaults. It uses a native card layout with queue and SMS-permission status,
 separate connection and bank-filter sections, collapsible delivery settings and
 a persistent save action. Failed saves retain the form; drafts survive rotation
