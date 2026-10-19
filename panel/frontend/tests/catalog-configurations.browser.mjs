@@ -7,6 +7,8 @@ const {chromium}=await import(pathToFileURL(modulePath).href);
 const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_EXECUTABLE});
 const page=await browser.newPage(),errors=[],planWrites=[];
 let scopes=['*'],configAttempts=0,planAttempts=0,healthChecks=0;
+let serverJsonRevision=1,serverJsonDocument=null,serverJsonWrites=0,serverJsonRestores=0;
+const serverJsonHistory=[];
 const list=data=>({data,meta:{pager:{total_items:data.length,total_pages:1}}});
 const respond=(route,data,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(data)});
 const node={id:31,code:'fixture-node',label:'Fixture node',public_host:'fixture.invalid',public_port:443,protocol:'vless_reality',is_enabled:true};
@@ -17,6 +19,19 @@ page.on('pageerror',error=>errors.push(error.message));
 await page.route(url=>url.pathname.startsWith('/api/'),route=>{
  const req=route.request(),path=new URL(req.url()).pathname.slice(4),method=req.method();
  if(path==='/v1/admin/auth/me')return respond(route,{username:'browser-fixture',scopes,csrf_token:'controlled-browser-token'});
+ if(path==='/v1/admin/network/configurations/91/server-json'&&method==='GET')return respond(route,{data:{configuration_id:91,revision:serverJsonRevision,core_kind:'xray',supported:true,capacity:{enabled:true,max_document_bytes:65536,max_depth:32},document:serverJsonDocument}});
+ if(path==='/v1/admin/network/configurations/91/server-json/history'&&method==='GET')return respond(route,list(serverJsonHistory));
+ if(path==='/v1/admin/network/configurations/91/server-json'&&method==='PUT'){
+  const body=req.postDataJSON();assert.equal(body.expected_revision,serverJsonRevision);assert.equal(body.reason,'Browser configuration acceptance');assert.equal(body.document.mode,'managed');
+  serverJsonHistory.unshift({id:55,revision:serverJsonRevision,staff_id:2,reason:body.reason,created_at:'2026-01-01T00:00:00Z',document:serverJsonDocument});serverJsonDocument=body.document;serverJsonRevision++;serverJsonWrites++;
+  return respond(route,{data:{...config,revision:serverJsonRevision}});
+ }
+ if(path==='/v1/admin/network/configurations/91/server-json/history/55/restore'&&method==='POST'){
+  const body=req.postDataJSON();assert.equal(body.expected_revision,serverJsonRevision);assert.equal(body.reason,'Restore the automatic configuration');
+  serverJsonHistory.unshift({id:56,revision:serverJsonRevision,staff_id:2,reason:body.reason,created_at:'2026-01-02T00:00:00Z',document:serverJsonDocument});serverJsonDocument=null;serverJsonRevision++;serverJsonRestores++;
+  return respond(route,{data:{...config,revision:serverJsonRevision}});
+ }
+ if(path==='/v1/admin/network/configurations/91/server-download'&&method==='POST')return respond(route,{data:{filename:'config.json',media_type:'application/json',content:'{"inbounds":[{"tag":"generated-client"}],"dns":{"servers":["9.9.9.9"]}}'}});
  if(path==='/v1/admin/network/configurations'&&method==='POST'){
   const body=req.postDataJSON();assert.equal(body.core_id,41);assert.equal(body.node_id,31);assert.equal(body.options.protocol,'vless_reality');assert.equal(body.label,'Retained configuration');
   if(++configAttempts===1)return respond(route,{error:{message_code:'request_failed'}},409);
@@ -26,7 +41,7 @@ await page.route(url=>url.pathname.startsWith('/api/'),route=>{
  if(path==='/v1/admin/network/health')return respond(route,list([{node_id:31,code:node.code,label:node.label,protocol:node.protocol,is_enabled:true,status:'stale',sample_count:2,successful_count:1,average_latency_ms:30,last_sample_at:'2026-01-01T00:00:00Z',checked_at:'2026-01-01T00:00:00Z'}]));
  if(path==='/v1/admin/network/quality')return respond(route,{data:[{node_id:31,code:node.code,label:node.label,protocol:node.protocol,client_network:'Fixture mobile',sample_count:1,successful_count:1,average_latency_ms:30,score:null}]});
  if(path==='/v1/admin/network/configurations'&&method==='GET')return respond(route,list(new URL(req.url()).searchParams.get('node_id')==='31'?[config]:[]));
- if(path==='/v1/admin/network/configurations/91')return respond(route,{data:config});
+ if(path==='/v1/admin/network/configurations/91')return respond(route,{data:{...config,revision:serverJsonRevision}});
  if(path==='/v1/admin/network/configurations/92')return respond(route,{data:{...config,id:92,label:'Retained configuration'}});
  if(path==='/v1/admin/network/nodes/31')return respond(route,{data:node});
  if(path==='/v1/admin/network/nodes/32')return respond(route,{data:{...node,id:32,label:'Other fixture node'}});
@@ -45,6 +60,13 @@ await page.route(url=>url.pathname.startsWith('/api/'),route=>{
 try{
  await page.goto(origin+'/configurations?configuration_id=91');await page.getByTestId('locale-selector').selectOption('fa');await page.getByRole('heading',{name:'کانفیگ‌ها',exact:true}).waitFor();await page.getByRole('heading',{name:'پیش‌نویس‌های کانفیگ',exact:true}).waitFor();await page.getByRole('button',{name:'ویرایش تنظیمات',exact:true}).waitFor();await page.getByTestId('locale-selector').selectOption('en');await page.getByRole('button',{name:'Edit settings',exact:true}).waitFor();
  await page.getByRole('button',{name:'Full server JSON and history',exact:true}).waitFor();await page.getByRole('button',{name:'View and edit JSON',exact:true}).waitFor();await page.getByTestId('locale-selector').selectOption('fa');await page.getByRole('button',{name:'JSON کامل سرور و تاریخچه',exact:true}).waitFor();await page.getByRole('button',{name:'مشاهده و ویرایش JSON',exact:true}).waitFor();await page.getByTestId('locale-selector').selectOption('en');
+ await page.getByRole('button',{name:'Full server JSON and history',exact:true}).click();
+ const coreJson=page.getByLabel('Core JSON',{exact:true});await coreJson.fill('{"inbounds":[{"$papilio":"managed"}],"dns":{"servers":["9.9.9.9"]},"outbounds":[{"protocol":"freedom","tag":"custom"}]}');
+ await page.getByLabel('Change reason',{exact:true}).fill('Browser configuration acceptance');
+ await page.getByRole('button',{name:'Save server document',exact:true}).click();await page.getByRole('status').filter({hasText:'Revision saved. Node application requires provisioning.'}).waitFor();assert.equal(serverJsonWrites,1);
+ await page.getByRole('button',{name:'Preview saved output',exact:true}).click();await page.locator('pre.json-input').filter({hasText:'9.9.9.9'}).waitFor();assert.match(await page.locator('pre.json-input').innerText(),/generated-client/);
+ await page.getByLabel('Change reason',{exact:true}).fill('Restore the automatic configuration');
+ await page.getByRole('button',{name:'Restore this revision',exact:true}).click();await page.getByRole('status').filter({hasText:'Revision saved. Node application requires provisioning.'}).waitFor();assert.equal(serverJsonRestores,1);assert.equal(serverJsonDocument,null);assert.equal(serverJsonRevision,3);
  await page.evaluate(async()=>{await document.querySelector('#app').__vue_app__.config.globalProperties.$router.push('/network/32/configurations?configuration_id=91');});
  await page.getByRole('alert').filter({hasText:'belongs to a different node'}).waitFor();assert.equal(await page.getByRole('button',{name:'Edit settings',exact:true}).count(),0);
  assert.equal(await page.getByRole('button',{name:'Full server JSON and history',exact:true}).count(),0);
