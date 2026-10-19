@@ -76,7 +76,8 @@ class PaymentReceiptCommand:
         existing = await self.repo.by_content(topup_id, digest)
         if existing is not None:
             await self.outbox.ensure_pending(existing.id)
-            return await self._details(existing)
+            details = await self._details(existing)
+            return details
         if topup.status != "pending":
             raise ConflictException(
                 message="این پرداخت قبلاً بررسی شده است.",
@@ -133,11 +134,12 @@ class PaymentReceiptCommand:
         )
 
     async def _details(self, row: PaymentReceiptModel) -> ReceiptDetails:
-        return await asyncio.to_thread(
+        details = await asyncio.to_thread(
             receipt_detail,
             row,
             self.settings.configuration_encryption_key,
         )
+        return details
 
     async def download(
         self, topup_id: int, id: int, customer_id: int | None
