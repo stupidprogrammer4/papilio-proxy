@@ -403,7 +403,10 @@ class ManagedInitialWindowBatchCommand:
             await self.tasks.change_many(task_updates)
         await self.windows.create_many(window_rows)
         stored = await self.windows.by_operation_batch(created_batch.id)
-        return await self._output(data.batch_request_key, data.windows, stored)
+        output = await self._output(
+            data.batch_request_key, data.windows, stored
+        )
+        return output
 
     async def _replay(
         self,
@@ -427,7 +430,10 @@ class ManagedInitialWindowBatchCommand:
         requested = {self.policy.identity(item) for item in data.windows}
         if stored_by_identity.keys() != requested:
             raise conflict("managed_window_batch_incomplete")
-        return await self._output(data.batch_request_key, data.windows, stored)
+        output = await self._output(
+            data.batch_request_key, data.windows, stored
+        )
+        return output
 
     async def _output(
         self,

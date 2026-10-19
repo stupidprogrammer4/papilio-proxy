@@ -429,9 +429,10 @@ class ManagedAdmissionCommand:
             data.batch_request_key,
         )
         if previous is not None:
-            return await self._replay_admission_batch(
+            replay = await self._replay_admission_batch(
                 previous, digest, data, hints
             )
+            return replay
         subscription_ids = sorted({row.subscription_id for row in hints})
         subscription_hints = await self.subscription_batches.by_ids_many(
             subscription_ids
@@ -506,9 +507,10 @@ class ManagedAdmissionCommand:
             installation.id, "admission", data.batch_request_key
         )
         if locked_batch is not None:
-            return await self._replay_admission_batch(
+            replay = await self._replay_admission_batch(
                 locked_batch, digest, data, windows
             )
+            return replay
         existing = await self.admissions.by_windows_many(
             [row.id for row in windows]
         )

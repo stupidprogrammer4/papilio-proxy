@@ -96,7 +96,8 @@ class UsageGrantRepository(MySQLPersistenceRepository[UsageGrantModel]):
             )
         }
         await self.bulk_update(rows, update_columns=columns)
-        return await self.locked_many([row.id for row in rows])
+        changed = await self.locked_many([row.id for row in rows])
+        return changed
 
     async def allocation(
         self, profile_id: int, generation: int, request_key: str
