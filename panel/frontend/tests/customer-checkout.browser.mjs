@@ -26,6 +26,8 @@ await page.route(url=>url.pathname.startsWith('/api/'),route=>{
  if(path==='/v1/customer/checkouts'&&req.method()==='POST'){creates.push(req.postDataJSON());if(failedCreate){failedCreate=false;return respond(route,{error:{message_code:'request_failed'}},503);}return respond(route,{data:intent});}
  if(path==='/v1/customer/checkouts'){if(historyFailed){historyFailed=false;return respond(route,{error:{message_code:'request_failed'}},503);}return respond(route,paged(creates.length?[intent]:[],2));}
  if(path==='/v1/customer/checkouts/71')return respond(route,{data:intent});
+ if(path==='/v1/customer/subscriptions/88')return respond(route,{data:{id:88,status:'pending_provision'}});
+ if(path==='/v1/customer/subscriptions/88/delivery')return respond(route,{data:{subscription_id:88,status:'pending_provision',feed_url:null,portal_url:null}});
  if(path==='/v1/customer/checkouts/71/cancel'){actions.push({action:'cancel',body:req.postDataJSON()});if(failedCancel){failedCancel=false;return respond(route,{error:{message_code:'request_failed'}},503);}intent={...intent,state:'cancelled',revision:2};return respond(route,{data:intent});}
  if(path==='/v1/customer/checkouts/71/reconfirm'){actions.push({action:'reconfirm',body:req.postDataJSON()});if(failedConfirm){failedConfirm=false;return respond(route,{error:{message_code:'request_failed'}},503);}intent={...intent,state:'ready',price_rial:offer.price_rial,revision:4};return respond(route,{data:intent});}
  if(path==='/v1/customer/topups/91')return respond(route,{data:{id:91,revision:1,customer_id:31,amount_rial:120000,status:'pending',bank_reference:null,approved_by_staff_id:null}});
@@ -64,14 +66,14 @@ try{
  assert.equal(await dialog.getByTestId('ocr-warnings').count(),0);
  assert.equal(await dialog.getByTestId('ocr-field-evidence').count(),0);
  await dialog.getByRole('button',{name:'Cancel checkout',exact:true}).click();await dialog.getByRole('button',{name:'Retry cancellation'}).waitFor();
- await dialog.getByRole('button',{name:'Retry cancellation'}).click();await dialog.getByText('Cancelled',{exact:true}).waitFor();
+ await dialog.getByRole('button',{name:'Retry cancellation'}).click();await dialog.locator('p[role="status"]').getByText('Cancelled',{exact:true}).waitFor();
  assert.deepEqual(actions[0],actions[1]);assert.equal(actions[1].body.expected_revision,1);
  assert.match(await dialog.innerText(),/approved payment remains in your wallet/);
  await dialog.getByRole('button',{name:'Close dialog'}).click();
  intent={...intent,state:'action_required',revision:3,reason_code:'checkout_offer_changed'};offer={...offer,price_rial:95000,offer_sha256:'b'.repeat(64)};
- await page.reload();await dialog.getByText('Review required',{exact:true}).waitFor();
+ await page.reload();await dialog.locator('p[role="status"]').getByText('Review required',{exact:true}).waitFor();await dialog.getByRole('list',{name:'Payment-to-delivery progress'}).locator('li[data-stage="funding"]').getByText('Review required',{exact:true}).waitFor();
  await dialog.getByRole('button',{name:'Confirm updated offer'}).click();await dialog.getByRole('button',{name:'Retry confirmation'}).waitFor();
- await dialog.getByRole('button',{name:'Retry confirmation'}).click();await dialog.getByText('Ready for purchase processing',{exact:true}).waitFor();
+ await dialog.getByRole('button',{name:'Retry confirmation'}).click();await dialog.locator('p[role="status"]').getByText('Ready for purchase processing',{exact:true}).waitFor();
  assert.deepEqual(actions[2],actions[3]);assert.equal(actions[3].body.expected_revision,3);assert.equal(actions[3].body.expected_price_rial,95000);assert.equal(actions[3].body.expected_offer_sha256,'b'.repeat(64));
  await page.setViewportSize({width:390,height:844});assert(await dialog.evaluate(el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth;}));
  assert(destinationPages.includes(2));assert.deepEqual(errors,[]);
@@ -79,5 +81,12 @@ try{
  await page.goto(process.env.PANEL_ORIGIN+'/account');await page.getByRole('button',{name:'Service purchase',exact:true}).click();await page.getByRole('row').filter({hasText:plan.title}).click();missingExpiry=true;
  await page.getByRole('button',{name:'Automated checkout',exact:true}).click();await dialog.getByRole('heading',{name:plan.title}).waitFor();
  assert.equal(await dialog.getByRole('button',{name:'Confirm checkout',exact:true}).isDisabled(),true);
+ intent={...intent,state:'purchased',subscription_id:88};
+ await page.goto(process.env.PANEL_ORIGIN+'/account?checkout_id=71');
+ const completed=page.getByRole('dialog',{name:'Plan checkout'});
+ await completed.getByRole('heading',{name:'Checkout #71'}).waitFor();
+ await completed.getByLabel('Payment-to-delivery progress').getByText('Purchase recorded',{exact:true}).waitFor();
+ await completed.getByLabel('Payment-to-delivery progress').locator('li[data-stage="delivery"]').getByText('Pending provisioning',{exact:true}).waitFor();
+ await completed.getByRole('link',{name:'View purchased service'}).waitFor();
  console.log('Owned checkout modal, configured expiry, paged destination retention, exact create/action retries, payment context, cancellation, changed offer, durable URL resume and mobile passed; controlled HTTP.');
 }finally{await browser.close();}

@@ -2023,6 +2023,16 @@
     "paymentApproval": "After payment approval, your selected plan is processed automatically. Ambiguous bank messages remain under review.",
     "separateCharges": "The transfer amount below funds your wallet. The saved plan price above is charged separately when this checkout is processed.",
     "viewService": "View purchased service",
+    "progress": {
+      "label": "Payment-to-delivery progress",
+      "request": "Checkout",
+      "funding": "Funding",
+      "delivery": "Service and delivery",
+      "loading": "Loading current status…",
+      "notFunded": "Checkout ended without a purchase",
+      "funded": "Funding is sufficient for purchase processing",
+      "serviceUnavailable": "Service status is not available yet"
+    },
     "reviewOffer": "Review the current offer",
     "unresolvedAction": "The previous operation has an unresolved response. Retry its retained request to confirm the outcome.",
     "unresolvedCreate": "The previous response was not confirmed. Retry the same request; its details are retained.",
