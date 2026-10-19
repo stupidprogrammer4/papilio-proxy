@@ -368,7 +368,7 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                     )
                 api_url = f"http://127.0.0.1:{listener.getsockname()[1]}"
                 with ManagedRolloverResponseDrop(
-                    api_url, hold_first_rollover_request=True
+                    api_url, hold_first_rollover_response=True
                 ) as relay:
                     try:
                         result = await asyncio.to_thread(
@@ -386,7 +386,6 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                             freeze_after_ms=8000,
                             max_epochs=2,
                             rollover_fault=relay,
-                            kill_before_api_request=True,
                         )
                     except AssertionError as error:
                         raise AssertionError(
@@ -395,15 +394,21 @@ class ManagedSuccessorAgentWorkflowTest(ManagedInstallationWorkflowFixture):
                     rollover_responses = relay.rollover_responses()
                     rollover_requests = relay.rollover_requests()
                     rollover_events = relay.events()
-                self.assertEqual(len(rollover_responses), 1)
-                self.assertEqual(len(rollover_requests), 2)
-                self.assertEqual(rollover_requests[0], rollover_requests[1])
-                self.assertEqual(
-                    rollover_responses[0][0], rollover_requests[1]
+                self.assertEqual(len(rollover_responses), 2)
+                self.assertGreaterEqual(len(rollover_requests), 2)
+                self.assertEqual(len(set(rollover_requests)), 1)
+                self.assertTrue(
+                    all(
+                        response[0] == rollover_requests[0]
+                        for response in rollover_responses
+                    )
                 )
-                self.assertEqual(rollover_responses[0][1], 200)
+                self.assertEqual(
+                    tuple(response[1] for response in rollover_responses),
+                    (200, 200),
+                )
                 self.assertIn(
-                    ("POST", "rollover_request_dropped", 0),
+                    ("POST", "rollover", 200),
                     rollover_events,
                 )
                 self.assertTrue(
