@@ -12,7 +12,11 @@ from contextlib import ExitStack
 from pathlib import Path
 from uuid import uuid4
 
-from tests.real_core_runtime import RealCoreRuntime, TrafficTarget
+from tests.real_core_runtime import (
+    RealCoreRuntime,
+    TrafficTarget,
+    TrafficTargetServer,
+)
 
 
 class KernelCoreRuntime:
@@ -186,8 +190,6 @@ def admit_openvpn(listener, expected_identity):
 
 
 def namespace_main(role):
-    from http.server import ThreadingHTTPServer
-
     root = Path("/fixtures")
     case = json.loads((root / "case.json").read_text())
     timeout = case["timeout"]
@@ -284,7 +286,7 @@ def namespace_main(role):
             )
             resources.callback(RealCoreRuntime.stop, process)
         if role == "server":
-            target = ThreadingHTTPServer(("0.0.0.0", 45321), TrafficTarget)
+            target = TrafficTargetServer(("0.0.0.0", 45321))
             resources.callback(target.server_close)
             target.serve_forever()
         else:
