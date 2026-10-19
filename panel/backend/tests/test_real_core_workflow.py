@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -19,7 +20,14 @@ class RealCoreWorkflowTest(
     StaffAdministrationWorkflowTest, FoundationsWorkflowTest
 ):
     async def configuration(
-        self, runtime, kind, protocol, transport, index, subscription_id
+        self,
+        runtime,
+        kind,
+        protocol,
+        transport,
+        index,
+        subscription_id,
+        server_document=None,
     ):
         port = runtime.port()
         registered = await self.post(
@@ -75,6 +83,17 @@ class RealCoreWorkflowTest(
             f"/v1/admin/network/configurations/{inbound['id']}/profiles",
             {"subscription_id": subscription_id},
         )
+        if server_document is not None:
+            saved = await self.client.put(
+                f"/v1/admin/network/configurations/{inbound['id']}/server-json",
+                headers=self.headers,
+                json={
+                    "expected_revision": inbound["revision"],
+                    "reason": "Real Xray managed document compatibility",
+                    "document": server_document,
+                },
+            )
+            self.assertEqual(saved.status_code, 200, saved.text)
         server = await self.post(
             f"/v1/admin/network/configurations/{inbound['id']}/server-download"
         )
@@ -145,3 +164,41 @@ class RealCoreWorkflowTest(
             await asyncio.to_thread(self.run_matrix, runtime, configurations)
         finally:
             await asyncio.to_thread(runtime.__exit__, None, None, None)
+
+    async def test_managed_server_json_runs_on_real_xray(self):
+        binary_dir = Path(os.environ["PAPILIO_CORE_BIN_DIR"]).resolve()
+        temporary = tempfile.TemporaryDirectory(
+            prefix="papilio-real-xray-json-"
+        )
+        root = Path(temporary.name)
+        runtime = await asyncio.to_thread(
+            RealCoreRuntime(root, binary_dir, 15).__enter__
+        )
+        try:
+            _, subscription = await self.paid_subscription()
+            configuration = await self.configuration(
+                runtime,
+                "xray",
+                "vless_tls",
+                "tcp",
+                1,
+                subscription["id"],
+                {
+                    "mode": "managed",
+                    "source": json.dumps(
+                        {
+                            "inbounds": [{"$papilio": "managed"}],
+                            "dns": {"servers": ["9.9.9.9"]},
+                            "routing": {"domainStrategy": "IPIfNonMatch"},
+                            "outbounds": [
+                                {"protocol": "freedom", "tag": "custom"}
+                            ],
+                        }
+                    ),
+                },
+            )
+            self.assertIn('"tag": "custom"', configuration[3])
+            await asyncio.to_thread(self.run_matrix, runtime, [configuration])
+        finally:
+            await asyncio.to_thread(runtime.__exit__, None, None, None)
+            temporary.cleanup()
