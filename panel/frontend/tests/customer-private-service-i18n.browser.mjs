@@ -23,13 +23,22 @@ try{
  await page.emulateMedia({colorScheme:'light'});
  await page.waitForFunction(()=>document.documentElement.dataset.theme==='light');
  await page.getByRole('tab',{name:'Android'}).waitFor();
- await page.getByRole('link',{name:'Get app v2rayNG'}).waitFor();
+ await assertClientLink(page,'Hiddify','https://github.com/hiddify/hiddify-app/releases/latest');
+ await assertClientLink(page,'v2rayNG','https://github.com/2dust/v2rayNG/releases');
  await page.getByRole('tab',{name:'iOS'}).click();
+ await assertClientLink(page,'Hiddify','https://apps.apple.com/app/hiddify-proxy-vpn/id6596777532');
  const streisand=page.getByRole('link',{name:'Get app Streisand'});
  await streisand.waitFor();
  assert.equal(await streisand.getAttribute('href'),'https://apps.apple.com/us/app/streisand/id6450534064');
  await page.getByRole('tab',{name:'Windows'}).click();
- await page.getByRole('link',{name:'Get app v2rayN'}).waitFor();
+ await assertClientLink(page,'Hiddify','https://github.com/hiddify/hiddify-app/releases/latest');
+ await assertClientLink(page,'v2rayN','https://github.com/2dust/v2rayN/releases');
+ await page.getByRole('tab',{name:'macOS'}).click();
+ await assertClientLink(page,'Hiddify','https://github.com/hiddify/hiddify-app/releases/latest');
+ await assertClientLink(page,'v2rayN','https://github.com/2dust/v2rayN/releases');
+ await page.getByRole('tab',{name:'Linux'}).click();
+ await assertClientLink(page,'Hiddify','https://github.com/hiddify/hiddify-app/releases/latest');
+ await assertClientLink(page,'v2rayN','https://github.com/2dust/v2rayN/releases');
  await page.locator('.usage-ring').waitFor();
  await page.getByTestId('locale-selector').selectOption('fa');
  await page.getByText('اتصال‌های در دسترس',{exact:true}).waitFor();
@@ -41,3 +50,11 @@ try{
  assert.deepEqual(errors,[]);assert(methods.length>=2&&methods.every(method=>method==='GET'));
  console.log('Public customer service summary and connection actions render in English and Persian; controlled read-only HTTP.');
 }finally{await browser.close();}
+
+async function assertClientLink(page,name,url){
+ const link=page.getByRole('link',{name:`Get app ${name}`});
+ await link.waitFor();
+ assert.equal(await link.getAttribute('href'),url);
+ assert.equal(await link.getAttribute('target'),'_blank');
+ assert.match(await link.getAttribute('rel'),/noopener/);
+}
