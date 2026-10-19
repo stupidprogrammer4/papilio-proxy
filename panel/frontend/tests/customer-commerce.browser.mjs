@@ -17,7 +17,7 @@ await page.route(url=>url.pathname.startsWith('/api/'),route=>{
  const request=route.request(),path=new URL(request.url()).pathname.slice(4);
  if(path==='/v1/customer/auth/me')return respond(route,{customer_id:31,display_name:'Customer',csrf_token:'controlled'});
  if(path==='/v1/customer/wallet')return respond(route,{data:{balance_rial:10000}});
- if(path==='/v1/customer/topups'&&request.method()==='POST'){topupWrites.push(request.postDataJSON());return respond(route,{data:{id:501,customer_id:31,amount_rial:10,status:'pending'}});}
+ if(path==='/v1/customer/topups'&&request.method()==='POST'){topupWrites.push(request.postDataJSON());return respond(route,{data:{id:501,revision:1,customer_id:31,amount_rial:10000,requested_amount_rial:10000,payment_identifier_mode:'none',payment_identifier_code4:null,status:'pending',bank_reference:null,approved_by_staff_id:null}});}
  if(path==='/v1/customer/preferences')return respond(route,{data:{brand_title:'Papilio',topup_options_rial:[],checkout:{destination_mode:'legacy',minimum_topup_rial:1,maximum_topup_rial:10000},receipts:{enabled:false}}});
  if(path==='/v1/customer/loyalty')return respond(route,{data:{customer_id:31,purchased_bytes:250*quota,purchase_count:4,lifetime_purchase_count:5,tier,next_tier:{...tier,id:2,title:'Gold',minimum_bytes:700*quota}}});
  if(path==='/v1/customer/plans')return respond(route,paged([plan]));
@@ -50,6 +50,10 @@ try{
  await page.getByRole('button',{name:'ایجاد درخواست شارژ',exact:true}).click();
  await page.getByRole('alert').getByText('مبلغ معتبر وارد کنید.',{exact:true}).waitFor();
  assert.equal(topupWrites.length,0,'Invalid amount reached the payment API');
+ await page.getByLabel('مبلغ شارژ').fill('1000');
+ await page.getByRole('button',{name:'ایجاد درخواست شارژ',exact:true}).click();
+ await page.getByRole('status').getByText('درخواست شارژ ثبت شد. اطلاعات پرداخت و ارسال رسید در ادامه نمایش داده می‌شود.',{exact:true}).waitFor();
+ assert.equal(topupWrites.length,1);assert.equal(topupWrites[0].amount_rial,10000);
  await page.getByRole('button',{name:'خرید سرویس',exact:true}).click();
  await page.getByRole('heading',{name:'خرید با کیف پول',exact:true}).waitFor();
  await page.getByRole('heading',{name:'سرویس آزمایشی',exact:true}).waitFor();
@@ -62,7 +66,11 @@ try{
  await loyalty.getByRole('heading',{name:'My tier and purchase progress',exact:true}).waitFor();
  assert.match(await loyalty.innerText(),/450 GiB.*next tier/);
  assert.equal(await loyalty.locator('progress').getAttribute('value'),String(250*quota));
+ await page.getByTestId('locale-selector').selectOption('fa');
  await page.getByRole('row').filter({hasText:'Selected volume plan'}).click();
+ await page.getByRole('heading',{name:'خرید Selected volume plan',exact:true}).waitFor();
+ await page.getByRole('alert').getByText('اتصال به سرور برقرار نشد. دوباره تلاش کنید.',{exact:true}).waitFor();
+ await page.getByTestId('locale-selector').selectOption('en');
  await page.getByRole('button',{name:'Retry price quote'}).waitFor();
  assert(await page.getByRole('button',{name:'Confirm wallet purchase'}).isDisabled());
  await page.getByRole('button',{name:'Retry price quote'}).click();
@@ -71,7 +79,10 @@ try{
  await page.getByLabel('Renew automatically when my wallet has sufficient funds').check();
  await page.getByRole('button',{name:'Confirm wallet purchase'}).click();await page.getByRole('alert').waitFor();
  assert(await page.getByLabel('Renew automatically when my wallet has sufficient funds').isChecked());
- await page.getByRole('button',{name:'Confirm wallet purchase'}).click();await page.getByRole('heading',{name:'Subscription 91',exact:true}).waitFor();
+ await page.getByTestId('locale-selector').selectOption('fa');
+ await page.getByRole('button',{name:'تأیید خرید با کیف پول',exact:true}).click();await page.getByRole('heading',{name:'اشتراک 91',exact:true}).waitFor();
+ await page.getByRole('status').getByText('خرید شمارهٔ 91 ثبت شد. وضعیت تحویل را در سرویس‌های من پیگیری کنید.',{exact:true}).waitFor();
+ await page.getByTestId('locale-selector').selectOption('en');
  const readiness=page.getByRole('region',{name:'Service renewal eligibility'});
  await readiness.getByRole('heading',{name:'Renewal readiness',exact:true}).waitFor();
  await page.getByRole('region',{name:'Subscription source IP allowance'}).getByText('Snapshot unavailable from this API').waitFor();
@@ -88,7 +99,7 @@ try{
  await page.getByRole('button',{name:'خرید سرویس',exact:true}).click();
  const persianLoyalty=page.getByRole('region',{name:'وفاداری مشتری'});
  await persianLoyalty.getByRole('heading',{name:'سطح و پیشرفت خرید من',exact:true}).waitFor();
- assert.deepEqual(writes[0],writes[1]);assert.equal(writes[1].plan_id,42);assert.equal(writes[1].auto_renew,true);assert.equal(topupWrites.length,0);
+ assert.deepEqual(writes[0],writes[1]);assert.equal(writes[1].plan_id,42);assert.equal(writes[1].auto_renew,true);assert.equal(topupWrites.length,1);assert.equal(topupWrites[0].amount_rial,10000);
  await page.getByTestId('locale-selector').selectOption('en');
  await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'Service purchase',exact:true}).click();await loyalty.getByRole('heading',{name:'Silver',exact:true}).waitFor();
  assert(await loyalty.evaluate(el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth;}));assert.deepEqual(errors,[]);
