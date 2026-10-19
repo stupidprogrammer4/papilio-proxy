@@ -94,12 +94,7 @@ class ConfiguredCheckoutAgentWorkflowTest(CoreProvisioningAgentFixture):
             await producers.stop()
             redis = Redis.from_url(self.raw["redis"]["url"])
             try:
-                keys = [
-                    key
-                    async for key in redis.scan_iter(
-                        match=self.checkout_namespace + ":*"
-                    )
-                ]
+                keys = await redis.keys(self.checkout_namespace + ":*")
                 if keys:
                     await redis.delete(*keys)
             finally:

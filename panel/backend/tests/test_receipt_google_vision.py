@@ -207,10 +207,22 @@ def test_google_vision_uses_async_http_and_keeps_key_out_of_url(monkeypatch):
                 ocr.recognize(b"x" * (5 * 1024 * 1024))
             )
             ticks = 0
-            while not request.done():
+            loop = asyncio.get_running_loop()
+            tick_handle = None
+
+            def record_tick():
+                nonlocal tick_handle
+                nonlocal ticks
                 ticks += 1
-                await asyncio.sleep(0.005)
-            return request.result(), ticks
+                tick_handle = loop.call_later(0.005, record_tick)
+
+            tick_handle = loop.call_later(0.005, record_tick)
+            try:
+                result = await request
+            finally:
+                if tick_handle is not None:
+                    tick_handle.cancel()
+            return result, ticks
 
     lines, ticks = asyncio.run(run_request())
 

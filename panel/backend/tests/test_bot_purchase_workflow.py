@@ -255,11 +255,20 @@ class BotPurchaseWorkflowTest(IsolatedAsyncioTestCase):
                     "ru": "Не удалось выполнить запрос.",
                     "zh": "请求未能完成。",
                 }
-                for locale, expected_error in locale_error_messages.items():
-                    localized = await client.get(
-                        f"/v1/bot/presentation?locale={locale}",
-                        headers=headers,
+                localized_responses = await asyncio.gather(
+                    *(
+                        client.get(
+                            f"/v1/bot/presentation?locale={locale}",
+                            headers=headers,
+                        )
+                        for locale in locale_error_messages
                     )
+                )
+                for expected_error, localized in zip(
+                    locale_error_messages.values(),
+                    localized_responses,
+                    strict=True,
+                ):
                     self.assertEqual(localized.status_code, 200)
                     localized_data = localized.json()["data"]
                     self.assertEqual(

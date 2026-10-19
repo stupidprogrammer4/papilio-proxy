@@ -126,12 +126,7 @@ class CheckoutNoticeDeliveryWorkflowTest(StaffAdministrationWorkflowFixture):
         if producers is not None:
             await producers.stop()
             client = Redis.from_url(self.raw["redis"]["url"])
-            keys = [
-                key
-                async for key in client.scan_iter(
-                    match=self.checkout_namespace + ":*"
-                )
-            ]
+            keys = await client.keys(self.checkout_namespace + ":*")
             if keys:
                 await client.delete(*keys)
             await client.aclose()
