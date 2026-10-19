@@ -117,6 +117,30 @@ def wait_for_production_events_worker(
     )
 
 
+def start_production_events_worker(
+    environment: dict[str, str], log_path: Path
+) -> subprocess.Popen[str]:
+    with log_path.open("a", encoding="utf-8") as output:
+        worker = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "papilio_tasks",
+                "events",
+                "run",
+                "src.apps.events:app",
+                "--log-level",
+                "info",
+            ],
+            env=environment,
+            stdout=output,
+            stderr=subprocess.STDOUT,
+            text=True,
+            start_new_session=True,
+        )
+    return worker
+
+
 def wait_for_production_ocr(
     database_url: str, receipt_id: int
 ) -> tuple[str, str]:
@@ -173,6 +197,15 @@ def stop_production_events_worker(worker: subprocess.Popen[str]) -> None:
         )
 
 
+def kill_production_events_worker(worker: subprocess.Popen[str]) -> None:
+    os.killpg(worker.pid, signal.SIGKILL)
+    returncode = worker.wait(timeout=10)
+    if returncode != -signal.SIGKILL:
+        raise AssertionError(
+            f"Production events worker survived SIGKILL: {returncode}"
+        )
+
+
 @skipUnless(
     TEST_DATABASE_URL and REDIS_TEST_URL and NATS_TEST_URL,
     "Requires isolated MySQL, Redis, and NATS test services",
@@ -197,7 +230,9 @@ class ReceiptOutboxIntegrationTest(IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         await self.connection.dispose()
 
-    async def test_production_events_worker_processes_ocr_event(self):
+    async def test_production_events_worker_recovers_ocr_after_process_kill(
+        self,
+    ):
         suffix = uuid4().hex
         settings = configured_settings()
         image = b"private-production-worker-receipt"
@@ -221,6 +256,8 @@ class ReceiptOutboxIntegrationTest(IsolatedAsyncioTestCase):
             await unit.execute(text("SET FOREIGN_KEY_CHECKS=1"))
 
         calls: list[bytes] = []
+        first_request = asyncio.Event()
+        release_first_request = asyncio.Event()
 
         async def recognize(request: web.Request) -> web.Response:
             self.assertEqual(
@@ -230,6 +267,9 @@ class ReceiptOutboxIntegrationTest(IsolatedAsyncioTestCase):
             payload = await request.json()
             encoded = payload["requests"][0]["image"]["content"]
             calls.append(base64.b64decode(encoded, validate=True))
+            if len(calls) == 1:
+                first_request.set()
+                await release_first_request.wait()
             words = []
             for value, break_type in (
                 ("Payment", "LINE_BREAK"),
@@ -304,8 +344,12 @@ class ReceiptOutboxIntegrationTest(IsolatedAsyncioTestCase):
                     "from src.modules.billing.receipts.infra import "
                     "google_vision\n"
                     "import os\n"
+                    "from src.modules.billing.receipts.tasks.events import "
+                    "ReceiptOcrConsumer\n"
                     "google_vision._ENDPOINT = "
-                    "os.environ['PAPILIO_TEST_OCR_ENDPOINT']\n",
+                    "os.environ['PAPILIO_TEST_OCR_ENDPOINT']\n"
+                    "ReceiptOcrConsumer.config.ack_wait = 1\n"
+                    "ReceiptOcrConsumer.config.backoff = [1]\n",
                     encoding="utf-8",
                 )
                 environment = {
@@ -320,24 +364,9 @@ class ReceiptOutboxIntegrationTest(IsolatedAsyncioTestCase):
                     ),
                 }
                 worker_log = directory / "events-worker.log"
-                with worker_log.open("w", encoding="utf-8") as output:
-                    worker = subprocess.Popen(
-                        [
-                            sys.executable,
-                            "-m",
-                            "papilio_tasks",
-                            "events",
-                            "run",
-                            "src.apps.events:app",
-                            "--log-level",
-                            "info",
-                        ],
-                        env=environment,
-                        stdout=output,
-                        stderr=subprocess.STDOUT,
-                        text=True,
-                        start_new_session=True,
-                    )
+                worker = start_production_events_worker(
+                    environment, worker_log
+                )
                 await asyncio.to_thread(
                     wait_for_production_events_worker,
                     environment,
@@ -353,6 +382,31 @@ class ReceiptOutboxIntegrationTest(IsolatedAsyncioTestCase):
                 client = await nats.connect(str(NATS_TEST_URL))
                 await ReceiptOcrRequested.publish(
                     ReceiptOcrRequest(receipt_id=receipt.id)
+                )
+                await asyncio.wait_for(first_request.wait(), timeout=15)
+                async with self.connection.uow() as independent:
+                    stored = await independent.execute(
+                        select(PaymentReceiptTable).where(
+                            col(PaymentReceiptTable.id) == receipt.id
+                        )
+                    )
+                    self.assertIsNone(stored.scalar_one().encrypted_extraction)
+                first_consumer = await client.jetstream().consumer_info(
+                    "receipt-ocr", durable
+                )
+                self.assertEqual(first_consumer.num_ack_pending, 1)
+                await asyncio.to_thread(kill_production_events_worker, worker)
+                worker = None
+                release_first_request.set()
+
+                worker = start_production_events_worker(
+                    environment, worker_log
+                )
+                await asyncio.to_thread(
+                    wait_for_production_events_worker,
+                    environment,
+                    worker,
+                    worker_log,
                 )
                 status, ciphertext = await asyncio.to_thread(
                     wait_for_production_ocr,
@@ -373,7 +427,8 @@ class ReceiptOutboxIntegrationTest(IsolatedAsyncioTestCase):
                 self.assertEqual(status, "complete")
                 self.assertEqual(extraction.amount_rial, 100_000)
                 self.assertEqual(extraction.currency, "rial")
-                self.assertEqual(calls, [image])
+                self.assertEqual(calls, [image, image])
+                self.assertEqual(consumer.name, durable)
                 self.assertEqual(consumer.num_ack_pending, 0)
         finally:
             if worker is not None:
