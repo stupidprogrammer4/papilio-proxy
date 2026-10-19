@@ -99,9 +99,10 @@ class ReceiptAnnotationCommand(IReceiptAnnotationCommand):
                 encrypted_reason=encrypted_reason,
             )
         )
-        return await asyncio.to_thread(
+        annotation = await asyncio.to_thread(
             annotation_detail, row, self.settings.configuration_encryption_key
         )
+        return annotation
 
 
 def encrypt_annotation(
