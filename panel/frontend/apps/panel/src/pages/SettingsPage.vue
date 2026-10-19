@@ -50,21 +50,21 @@ async function load(): Promise<void> {
     creationAccess.value = {...values.customer_creation_access}; allowRotation.value = values.customer_link_rotation; brand.value = values.brand_title; instructions.value = values.payment_instructions ?? ""; support.value = values.support_handle ?? ""; amounts.value = values.topup_options_rial.map(value => String(value / 10)).join("\n");
     receipts.value=structuredClone(values.receipts);receiptCount.value=String(values.receipts.max_per_topup); checkout.value = structuredClone(values.checkout); quotaPolicy.value = { ...values.quota_policy }; fulfillment.value = { ...values.fulfillment }; defaultIpEnabled.value = values.ip_defaults.enabled; mode.value = values.ip_defaults.mode; maxIps.value = String(values.ip_defaults.max_ips); lease.value = String(values.ip_defaults.lease_seconds); ban.value = String(values.ip_defaults.ban_seconds);
     for (const field of fields) numbers.value[field.key] = String(values[field.key]); state.value = "ready";
-  } catch (cause) { state.value = "error"; error.value = cause instanceof Error ? cause.message : "The operation failed. Please try again."; }
+  } catch (cause) { state.value = "error"; error.value = cause instanceof Error ? cause.message : t("errors.request_failed"); }
 }
 async function loadHistory(): Promise<void> {
   historyState.value = "loading"; const requested = page.value;
   try { const result = await request<Page<PreferencesRevision>>(`/v1/admin/settings/history?${query({ page: requested })}`); if (page.value !== requested) return; history.value = result.data; pages.value = result.meta.pager?.total_pages ?? 1; historyState.value = "ready"; }
-  catch (cause) { historyState.value = "error"; error.value = cause instanceof Error ? cause.message : "The operation failed. Please try again."; }
+  catch (cause) { historyState.value = "error"; error.value = cause instanceof Error ? cause.message : t("errors.request_failed"); }
 }
 async function save(): Promise<void> {
-  if (!snapshot.value) return; if(!identifierDraftValid.value){error.value="Review the payment identifier adjustment and step before saving settings.";return;} if(purchaseSupported.value&&!purchaseDraftValid.value){error.value="Enter a positive checkout lifetime before saving settings.";return;} busy.value = true; error.value = ""; notice.value = "";
+  if (!snapshot.value) return; if(!identifierDraftValid.value){error.value=t("settingsForm.identifierInvalid");return;} if(purchaseSupported.value&&!purchaseDraftValid.value){error.value=t("settingsForm.checkoutLifetimeRequired");return;} busy.value = true; error.value = ""; notice.value = "";
   try {
     const options = asciiDigits(amounts.value).replace(/٫/g, ".").split(/[\s,،]+/).filter(Boolean);
-    if (!options.length || options.some(value => !/^\d+(?:\.\d)?$/.test(value))) throw new Error("Enter amounts in toman with at most one decimal place.");
+    if (!options.length || options.some(value => !/^\d+(?:\.\d)?$/.test(value))) throw new Error(t("settingsForm.topupAmountFormat"));
     const values = { ...(purchaseSupported.value?{purchase_checkout:purchasePolicy.value}:{}), ...(alertsSupported.value?{subscription_alerts:alertPolicy.value}:{}), reseller_defaults:resellerDefaults.value, qr_codes:qrPolicy.value, trials:trialPolicy.value, notifications: notificationPolicy.value, support: supportPolicy.value, customer_creation_access: creationAccess.value, receipts: receipts.value ? {...receipts.value,max_per_topup:Number(receiptCount.value)} : null, checkout: checkout.value, quota_policy: quotaPolicy.value, customer_link_rotation: allowRotation.value, bot_presentation: botPresentation.value, brand_title: brand.value, payment_instructions: instructions.value.trim() || null, support_handle: support.value.trim() || null, topup_options_rial: options.map(value => Math.round(Number(value) * 10)), max_plan_duration_days: Number(numbers.value.max_plan_duration_days), payment_stale_hours: Number(numbers.value.payment_stale_hours), node_health_stale_seconds: Number(numbers.value.node_health_stale_seconds), subscription_expiry_warning_hours: Number(numbers.value.subscription_expiry_warning_hours), provisioning_attention_minutes: Number(numbers.value.provisioning_attention_minutes), fulfillment: fulfillment.value, ip_defaults: { enabled: defaultIpEnabled.value, mode: mode.value, max_ips: Number(maxIps.value), lease_seconds: Number(lease.value), ban_seconds: Number(ban.value) } };
-    snapshot.value = await item<PreferencesSnapshot>("/v1/admin/settings", "PUT", { expected_revision: snapshot.value.revision, values }); notice.value = "Settings saved. Subsequent requests and checks use the updated values."; await branding.refresh(); page.value = 1; await loadHistory();
-  } catch (cause) { error.value = cause instanceof Error ? cause.message : "The operation failed. Please try again."; } finally { busy.value = false; }
+    snapshot.value = await item<PreferencesSnapshot>("/v1/admin/settings", "PUT", { expected_revision: snapshot.value.revision, values }); notice.value = t("settingsForm.saved"); await branding.refresh(); page.value = 1; await loadHistory();
+  } catch (cause) { error.value = cause instanceof Error ? cause.message : t("errors.request_failed"); } finally { busy.value = false; }
 }
 onMounted(async () => { await load(); await loadHistory(); });
 </script>
