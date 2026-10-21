@@ -34,6 +34,31 @@ class InstallSettings:
     https_port: int = 8443
     scheme: str | None = None
 
+    @classmethod
+    def from_options(
+        cls,
+        *,
+        environment: str,
+        instance: str = "default",
+        host: str = "localhost",
+        scheme: str | None = None,
+        bind_address: str | None = None,
+        http_port: int | None = None,
+        https_port: int | None = None,
+    ) -> "InstallSettings":
+        production = environment == "production"
+        return cls(
+            environment=environment,
+            instance=instance,
+            host=host,
+            scheme=scheme,
+            bind_address=bind_address
+            if bind_address is not None
+            else ("0.0.0.0" if production else "127.0.0.1"),
+            http_port=http_port if http_port is not None else (80 if production else 8080),
+            https_port=https_port if https_port is not None else (443 if production else 8443),
+        )
+
     @property
     def transport_scheme(self) -> str:
         return self.scheme or ("https" if self.environment == "production" else "http")
@@ -67,10 +92,24 @@ class InstallSettings:
             raise ValueError("The host must be a hostname or IPv4 address without a URL path.")
         if self.bind_address not in {"127.0.0.1", "0.0.0.0"}:
             raise ValueError("Choose 127.0.0.1 or 0.0.0.0 as the bind address.")
-        if not all(1 <= port <= 65535 for port in (self.http_port, self.https_port)):
+        if not all(
+            isinstance(port, int) and not isinstance(port, bool) and 1 <= port <= 65535
+            for port in (self.http_port, self.https_port)
+        ):
             raise ValueError("A port must be between 1 and 65535.")
         if self.tls_enabled and self.http_port == self.https_port:
             raise ValueError("HTTP and HTTPS require different ports.")
+
+
+def load_settings(path: Path) -> InstallSettings:
+    try:
+        settings = InstallSettings(**json.loads(path.read_text()))
+        settings.validate()
+    except (TypeError, json.JSONDecodeError) as error:
+        raise ValueError(
+            "The installation settings file has an invalid shape or field type."
+        ) from error
+    return settings
 
 
 def write_private(path: Path, value: str) -> None:

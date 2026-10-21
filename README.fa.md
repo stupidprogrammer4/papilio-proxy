@@ -50,17 +50,27 @@ ssh -L 8080:127.0.0.1:8080 user@server
 sudo bash -c 'set -euo pipefail; apt-get update; apt-get install -y curl ca-certificates; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.1/install.sh | bash -s -- --environment production --host panel.example.com'
 ```
 
-**در main، استفاده از HTTPS در همهٔ محیط‌ها اختیاری است.** از پوشهٔ سورس main،
-کل سرویس‌های فعلی را با HTTP روی همین سرور نصب کنید:
+**در main، نصب TUI دارد و HTTPS اختیاری است.** از پوشهٔ سورس، ویزارد نصب را اجرا کنید:
 
 ```sh
-sudo bash ./install.sh --source "$PWD" --environment production --host panel.example.com --scheme http
+sudo bash ./install.sh --source "$PWD"
+```
+
+محیط، دامنه/IP و HTTP یا HTTPS را انتخاب کنید. با F3 تنظیمات شناسهٔ نصب، نشانی
+شنود و پورت‌ها باز می‌شوند؛ F2 صفحهٔ مرور تنظیمات را نشان می‌دهد. حرکت با Tab و
+کلیدهای جهت و لغو با Esc است. هنگام ادامهٔ نصب قبلی، مقادیر ذخیره‌شده در فرم
+قرار می‌گیرند. ترمینال ساده از فرم متنی استفاده می‌کند؛ وابستگی اضافه‌ای برای UI
+نصب نمی‌شود. برای نصب بدون تعامل با HTTP:
+
+```sh
+sudo bash ./install.sh --source "$PWD" --non-interactive --environment production --host panel.example.com --scheme http
 ```
 
 برای TLS خودکار Caddy، گزینهٔ `--scheme https` را انتخاب کنید. در HTTP می‌توان
 به‌جای دامنه، IPv4 سرور را به `--host` داد؛ فقط پورت HTTP انتخابی لازم است.
-آدرس راه‌اندازی، کوکی ورود و مبدأ CSRF مطابق همین انتخاب تنظیم می‌شوند.
-گزینهٔ تازهٔ `--scheme` در بستهٔ ثابت alpha.1 وجود ندارد. در صورت حذف آن، پیش‌فرض
+با `--interactive` می‌توان ویزارد را صریحاً باز کرد، حتی وقتی ورودی نصاب از pipe
+می‌آید. آدرس راه‌اندازی، کوکی ورود و مبدأ CSRF مطابق انتخاب تنظیم می‌شوند.
+TUI و گزینهٔ تازهٔ `--scheme` در بستهٔ ثابت alpha.1 وجود ندارند. در صورت حذف scheme، پیش‌فرض
 قبلی حفظ می‌شود: HTTPS برای production و HTTP برای محیط‌های دیگر.
 
 محیط‌های `dev`، `test`، `sandbox` و `production` داده، کلید، شبکهٔ Docker، صف و کش

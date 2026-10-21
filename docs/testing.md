@@ -53,6 +53,13 @@ the custom-port redirect and Secure cookies. Chromium allows that local test CA;
 the separate Python TLS request verifies the chain. No public ACME issuance is
 inferred. The external Telegram API is substituted; internal runtime services run.
 
+`test_tui.py` drives actual ncurses in a pseudo-terminal, including validation,
+advanced view retention, saved-instance seeds, resize/cancel and a `TERM=dumb`
+fallback. The production installed case drives the real `install.sh` wizard with
+non-TTY stdin, changes its HTTPS seed to HTTP, then verifies the installed browser
+and recovery paths. It uses an existing Docker engine; fresh-host prerequisite
+installation and public release downloads remain separate checks.
+
 The clean-host bootstrap test is separate from these preinstalled-Docker tests.
 Production load, real core/client traffic, financial workflows, Android parsing,
 multi-host scheduling and prior-version migration compatibility are not established

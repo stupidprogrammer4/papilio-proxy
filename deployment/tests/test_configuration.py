@@ -12,6 +12,7 @@ from deployment.papilio_installer.configuration import (
     InstallSettings,
     decode_env,
     encode_env,
+    load_settings,
 )
 from deployment.papilio_installer.preflight import check_ports
 
@@ -186,3 +187,53 @@ def test_cli_rejects_port_zero_before_creating_state(tmp_path: Path, flag: str) 
     with pytest.raises(ValueError, match="port"):
         install(arguments)
     assert not (tmp_path / "install").exists()
+
+
+def test_settings_file_is_a_complete_validated_profile(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    path.write_text(
+        json.dumps(
+            {
+                "environment": "production",
+                "instance": "chosen",
+                "host": "panel.test",
+                "scheme": "http",
+                "http_port": 9080,
+                "https_port": 9443,
+                "bind_address": "0.0.0.0",
+            }
+        )
+    )
+    settings = load_settings(path)
+    assert settings.project == "papilio-chosen-production"
+    assert settings.origin == "http://panel.test:9080"
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "[]",
+        '{"http_port": "oops"}',
+        '{"http_port": true}',
+        '{"http_port": 8080.5}',
+        '{"owner": "injected"}',
+        '{"host": "../escape"}',
+    ],
+)
+def test_invalid_settings_file_never_creates_state(tmp_path: Path, content: str) -> None:
+    path = tmp_path / "settings.json"
+    path.write_text(content)
+    arguments = parser().parse_args(
+        [
+            "--home",
+            str(tmp_path / "state"),
+            "install",
+            "--source",
+            str(Path(__file__).resolve().parents[2]),
+            "--settings-file",
+            str(path),
+        ]
+    )
+    with pytest.raises(ValueError):
+        install(arguments)
+    assert not (tmp_path / "state").exists()

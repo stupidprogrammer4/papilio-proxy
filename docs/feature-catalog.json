@@ -187,7 +187,9 @@
           "instance",
           "domain",
           "bind address",
-          "ports"
+          "ports",
+          "HTTP/HTTPS choice",
+          "terminal wizard / unattended flags"
         ],
         "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
       },
@@ -196,13 +198,14 @@
         "deployment/tests/test_installed_runtime.py",
         "deployment/tests/test_configuration.py",
         "deployment/tests/test_archives.py",
-        "deployment/tests/test_launcher.py"
+        "deployment/tests/test_launcher.py",
+        "deployment/tests/test_tui.py"
       ],
       "sources": [
         "OWNER"
       ],
       "guide": "docs/user-guide.en.md",
-      "verified_scope": "Clean Ubuntu 24.04 amd64 sandbox with public artifact; CI full Compose on Ubuntu 24.04. Other OS, architecture and clean environment combinations remain pending."
+      "verified_scope": "Clean Ubuntu 24.04 amd64 sandbox with public artifact; CI full Compose on Ubuntu 24.04. Other OS, architecture and clean environment combinations remain pending. On main after alpha.1: native simple/advanced TUI, validation/review/resize/cancel and saved-instance seeding; actual interactive bootstrap with non-TTY stdin to production HTTP, browser and recovery. Prebuilt release speed is still pending."
     },
     {
       "id": "BASE-LIFECYCLE",

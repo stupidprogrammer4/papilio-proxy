@@ -2,11 +2,19 @@
 
 ## Select HTTP or HTTPS on main
 
+Running `sudo bash ./install.sh --source "$PWD"` from a checkout opens a native
+terminal wizard. Set the environment, domain/IP and transport; F3 toggles advanced
+instance/bind/port settings without resetting them, F2 reviews, Enter continues
+and Esc cancels. A basic terminal gets plain prompts. The bootstrap uses production
+as its initial environment; dev/test/sandbox remain available. Flags seed choices,
+and a known instance's saved settings seed a resumed install. A review does not
+override the existing-instance check or turn reinstall into reconfiguration.
+
 The current source installer accepts `--scheme http` or `--scheme https` with any
 of `dev`, `test`, `sandbox` and `production`. For example, from a main checkout:
 
 ```sh
-sudo bash ./install.sh --source "$PWD" --environment production --host panel.example.com --scheme http
+sudo bash ./install.sh --source "$PWD" --non-interactive --environment production --host panel.example.com --scheme http
 ```
 
 All current services run together on this server. HTTP uses the selected `--port`
@@ -16,6 +24,10 @@ reachability; `--https-port` selects the public TLS port. Web transport selectio
 does not change the node agent's separate mTLS contract. Existing installations
 without a recorded scheme retain their original behavior. This flag is newer
 than the published alpha.1 installer.
+
+The five printed execution stages report configuration, image preparation,
+infrastructure startup, migrations and application/worker checks. The current
+source path builds images; prebuilt release delivery is still in progress.
 
 ## Create the owner
 

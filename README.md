@@ -52,17 +52,28 @@ and make HTTP/HTTPS ports reachable for certificate issuance:
 sudo bash -c 'set -euo pipefail; apt-get update; apt-get install -y curl ca-certificates; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.1/install.sh | bash -s -- --environment production --host panel.example.com'
 ```
 
-**On main, HTTPS is optional in every environment.** From a checkout of main,
-install the complete current stack on this server with HTTP:
+**On main, installation has a terminal wizard and optional HTTPS.** From a
+checkout, start the wizard with:
 
 ```sh
-sudo bash ./install.sh --source "$PWD" --environment production --host panel.example.com --scheme http
+sudo bash ./install.sh --source "$PWD"
+```
+
+Choose the environment, domain/IP and HTTP or HTTPS; F3 opens instance, bind and
+port settings, and F2 reviews the selection. Tab/arrows navigate and Esc cancels.
+Saved installation settings seed the form on resume. Basic terminals use a plain
+prompt fallback. The wizard uses Python's standard library and installs no UI package.
+For an unattended HTTP installation:
+
+```sh
+sudo bash ./install.sh --source "$PWD" --non-interactive --environment production --host panel.example.com --scheme http
 ```
 
 Use `--scheme https` for automatic Caddy TLS. HTTP also accepts an IPv4 address
-as `--host` and needs only its selected HTTP port. The printed setup URL, login
+as `--host` and needs only its selected HTTP port. `--interactive` explicitly opens
+the wizard, including when the bootstrap's stdin is a pipe. The printed setup URL, login
 cookies and CSRF origin follow that selection. The new `--scheme` flag is not
-part of the immutable alpha.1 package. When omitted, existing defaults remain
+part of the immutable alpha.1 package, which also predates this wizard. When the scheme is omitted, existing defaults remain
 HTTPS for production and HTTP for other environments.
 
 `dev`, `test`, `sandbox` and `production` have separate data, credentials, Docker

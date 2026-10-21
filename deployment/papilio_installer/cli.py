@@ -8,38 +8,42 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .archives import backup, restore
-from .configuration import ENVIRONMENTS, Installation, InstallSettings, replace_private
+from .configuration import (
+    ENVIRONMENTS,
+    Installation,
+    InstallSettings,
+    load_settings,
+    replace_private,
+)
 from .docker import Compose
 from .launcher import ManagedLauncher
 from .preflight import check_host, check_ports
 from .releases import download_release
 
 
+def selected_settings(arguments: argparse.Namespace) -> InstallSettings:
+    if arguments.settings_file is not None:
+        return load_settings(arguments.settings_file)
+    if arguments.environment == "production" and not arguments.host:
+        raise ValueError("Production requires --host with this server's domain or IPv4 address.")
+    settings = InstallSettings.from_options(
+        environment=arguments.environment,
+        instance=arguments.instance,
+        host=arguments.host or "localhost",
+        bind_address=arguments.bind,
+        http_port=arguments.port,
+        https_port=arguments.https_port,
+        scheme=arguments.scheme,
+    )
+    settings.validate()
+    return settings
+
+
 def install(arguments: argparse.Namespace) -> None:
     source = arguments.source.resolve()
     if not (source / "VERSION").is_file() or not (source / "deployment/compose.yml").is_file():
         raise ValueError("Choose an extracted Papilio release as --source.")
-    production = arguments.environment == "production"
-    if production and not arguments.host:
-        raise ValueError("Production requires --host with this server's domain or IPv4 address.")
-    settings = InstallSettings(
-        environment=arguments.environment,
-        instance=arguments.instance,
-        host=arguments.host or "localhost",
-        bind_address=(
-            arguments.bind
-            if arguments.bind is not None
-            else ("0.0.0.0" if production else "127.0.0.1")
-        ),
-        http_port=arguments.port if arguments.port is not None else (80 if production else 8080),
-        https_port=(
-            arguments.https_port
-            if arguments.https_port is not None
-            else (443 if production else 8443)
-        ),
-        scheme=arguments.scheme,
-    )
-    settings.validate()
+    settings = selected_settings(arguments)
     root = arguments.home.resolve() / settings.environment / settings.instance
     if root.exists():
         installation = Installation.load(root)
@@ -55,10 +59,16 @@ def install(arguments: argparse.Namespace) -> None:
     launcher = ManagedLauncher(installation)
     launcher.prepare(arguments.command_path, allow_alias=True)
     compose = Compose(installation)
+    print(f"\nPAPILIO / {settings.environment} / {settings.instance}", flush=True)
+    print("[1/5] Checking service configuration", flush=True)
     compose.run("config", "--quiet")
+    print("[2/5] Preparing application images", flush=True)
     compose.run("build")
+    print("[3/5] Starting PostgreSQL, Redis and RabbitMQ", flush=True)
     compose.run("up", "-d", "--wait", "postgres", "redis", "rabbitmq")
+    print("[4/5] Applying database migrations", flush=True)
     compose.run("run", "--rm", "--no-deps", "api", "python", "manage.py", "migrate", "--noinput")
+    print("[5/5] Starting the panel and verifying both worker queues", flush=True)
     compose.start()
     print(f"Open {settings.origin}/setup and enter the single-use token:")
     compose.run("exec", "-T", "api", "python", "manage.py", "owner_setup_token", "--if-needed")
@@ -115,6 +125,7 @@ def parser() -> argparse.ArgumentParser:
     commands = root.add_subparsers(dest="command", required=True)
     setup = commands.add_parser("install")
     setup.add_argument("--source", type=Path, default=Path(__file__).resolve().parents[2])
+    setup.add_argument("--settings-file", type=Path)
     setup.add_argument("--host")
     setup.add_argument("--scheme", choices=("http", "https"))
     setup.add_argument("--bind")

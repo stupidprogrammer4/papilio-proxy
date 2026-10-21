@@ -13,7 +13,9 @@ delivered in this foundation. Other panel editors remain pending.
 
 | Owner | Setting | Default | Scope / application |
 | --- | --- | --- | --- |
-| Installation | Environment / instance | sandbox / default in bootstrap | Separate persistent state, credentials, Docker network, queues and cache namespace. Immutable installation identity. |
+| Installation | Environment / instance | main bootstrap production/default; direct CLI and alpha.1 sandbox/default | Separate persistent state, credentials, Docker network, queues and cache namespace. Immutable installation identity. |
+| Installation | Interaction | Main bootstrap opens TUI when a controlling terminal exists | `--interactive` forces the wizard; `--non-interactive` retains flag-based automation. Advanced views retain selected values. Existing instance settings seed resume; changed settings still obey existing-instance safeguards. |
+| Installation | Settings file / command path | Private TUI handoff / `/usr/local/bin/papilio` | CLI `install --settings-file FILE` accepts a complete validated profile; bootstrap `--command-path PATH` changes the managed launcher destination. |
 | Installation | Bind / HTTP port | localhost / 8080; production all interfaces / 80 | Gateway; recreate service after change. Port conflicts checked before first installation. |
 | Installation | Web scheme (`--scheme`) | HTTPS in production, HTTP elsewhere when omitted | Select HTTP or HTTPS independently in every environment on main; old installation metadata retains its original transport. |
 | Installation | HTTPS port / host | 443 in production, 8443 elsewhere | Used only with HTTPS; Caddy automatic public issuance needs appropriate DNS and challenge reachability. Production HTTP accepts a domain or IPv4 and uses only the HTTP port. |

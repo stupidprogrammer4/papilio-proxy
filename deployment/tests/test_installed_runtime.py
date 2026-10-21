@@ -20,6 +20,7 @@ from deployment.papilio_installer.archives import backup, restore
 from deployment.papilio_installer.cli import update
 from deployment.papilio_installer.configuration import Installation
 from deployment.papilio_installer.docker import Compose
+from deployment.tests.installer_terminal import read_until, wizard_process
 
 pytestmark = [
     pytest.mark.installed,
@@ -100,9 +101,7 @@ def test_install_browser_backup_restore_and_restart_preserve_data(
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         tls_port = listener.getsockname()[1]
-    command = [
-        sys.executable,
-        str(PROJECT / "deployment/papilio.py"),
+    identity_arguments = [
         "--home",
         str(home),
         "--environment",
@@ -110,33 +109,52 @@ def test_install_browser_backup_restore_and_restart_preserve_data(
         "--instance",
         instance,
     ]
+    command = [sys.executable, str(PROJECT / "deployment/papilio.py"), *identity_arguments]
     installation = None
     launcher = tmp_path / "commands/papilio"
     try:
-        subprocess.run(
-            [
-                *command,
-                "install",
-                "--source",
-                str(PROJECT),
-                "--port",
-                str(port),
-                "--scheme",
-                scheme,
-                "--https-port",
-                str(tls_port),
-                "--bind",
-                "127.0.0.1",
-                "--host",
-                "papilio-http.test" if environment == "production" else "localhost",
-                "--allow-unverified-host",
-                "--command-path",
-                str(launcher),
-            ],
-            check=True,
-            capture_output=True,
-            timeout=900,
-        )
+        setup_arguments = [
+            "--source",
+            str(PROJECT),
+            "--port",
+            str(port),
+            "--scheme",
+            "https" if environment == "production" else scheme,
+            "--https-port",
+            str(tls_port),
+            "--bind",
+            "127.0.0.1",
+            "--host",
+            "papilio-http.test" if environment == "production" else "localhost",
+            "--allow-unverified-host",
+            "--command-path",
+            str(launcher),
+        ]
+        if environment == "production":
+            bootstrap = [
+                "bash",
+                str(PROJECT / "install.sh"),
+                *identity_arguments,
+                *setup_arguments,
+                "--interactive",
+            ]
+            with wizard_process(tmp_path / "settings.json", command=bootstrap, pipe_input=True) as (
+                terminal,
+                process,
+            ):
+                read_until(terminal, b"PAPILIO")
+                os.write(terminal, b"\t\t \x12")
+                read_until(terminal, b"Review")
+                os.write(terminal, b"\n")
+                read_until(terminal, b"Installed command:", timeout=900)
+                assert process.wait(timeout=10) == 0
+        else:
+            subprocess.run(
+                [*command, "install", *setup_arguments],
+                check=True,
+                capture_output=True,
+                timeout=900,
+            )
         installation = Installation.load(home / environment / instance)
         compose = Compose(installation)
         rendered = json.loads(compose.run("config", "--format", "json", capture=True).stdout)
