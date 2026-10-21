@@ -7,7 +7,7 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 | Stage | Status | Completed version | Remaining acceptance |
 | --- | --- | --- | --- |
 | Foundation | Experimental release | 0.1.0-alpha.1 | Additional OS/environment combinations and later panel settings editors remain pending. |
-| First practical release | In progress | — | Node onboarding/connectivity is exercised; automatic node/core installation and Django provisioning, subscriptions, bot, products, wallet, receipts, purchase and delivery remain. |
+| First practical release | In progress | — | Node onboarding/connectivity is exercised; automatic node/core installation and Django provisioning, subscriptions, bot commerce, products, wallet, receipts, purchase and delivery remain. |
 | PasarGuard phase one | Planned | — | Reconcile and execute the complete v5.4.1 feature baseline. |
 | Full sales and bot | Planned | — | Approved Mirza/PGClock capabilities, resellers, Mini App and offline intake. |
 | Network and additional cores | Planned | — | Four complete cores and verified reference extras, certificates, Single Port, WARP, speed/IP controls. |
@@ -24,6 +24,11 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
   configuration editing/renewal, core management, provisioning and purchase
   remain incomplete. See [agent scope](node/agent/README.md).
 
+- Bot onboarding on main: owner-scoped encrypted tokens, editable runtime and native
+  per-bot schedules, one-use admin pairing and durable supported message intake.
+  Worker and installed-browser paths use a controlled external Telegram double;
+  live read-only identity inspection is separate. Purchase/delivery conversations
+  and independent offline intake remain incomplete.
 - Real PostgreSQL: atomic owner setup, session/CSRF, ownership and revocation.
 - Real RabbitMQ/Celery/Beat: separate worker queues, durable outbox, replay and
   recovery after broker outage.
@@ -37,7 +42,8 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
   browser setup/login/schedule edit/actual worker completion passed. CI also
   exercised a synthetic update preserving data and the managed command.
 - Configurability: managed interval schedules have panel controls. Node creation also exposes advanced runtime and certificate choices. Other
-  product setting editors and per-operator bot setup remain pending; the shared
+  product setting editors remain pending; per-operator bot connection settings now
+  have a dedicated page on main; the shared
   acceptance contract is in [configuration.md](docs/configuration.md).
 
 Single Port, WARP registration and speed/IP enforcement remain unverified until

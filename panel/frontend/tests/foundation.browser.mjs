@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { chromium } from "playwright";
 import { expect } from "playwright/test";
 
@@ -105,6 +106,58 @@ try {
   assert.equal(paused.status(), 200);
   assert.equal((await paused.json()).enabled, false);
   console.log("Real node registration, CPU credential issuance, private download and persisted panel state passed.");
+  assert(process.env.PAPILIO_TEST_TELEGRAM_API_URL && process.env.PAPILIO_TEST_TELEGRAM_CONTAINER);
+  await page.getByRole("link", { name: "Telegram bots", exact: true }).click();
+  await page.waitForURL(`${base}/bots`);
+  await page.getByTestId("bot-create-label").fill("browser-bot");
+  await page.getByTestId("bot-create-token").fill("123456789:placeholder-not-a-real-telegram-token");
+  await page.getByTestId("bot-create-interval").fill("1");
+  await page.getByTestId("bot-create-advanced").click();
+  await page.getByTestId("bot-create-api_base_url").fill(process.env.PAPILIO_TEST_TELEGRAM_API_URL);
+  await page.getByTestId("bot-create-poll_timeout_seconds").fill("1");
+  await page.getByTestId("bot-create-http_timeout_seconds").fill("6");
+  const [botCreated] = await Promise.all([
+    page.waitForResponse(response => response.url().endsWith("/api/v1/bots") && response.request().method() === "POST"),
+    page.getByTestId("bot-create-submit").click(),
+  ]);
+  assert.equal(botCreated.status(), 202);
+  const bot = await botCreated.json();
+  assert.equal("token" in bot, false);
+  await expect(page.getByTestId("bot-create-token")).toHaveValue("");
+  await expect(page.getByTestId("bot-edit-token")).toHaveValue("");
+  const botUrl = `${base}/api/v1/bots/${bot.id}`;
+  await expect.poll(async () => (await (await page.request.get(botUrl)).json()).verified,
+    { timeout: 35000, intervals: [100, 250, 500] }).toBe(true);
+  await page.getByTestId("bot-refresh").click();
+  await page.getByTestId("bot-pair-create").click();
+  const pairingLink = await page.getByTestId("bot-pair-link").getAttribute("href");
+  assert(pairingLink);
+  const pairingParameter = new URL(pairingLink).searchParams.get("start");
+  assert(pairingParameter);
+  const fixtureProgram = `import http.client,json,sys,urllib.parse; data=json.load(sys.stdin); endpoint=urllib.parse.urlsplit(data['address']); client=http.client.HTTPConnection(endpoint.hostname,endpoint.port,timeout=5); client.request('POST','/bot123456789:fixture/fixturePush',body=json.dumps({'update_id':40,'text':data['text']}).encode(),headers={'Content-Type':'application/json'}); response=client.getresponse(); assert response.status==200; client.close()`;
+  execFileSync("docker", ["exec", "-i", process.env.PAPILIO_TEST_TELEGRAM_CONTAINER, "python", "-c", fixtureProgram],
+    { input: JSON.stringify({ address: process.env.PAPILIO_TEST_TELEGRAM_API_URL, text: `/start ${pairingParameter}` }) });
+  await expect.poll(async () => (await (await page.request.get(botUrl)).json()).admin_chat_id,
+    { timeout: 35000, intervals: [100, 250, 500] }).toBe(456789);
+  await page.getByTestId("bot-refresh").click();
+  await expect(page.getByTestId("bot-detail")).toContainText("456789");
+  await page.getByTestId("bot-edit-label").fill("browser-bot-edited");
+  await page.getByTestId("bot-edit-enabled").uncheck();
+  await page.getByTestId("bot-edit-interval").fill("11");
+  await page.getByTestId("bot-edit-advanced").click();
+  await page.getByTestId("bot-edit-pairing_ttl_seconds").fill("91");
+  const [botSaved] = await Promise.all([
+    page.waitForResponse(response => response.url().endsWith(`/api/v1/bots/${bot.id}`) && response.request().method() === "PUT"),
+    page.getByTestId("bot-edit-submit").click(),
+  ]);
+  assert.equal(botSaved.status(), 200);
+  assert.equal((await botSaved.json()).schedule.enabled, false);
+  await page.reload();
+  await page.getByTestId("bot-row").click();
+  await expect(page.getByTestId("bot-edit-label")).toHaveValue("browser-bot-edited");
+  await expect(page.getByTestId("bot-edit-token")).toHaveValue("");
+  await expect(page.getByTestId("bot-edit-enabled")).not.toBeChecked();
+  console.log("Installed browser, real worker and external Telegram double: setup, private credentials, pairing and schedule edits passed.");
   console.log("Real setup, CSRF login, authenticated status, outbox submission and session reload passed.");
 } finally {
   await browser.close();

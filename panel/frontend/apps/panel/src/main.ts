@@ -13,6 +13,7 @@ const NodeCoresPage = () => import("./pages/NodeCoresPage.vue");
 const CustomerServicePage = () => import("./pages/CustomerServicePage.vue");
 import App from "./App.vue";
 const LoginPage = () => import("./pages/LoginPage.vue");
+const BotsPage = () => import("./pages/BotsPage.vue");
 const NodeOnboardingPage = () => import("./pages/NodeOnboardingPage.vue");
 const SystemStatusPage = () => import("./pages/SystemStatusPage.vue");
 const OwnerSetupPage = () => import("./pages/OwnerSetupPage.vue");
@@ -69,6 +70,7 @@ const router = createRouter({
     { path: "/login", component: LoginPage },
     { path: "/setup", meta: { public: true }, component: OwnerSetupPage },
     { path: "/", component: SystemStatusPage },
+    { path: "/bots", meta: { scope: "bots" }, component: BotsPage },
     { path: "/nodes", meta: { scope: "nodes" }, component: NodeOnboardingPage },
     { path: "/customers", meta: { scope: "customers" }, component: CustomersPage },
     { path: "/customers/:customerId/wallet", meta: { scope: "payments" }, component: WalletPage },

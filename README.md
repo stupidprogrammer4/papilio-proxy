@@ -23,6 +23,12 @@ worker; the Nodes panel registers and checks an existing agent through the I/O
 worker. Automatic installation, process management and sales remain in progress. This work is not included in the foundation release above.
 See the [agent's current scope](node/agent/README.md).
 
+Main also has an operator-owned **Telegram bots** page: encrypted write-only
+credentials, editable per-bot schedules/runtime settings and one-use administrator
+pairing. Actual workers and an external Telegram API double exercise that setup;
+a separate live API check verifies identity only. Shop, payment and delivery
+conversations are still being implemented. These changes are newer than alpha.1.
+
 ## Install
 
 From a clean candidate Ubuntu/Debian host:

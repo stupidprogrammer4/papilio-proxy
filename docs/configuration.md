@@ -98,3 +98,45 @@ still require their future panel editors; they are not claimed fully configurabl
 from the UI. Node bootstrap downloads include the server private key; responses
 are private/no-store and scoped to the owner. Database private keys use authenticated
 Fernet encryption derived from the installation secret. Restore must preserve it.
+
+
+## Bot connection settings on main
+
+Each active operator manages only their own bot records in **Telegram bots**.
+All settings below have panel controls. Defaults initialize missing input only;
+there is no migration-time rewrite of existing bot settings.
+
+| Owner | Setting | Initial default | Application |
+| --- | --- | --- | --- |
+| Bots | Label / token | Required | Token is encrypted and write-only; blank replacement preserves the current token. |
+| Bots | API origin | `https://api.telegram.org:443` | Next worker request. HTTP is allowed only on literal loopback for local API servers. |
+| Bots | Schedule enabled / interval | Enabled / 10 seconds | Native per-bot Beat row; live changes, no restart. |
+| Bots | Long polling / HTTP timeout | 10 / 15 seconds | HTTP timeout must exceed long polling by at least 5 seconds. |
+| Bots | Update batch | 100 | Between 1 and 100, the native Telegram API bound. |
+| Bots | Maximum response | 16777216 bytes | Bounded read before protocol parsing. |
+| Bots | Pairing lifetime | 300 seconds | New one-use administrator links; edits invalidate older links. |
+| Bots | Failure retry delay | 30 seconds | Minimum retry delay; a longer Telegram `retry_after` is honored. |
+
+Task expiry/hard timeout is three HTTP timeouts plus thirty seconds, soft timeout
+is five seconds earlier and the operation lease lasts another thirty seconds.
+The derived expiry must fit native Beat's positive integer field. These currently
+derived technical deadlines are not independent panel editors. The native Celery
+protocol `timelimit` header carries the per-bot deadlines; no custom task executor
+or alternate scheduler is introduced.
+
+Config revisions invalidate older in-flight results. Pairing grants are hashed,
+expiring and one-use; their secret is removed from retained inbox payloads. The
+inbox retains declared text, photo/document/contact and callback facts. Unknown
+protocol fields are ignored, including unsupported geolocation quantities; they
+are not silently rounded or interpreted as product data. Batch writes use one
+native bounded bulk insert, and the next Telegram offset commits with the inbox.
+No remote update is acknowledged before the corresponding DB transaction commits.
+
+PUT requires complete runtime and schedule objects; omission is rejected instead
+of resetting existing choices to creation defaults. An omitted token is preserved.
+HTTP `revision` and `next_update_id` are decimal strings to preserve BIGINT values
+in JavaScript. Telegram user/chat IDs respect the platform's 52-bit representation.
+Existing webhooks are never deleted automatically. Polling credentials, per-bot
+settings and their schedule survive restart/migrations; restoring encrypted tokens
+requires the original installation key. Other bot modes, shop presentation,
+commerce and independent offline intake remain separate pending deliveries.

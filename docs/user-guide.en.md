@@ -106,3 +106,31 @@ finish. Migrations and restarts preserve the chosen schedule. Bootstrap settings
 apply when the agent starts. Editing an existing node, certificate renewal/rotation
 and automatic installation remain pending. Retain the installation secret key
 with backups: it is needed to decrypt node keys after restore.
+
+## Operator bot setup on main (newer than alpha.1)
+
+1. Create your Telegram bot with BotFather, then open **Telegram bots** in Papilio.
+   Enter a label and token. The token is encrypted; list/detail responses never
+   return it. After a successful save the token input is cleared.
+2. Enable polling and select its interval. Advanced settings configure the API
+   origin, polling and HTTP timeouts, batch/response limits, pairing lifetime and
+   failure delay. Missing creation values receive defaults; edits persist across
+   migrations, restore and restart. Saving a blank replacement token preserves it.
+3. Refresh until the identity is verified. Papilio checks the real bot identity
+   in an I/O worker. An existing webhook is reported and preserved; remove it
+   yourself before choosing polling. A conflicting receiver, invalid token or
+   transport failure is shown with a retry time. A replacement token must belong
+   to the same bot; register a different bot separately.
+4. Choose **Create administrator pairing link**, keep it private, open it in
+   Telegram and press Start. Refresh to see the paired chat. No manual `chat_id`
+   is needed. Links expire and can be used once; creating a new link invalidates
+   the old one. Only a private chat whose sender matches the chat can pair.
+5. Edit settings in the selected bot. Status refresh preserves the draft and its
+   revision. Use **Reload settings and discard draft** before reconciling another
+   editor's changes. A stale save is rejected. Disabling polling prevents further
+   external calls; a request already running can finish, and obsolete results
+   cannot replace the new configuration.
+
+This delivers bot setup and durable supported update intake. Shop menus, receipt
+review, wallet, purchased service delivery and independent offline intake are not
+implemented by this step. These are not provided by the alpha.1 release artifact.

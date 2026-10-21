@@ -483,7 +483,7 @@
       "title": "Connected Telegram purchase bot",
       "owner": "bot",
       "stage": "first",
-      "status": "planned",
+      "status": "in_progress",
       "completed_in": null,
       "expected_behavior": "A real Telegram update reaches the shared module and delivers the purchased subscription to its owner.",
       "configuration": {
@@ -500,13 +500,21 @@
         "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
       },
       "acceptance": "A real Telegram update reaches the shared module and delivers the purchased subscription to its owner.",
-      "evidence": [],
+      "evidence": [
+        "panel/backend/tests/test_bots.py",
+        "panel/backend/tests/test_bot_runtime.py",
+        "panel/backend/tests/test_bot_polling.py",
+        "panel/backend/tests/test_bot_transport.py",
+        "panel/backend/tests/test_bot_migration.py",
+        "panel/frontend/tests/foundation.browser.mjs"
+      ],
       "sources": [
         "OWNER",
         "MIRZA",
         "CLOCK"
       ],
-      "guide": null
+      "guide": "docs/user-guide.en.md",
+      "verified_scope": "Operator-owned encrypted token/settings CRUD, per-bot native schedule controls, one-use private administrator pairing and durable supported update intake. Real worker and installed browser use an explicit external Telegram API double; separate live identity/webhook inspection is read-only. Purchase, wallet, receipt review, service delivery and independent offline bot remain incomplete."
     },
     {
       "id": "PG-USER-LIFECYCLE",

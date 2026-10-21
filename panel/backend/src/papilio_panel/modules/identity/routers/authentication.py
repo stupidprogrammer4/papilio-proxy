@@ -25,9 +25,16 @@ def session_data(request: HttpRequest, principal: AdminPrincipal) -> AdminSessio
     admin_access.authorize(principal)
     return AdminSession(
         username=principal.username,
-        scopes=("system:read", "system:write", "nodes:read", "nodes:write")
+        scopes=(
+            "system:read",
+            "system:write",
+            "nodes:read",
+            "nodes:write",
+            "bots:read",
+            "bots:write",
+        )
         if principal.is_superuser
-        else ("system:read",),
+        else ("system:read", "bots:read", "bots:write"),
         csrf_token=get_token(request),
     )
 

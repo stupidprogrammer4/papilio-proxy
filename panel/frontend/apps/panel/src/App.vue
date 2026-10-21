@@ -7,7 +7,7 @@ import { useI18n } from "vue-i18n";
 import DisplayPreferences from "./components/DisplayPreferences.vue";
 import { useBranding } from "./stores/branding";
 const { t } = useI18n();
-const navLabel = (label: string): string => t(`navigation.${label}`);
+const navLabel = (label: string): string => label === "Telegram bots" ? t("bots.title") : t(`navigation.${label}`);
 const route=useRoute(),router=useRouter(),auth=useAuth(),reseller=useResellerAuth(),branding=useBranding();
 const menuOpen=ref(false),signOutError=ref(""),signingOut=ref(false);
 const navigationToggle=ref<HTMLButtonElement|null>(null),sidebar=ref<HTMLElement|null>(null);
@@ -54,6 +54,7 @@ const navigation=computed(()=>dealer.value?[
  {path:"/subscriptions",label:"Subscriptions",icon:"link",scope:"subscriptions",group:"Workspace"},
  {path:"/loyalty",label:"Loyalty & discounts",icon:"users",scope:"catalog",group:"Finance"},
  {path:"/payments",label:"Payments",icon:"wallet",scope:"payments",group:"Finance"},
+ {path:"/bots",label:"Telegram bots",icon:"bell",scope:"bots",group:"Operations"},
  {path:"/nodes",label:"Nodes",icon:"server",scope:"nodes",group:"Infrastructure"},
  {path:"/network",label:"Nodes",icon:"server",scope:"network",group:"Infrastructure"},
  {path:"/configurations",label:"Configurations",icon:"layers",scope:"network",group:"Infrastructure"},

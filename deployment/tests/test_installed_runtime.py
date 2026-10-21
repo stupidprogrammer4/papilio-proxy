@@ -1,10 +1,13 @@
 """Exercise the shipped CLI, real browser and PostgreSQL restore on owned resources."""
 
 import os
+import select
 import shutil
 import socket
 import subprocess
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from uuid import uuid4
 
@@ -22,6 +25,61 @@ pytestmark = [
     ),
 ]
 PROJECT = Path(__file__).resolve().parents[2]
+
+
+@contextmanager
+def telegram_api(compose: Compose, instance: str) -> Iterator[tuple[str, str]]:
+    """External test double shares only the test I/O worker's loopback network."""
+    worker = compose.run("ps", "-q", "worker-io", capture=True).stdout.decode().strip()
+    assert worker, "The test-owned I/O worker container must exist."
+    name = f"papilio-telegram-{instance}"
+    program = "from telegram_server import TelegramServer; import signal; "
+    program += "server=TelegramServer(); "
+    program += "context=server.running(); address=context.__enter__(); "
+    program += "print(address, flush=True); signal.pause()"
+    subprocess.run(
+        ["docker", "pull", "python:3.13-slim-bookworm"],
+        check=True,
+        capture_output=True,
+        timeout=180,
+    )
+    process = subprocess.Popen(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--name",
+            name,
+            "--network",
+            f"container:{worker}",
+            "--mount",
+            f"type=bind,src={PROJECT / 'panel/backend/tests'},dst=/testing,readonly",
+            "--env",
+            "PYTHONPATH=/testing",
+            "python:3.13-slim-bookworm",
+            "python",
+            "-u",
+            "-c",
+            program,
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        assert process.stdout is not None
+        readable, _, _ = select.select([process.stdout], [], [], 30)
+        assert readable, "The test Telegram double did not report readiness."
+        address = process.stdout.readline().strip()
+        assert address.startswith("http://127.0.0.1:")
+        yield address, name
+    finally:
+        subprocess.run(
+            ["docker", "rm", "--force", name], capture_output=True, timeout=20, check=False
+        )
+        process.wait(timeout=20)
+        if process.stdout is not None:
+            process.stdout.close()
 
 
 def test_install_browser_backup_restore_and_restart_preserve_data(tmp_path: Path) -> None:
@@ -74,12 +132,15 @@ def test_install_browser_backup_restore_and_restart_preserve_data(tmp_path: Path
             "PAPILIO_BROWSER_USERNAME": "browser-owner",
             "PAPILIO_BROWSER_PASSWORD": "isolated-browser-test-password-749!",
         }
-        browser_result = subprocess.run(
-            ["node", str(PROJECT / "panel/frontend/tests/foundation.browser.mjs")],
-            env=browser_environment,
-            capture_output=True,
-            timeout=120,
-        )
+        with telegram_api(compose, instance) as (api_address, api_container):
+            browser_environment["PAPILIO_TEST_TELEGRAM_API_URL"] = api_address
+            browser_environment["PAPILIO_TEST_TELEGRAM_CONTAINER"] = api_container
+            browser_result = subprocess.run(
+                ["node", str(PROJECT / "panel/frontend/tests/foundation.browser.mjs")],
+                env=browser_environment,
+                capture_output=True,
+                timeout=120,
+            )
         browser_error = browser_result.stderr.decode().replace(token, "[setup token redacted]")
         browser_error = browser_error.replace(
             browser_environment["PAPILIO_BROWSER_PASSWORD"], "[test password redacted]"
@@ -140,6 +201,13 @@ def test_install_browser_backup_restore_and_restart_preserve_data(tmp_path: Path
             "from django_celery_beat.models import PeriodicTask; "
             "schedule=PeriodicTask.objects.get(name__endswith='.node-outbox'); "
             "assert not schedule.enabled and schedule.interval.every == 9; "
+            "from papilio_panel.modules.bots.models import Bot; "
+            "from papilio_panel.shared.credentials import credential_cipher; "
+            "bot=Bot.objects.get(label='browser-bot-edited'); "
+            "assert bot.pairing_ttl_seconds == 91 and bot.admin_chat_id == 456789; "
+            "assert not bot.periodic_task.enabled and bot.periodic_task.interval.every == 11; "
+            "opened=credential_cipher().decrypt(bytes(bot.token_ciphertext)); "
+            "assert opened.startswith(b'123456789:'); "
             "print('independent-read-passed')",
             capture=True,
         )
@@ -185,6 +253,10 @@ def test_install_browser_backup_restore_and_restart_preserve_data(tmp_path: Path
             "from django_celery_beat.models import PeriodicTask; "
             "schedule=PeriodicTask.objects.get(name__endswith='.node-outbox'); "
             "assert not schedule.enabled and schedule.interval.every == 9; "
+            "from papilio_panel.modules.bots.models import Bot; "
+            "bot=Bot.objects.get(label='browser-bot-edited'); "
+            "assert bot.pairing_ttl_seconds == 91 and bot.admin_chat_id == 456789; "
+            "assert not bot.periodic_task.enabled and bot.periodic_task.interval.every == 11; "
             "print('synthetic-upgrade-passed')",
             capture=True,
         )

@@ -1,3 +1,4 @@
+export * from "./bots";
 export * from "./nodes";
 export * from "./ipPolicies";
 export * from "./system";

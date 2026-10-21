@@ -83,3 +83,24 @@ advanced values, actual CPU issuance, private download and reload; restore and
 synthetic update independently verify node settings, encrypted-key decryption and
 the disabled node schedule survive. The migration test upgrades a nonempty native
 foundation schema; it is not a complete prior-release binary deployment test.
+
+
+## Bot connection boundary on main
+
+`test_bot_runtime.py` uses actual PostgreSQL, native Beat/RabbitMQ/prefork workers
+and an explicit external Telegram HTTP double. It checks identity verification,
+one-use pairing, committed intake, offset progression and disabled schedule/replay.
+`test_bot_polling.py` additionally exercises an independent concurrent poll,
+configuration changes during HTTP, expiry/reuse/foreign bot/group rejection,
+revocation, native one-insert batches of 1/100, retry delays and an explicit inbox
+DB-write fault. The fault proves rollback and replay after an explicitly expired
+lease; it is not a worker hard-kill recovery test.
+
+The installed browser gate starts a disposable external Telegram double sharing
+only the owned I/O worker's loopback network. Chromium creates the bot, pairs the
+administrator through the actual API/Beat/worker, edits settings and pauses its
+schedule. Independent post-restore and synthetic-upgrade reads check the paired
+chat, chosen values, disabled interval and decryption of the preserved token.
+Internal app/storage/queue paths are not mocked. The Telegram API is substituted;
+no real Telegram purchase conversation is inferred. Separate live read-only
+getMe/getWebhookInfo verification proves identity only and sends no messages.
