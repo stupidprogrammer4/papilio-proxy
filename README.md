@@ -9,6 +9,7 @@ payments, Telegram bots and the preserved Android bridge.
 ## Current release
 
 **0.1.0-alpha.1 is an experimental foundation, not a usable VPN sales MVP yet.**
+[Download the release](https://github.com/stupidprogrammer4/papilio-proxy/releases/tag/v0.1.0-alpha.1).
 It provides first-owner setup, cookie/CSRF login, an integrated system page,
 durable diagnostic operations, separate Celery I/O/CPU workers, database-backed
 editable schedules, isolated installation profiles and a backup/restore CLI.
@@ -18,10 +19,10 @@ presence does not establish backend feature support.
 
 ## Install
 
-From a clean candidate Linux host, with `curl` available:
+From a clean candidate Ubuntu/Debian host:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.1/install.sh | sudo bash -s -- --environment sandbox
+sudo bash -c 'set -euo pipefail; apt-get update; apt-get install -y curl ca-certificates; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.1/install.sh | bash -s -- --environment sandbox'
 ```
 
 The installer installs prerequisites and all services, prints the setup URL and a
@@ -36,7 +37,7 @@ For production transport, point a domain at the server and make HTTP/HTTPS ports
 reachable for certificate issuance:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.1/install.sh | sudo bash -s -- --environment production --host panel.example.com
+sudo bash -c 'set -euo pipefail; apt-get update; apt-get install -y curl ca-certificates; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.1/install.sh | bash -s -- --environment production --host panel.example.com'
 ```
 
 `dev`, `test`, `sandbox` and `production` have separate data, credentials, Docker

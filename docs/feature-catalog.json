@@ -41,7 +41,7 @@
       "owner": "identity",
       "stage": "foundation",
       "status": "implemented",
-      "completed_in": null,
+      "completed_in": "0.1.0-alpha.1",
       "expected_behavior": "Two concurrent valid grants create exactly one owner; expired and invalid grants leave no owner.",
       "configuration": {
         "owner": "identity",
@@ -59,7 +59,8 @@
         "OWNER",
         "PG"
       ],
-      "guide": "docs/user-guide.en.md"
+      "guide": "docs/user-guide.en.md",
+      "verified_scope": "Foundation behavior only. Managed interval schedule controls are delivered; other product setting panel editors remain pending."
     },
     {
       "id": "BASE-AUTH",
@@ -67,7 +68,7 @@
       "owner": "identity",
       "stage": "foundation",
       "status": "implemented",
-      "completed_in": null,
+      "completed_in": "0.1.0-alpha.1",
       "expected_behavior": "HTTP rejects missing CSRF and non-staff login; logout revokes the session.",
       "configuration": {
         "owner": "identity",
@@ -85,7 +86,8 @@
       "sources": [
         "OWNER"
       ],
-      "guide": "docs/user-guide.en.md"
+      "guide": "docs/user-guide.en.md",
+      "verified_scope": "Foundation behavior only. Managed interval schedule controls are delivered; other product setting panel editors remain pending."
     },
     {
       "id": "BASE-OUTBOX",
@@ -93,7 +95,7 @@
       "owner": "jobs",
       "stage": "foundation",
       "status": "implemented",
-      "completed_in": null,
+      "completed_in": "0.1.0-alpha.1",
       "expected_behavior": "A request survives RabbitMQ outage, resumes after recovery and produces one committed result on replay.",
       "configuration": {
         "owner": "jobs",
@@ -113,7 +115,8 @@
       "sources": [
         "OWNER"
       ],
-      "guide": "docs/user-guide.en.md"
+      "guide": "docs/user-guide.en.md",
+      "verified_scope": "Foundation behavior only. Managed interval schedule controls are delivered; other product setting panel editors remain pending."
     },
     {
       "id": "BASE-WORKERS",
@@ -121,7 +124,7 @@
       "owner": "jobs",
       "stage": "foundation",
       "status": "implemented",
-      "completed_in": null,
+      "completed_in": "0.1.0-alpha.1",
       "expected_behavior": "Real prefork processes on their own queues persist independent results and fresh heartbeat observations.",
       "configuration": {
         "owner": "jobs",
@@ -140,7 +143,8 @@
       "sources": [
         "OWNER"
       ],
-      "guide": "docs/user-guide.en.md"
+      "guide": "docs/user-guide.en.md",
+      "verified_scope": "Foundation behavior only. Managed interval schedule controls are delivered; other product setting panel editors remain pending."
     },
     {
       "id": "BASE-SCHEDULES",
@@ -148,7 +152,7 @@
       "owner": "jobs",
       "stage": "foundation",
       "status": "implemented",
-      "completed_in": null,
+      "completed_in": "0.1.0-alpha.1",
       "expected_behavior": "An owner edit survives migrations and a concurrent Beat run; stale edits are rejected.",
       "configuration": {
         "owner": "jobs",
@@ -165,15 +169,16 @@
       "sources": [
         "OWNER"
       ],
-      "guide": "docs/user-guide.en.md"
+      "guide": "docs/user-guide.en.md",
+      "verified_scope": "Foundation behavior only. Managed interval schedule controls are delivered; other product setting panel editors remain pending."
     },
     {
       "id": "BASE-INSTALL",
       "title": "Isolated one-command installation",
       "owner": "installation",
       "stage": "foundation",
-      "status": "planned",
-      "completed_in": null,
+      "status": "implemented",
+      "completed_in": "0.1.0-alpha.1",
       "expected_behavior": "A clean candidate host installs dependencies and all services; conflicting ports are rejected.",
       "configuration": {
         "owner": "installation",
@@ -187,19 +192,25 @@
         "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
       },
       "acceptance": "A clean candidate host installs dependencies and all services; conflicting ports are rejected.",
-      "evidence": [],
+      "evidence": [
+        "deployment/tests/test_installed_runtime.py",
+        "deployment/tests/test_configuration.py",
+        "deployment/tests/test_archives.py",
+        "deployment/tests/test_launcher.py"
+      ],
       "sources": [
         "OWNER"
       ],
-      "guide": "docs/user-guide.en.md"
+      "guide": "docs/user-guide.en.md",
+      "verified_scope": "Clean Ubuntu 24.04 amd64 sandbox with public artifact; CI full Compose on Ubuntu 24.04. Other OS, architecture and clean environment combinations remain pending."
     },
     {
       "id": "BASE-LIFECYCLE",
       "title": "Lifecycle and diagnostics CLI",
       "owner": "installation",
       "stage": "foundation",
-      "status": "planned",
-      "completed_in": null,
+      "status": "implemented",
+      "completed_in": "0.1.0-alpha.1",
       "expected_behavior": "Stop/start retains owner data; doctor checks real DB/cache/worker observations.",
       "configuration": {
         "owner": "installation",
@@ -211,20 +222,26 @@
         "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
       },
       "acceptance": "Stop/start retains owner data; doctor checks real DB/cache/worker observations.",
-      "evidence": [],
+      "evidence": [
+        "deployment/tests/test_installed_runtime.py",
+        "deployment/tests/test_configuration.py",
+        "deployment/tests/test_archives.py",
+        "deployment/tests/test_launcher.py"
+      ],
       "sources": [
         "OWNER",
         "CLOCK"
       ],
-      "guide": "docs/user-guide.en.md"
+      "guide": "docs/user-guide.en.md",
+      "verified_scope": "Foundation behavior only. Managed interval schedule controls are delivered; other product setting panel editors remain pending."
     },
     {
       "id": "BASE-BACKUP",
       "title": "Compressed CLI backup and restore",
       "owner": "installation",
       "stage": "foundation",
-      "status": "planned",
-      "completed_in": null,
+      "status": "implemented",
+      "completed_in": "0.1.0-alpha.1",
       "expected_behavior": "A backup restores committed data and signing key, retains destination infrastructure identity and rejects unsafe archives.",
       "configuration": {
         "owner": "installation",
@@ -236,12 +253,18 @@
         "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
       },
       "acceptance": "A backup restores committed data and signing key, retains destination infrastructure identity and rejects unsafe archives.",
-      "evidence": [],
+      "evidence": [
+        "deployment/tests/test_installed_runtime.py",
+        "deployment/tests/test_configuration.py",
+        "deployment/tests/test_archives.py",
+        "deployment/tests/test_launcher.py"
+      ],
       "sources": [
         "OWNER",
         "CLOCK"
       ],
-      "guide": "docs/user-guide.en.md"
+      "guide": "docs/user-guide.en.md",
+      "verified_scope": "Foundation behavior only. Managed interval schedule controls are delivered; other product setting panel editors remain pending."
     },
     {
       "id": "FLOW-AGENT",
@@ -452,10 +475,13 @@
       "configuration": {
         "owner": "bot",
         "parameters": [
-          "token",
-          "webhook",
+          "operator scope",
+          "token replacement",
+          "enabled state",
+          "update delivery mode",
           "language",
-          "admin destination"
+          "administrator chat pairing",
+          "schedule timing and enabled state"
         ],
         "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
       },
@@ -2448,5 +2474,12 @@
       ],
       "guide": null
     }
-  ]
+  ],
+  "configuration_contract": {
+    "panel_controls": "All delivered product settings require permission-scoped panel controls; environment-only configuration does not complete this requirement.",
+    "seeding": "Initialize missing settings only; migrations, restarts and reinstalls preserve operator edits.",
+    "schedules": "Every scheduled capability exposes enabled state and editable timing with explicit effects on queued/running work.",
+    "bots": "Each operator connects and configures their own bot from the panel; secrets remain write-only and administrator chat pairing has no hardcoded ID.",
+    "guide": "docs/configuration.md"
+  }
 }

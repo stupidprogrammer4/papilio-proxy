@@ -9,7 +9,7 @@ requires an actual complete Papilio installation test.
 | OS | amd64 | arm64 | Exact evidence |
 | --- | --- | --- | --- |
 | Ubuntu 22.04 | Pending | Pending | Candidate only. |
-| Ubuntu 24.04 | Clean-host sandbox installed | Pending | Disposable KVM VM, official 24.04.5 cloud image; initially no Docker. Bootstrap installed Docker/Compose, built images, migrated PostgreSQL and observed both worker queues. Published-artifact and expanded browser/recovery gates remain open. |
+| Ubuntu 24.04 | Clean-host sandbox installed | Pending | Disposable KVM VM, official 24.04.5 amd64 cloud image; initially no Docker. Public v0.1.0-alpha.1 bootstrap downloaded and verified the release artifact, installed Docker/Compose, built images, migrated PostgreSQL and observed both queues. Real browser setup/login, schedule edit, worker completion and session reload passed through the VM gateway. |
 | Ubuntu 26.04 | Pending | Pending | Candidate only. |
 | Debian 12 | Pending | Pending | Candidate only. |
 | Debian 13 | Pending | Pending | Candidate only. |
@@ -18,6 +18,10 @@ requires an actual complete Papilio installation test.
 Local full Compose installation/backup/restore/stop/start were also exercised on
 an Ubuntu 25.10 development host with an already installed Docker engine. That is
 explicit development evidence outside the candidate OS matrix, not certification.
+
+Repeating the public sandbox bootstrap after browser setup preserved the owner
+and an edited 2-second delivery schedule, verified through a new authenticated
+HTTP session. This demonstrates installation resume on that tested combination.
 
 The CI installer job uses an Ubuntu runner with Docker already present; it proves
 Compose/browser/recovery behavior and does not replace a clean-host bootstrap test.

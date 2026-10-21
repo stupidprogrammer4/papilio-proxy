@@ -6,7 +6,7 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 
 | Stage | Status | Completed version | Remaining acceptance |
 | --- | --- | --- | --- |
-| Foundation | In progress | — | Finish synthetic update check, CI and publish installable artifact. |
+| Foundation | Experimental release | 0.1.0-alpha.1 | Additional OS/environment combinations and later panel settings editors remain pending. |
 | First practical release | Planned | — | Real Xray/client traffic, users/subscriptions, connected bot, products, wallet, receipts, purchase and delivery. |
 | PasarGuard phase one | Planned | — | Reconcile and execute the complete v5.4.1 feature baseline. |
 | Full sales and bot | Planned | — | Approved Mirza/PGClock capabilities, resellers, Mini App and offline intake. |
@@ -25,6 +25,12 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
   session restoration exercised through the installed gateway.
 - Full Compose: install, backup, restore and stop/start tested on owned resources.
   Exact OS/mode scope is recorded in the [matrix](docs/installation-matrix.md).
+- Published v0.1.0-alpha.1: clean Ubuntu 24.04 amd64 sandbox installation and
+  browser setup/login/schedule edit/actual worker completion passed. CI also
+  exercised a synthetic update preserving data and the managed command.
+- Configurability: managed interval schedules have panel controls. All other
+  product setting editors and per-operator bot setup remain pending; the shared
+  acceptance contract is in [configuration.md](docs/configuration.md).
 
 Single Port, WARP registration and speed/IP enforcement remain unverified until
 their prototypes and actual client tests pass. No claim is made about unseen

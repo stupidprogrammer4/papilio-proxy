@@ -8,6 +8,7 @@
 ## وضعیت فعلی
 
 **نسخهٔ 0.1.0-alpha.1 پایهٔ آزمایشی است؛ هنوز MVP فروش سرویس نیست.**
+[دریافت نسخه](https://github.com/stupidprogrammer4/papilio-proxy/releases/tag/v0.1.0-alpha.1).
 راه‌اندازی مالک، ورود با نشست و CSRF، صفحهٔ وضعیت، عملیات پایدار پس‌زمینه، workerهای
 جدا برای ارتباطات و CPU، زمان‌بندی قابل ویرایش در دیتابیس و CLI نصب و بکاپ را دارد.
 ساخت واقعی سرویس Xray، اشتراک، فروش، بات متصل و تطبیق پرداخت اندروید در تحویل‌های
@@ -16,10 +17,10 @@
 
 ## نصب
 
-روی یک Linux تمیز از ماتریس اولیه که `curl` دارد:
+روی یک Ubuntu/Debian تمیز از ماتریس اولیه:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.1/install.sh | sudo bash -s -- --environment sandbox
+sudo bash -c 'set -euo pipefail; apt-get update; apt-get install -y curl ca-certificates; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.1/install.sh | bash -s -- --environment sandbox'
 ```
 
 نصاب وابستگی‌ها و سرویس‌ها را آماده می‌کند و آدرس راه‌اندازی و توکن یک‌بارمصرف با
@@ -33,7 +34,7 @@ ssh -L 8080:127.0.0.1:8080 user@server
 برای حالت production، دامنه را به سرور متصل و پورت‌های صدور گواهی را در دسترس کنید:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.1/install.sh | sudo bash -s -- --environment production --host panel.example.com
+sudo bash -c 'set -euo pipefail; apt-get update; apt-get install -y curl ca-certificates; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.1/install.sh | bash -s -- --environment production --host panel.example.com'
 ```
 
 محیط‌های `dev`، `test`، `sandbox` و `production` داده، کلید، شبکهٔ Docker، صف و کش

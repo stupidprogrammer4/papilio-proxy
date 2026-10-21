@@ -52,3 +52,23 @@ not rotate an existing service's password. No credentials are printed by `status
 
 Optional 2FA/HWID, commercial policy editors and every later module's settings
 remain pending. Their enabled defaults will be off where the approved plan says so.
+
+## Panel controls required for subsequent deliveries
+
+- Simple and advanced views edit the same authoritative settings. Switching views
+  must preserve configured values; no second hidden configuration is introduced.
+- A control identifies its owner, scope, default, effective value, revision and
+  restart requirement. Permission checks apply through HTTP and background paths.
+- Secret fields are write-only. Bot credentials are not returned in list/detail
+  responses, logs or public exports. Replacing a token must invalidate work using the
+  previous credential revision.
+- Each operator can connect and configure their bot from the panel. Administrator
+  chat pairing must not require a hardcoded chat ID. Pairing has a single-use,
+  expiring challenge and verifies bot ownership before accepting a chat.
+- Each scheduled capability exposes enabled state and timing. Edits must survive
+  migrations, restarts and installation resume. Disabling a schedule is distinct
+  from cancelling work already delivered to a worker; its effect must be shown.
+- Seed code creates missing settings only. A default change must not overwrite an
+  operator's choice. Issued invoices retain the approved configuration snapshot.
+
+These are acceptance requirements, not claims that the pending editors exist.
