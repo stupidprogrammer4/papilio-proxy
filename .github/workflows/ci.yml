@@ -127,6 +127,10 @@ jobs:
       - run: pnpm --dir panel/frontend install --frozen-lockfile
       - run: pnpm --dir panel/frontend exec playwright install --with-deps chromium
       - run: pnpm --dir panel/frontend build
+      - name: Record native container tool versions
+        run: |
+          docker version --format '{{.Client.Version}} / {{.Server.Version}}'
+          docker compose version
       - run: .venv/bin/pytest -c deployment/pyproject.toml deployment/tests/test_installed_runtime.py -q
 
   installer-python:

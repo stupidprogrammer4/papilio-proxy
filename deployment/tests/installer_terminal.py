@@ -3,6 +3,7 @@
 import fcntl
 import os
 import pty
+import re
 import select
 import signal
 import struct
@@ -17,6 +18,13 @@ from pathlib import Path
 import pytest
 
 PROJECT = Path(__file__).resolve().parents[2]
+
+
+def safe_terminal_output(output: bytes | bytearray) -> str:
+    text = output.decode(errors="replace")
+    text = re.sub(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\([^)]?)", "", text)
+    text = re.sub(r"(\w+://)[^\s/:@]+:[^\s/@]+@", r"\1[redacted]@", text)
+    return re.sub(r"[A-Za-z0-9_-]{32,}", "[redacted]", text)[-5000:]
 
 
 def terminal_session() -> None:
@@ -45,7 +53,7 @@ def read_until(descriptor: int, expected: bytes, timeout: int = 10) -> bytes:
         del received[:-65536]
         if expected in received:
             return bytes(received)
-    pytest.fail(f"Terminal did not render {expected!r} ({len(received)} output bytes).")
+    pytest.fail(f"Terminal did not render {expected!r}:\n{safe_terminal_output(received)}")
 
 
 @contextmanager

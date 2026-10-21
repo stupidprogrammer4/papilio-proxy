@@ -67,7 +67,9 @@ def install(arguments: argparse.Namespace) -> None:
     print("[3/5] Starting PostgreSQL, Redis and RabbitMQ", flush=True)
     compose.run("up", "-d", "--wait", "postgres", "redis", "rabbitmq")
     print("[4/5] Applying database migrations", flush=True)
-    compose.run("run", "--rm", "--no-deps", "api", "python", "manage.py", "migrate", "--noinput")
+    compose.run(
+        "run", "-T", "--rm", "--no-deps", "api", "python", "manage.py", "migrate", "--noinput"
+    )
     print("[5/5] Starting the panel and verifying both worker queues", flush=True)
     compose.start()
     print(f"Open {settings.origin}/setup and enter the single-use token:")
@@ -107,7 +109,9 @@ def update(installation: Installation, source: Path) -> None:
     compose.run("build")
     Compose(installation).stop()
     compose.run("up", "-d", "--wait", "postgres", "redis", "rabbitmq")
-    compose.run("run", "--rm", "--no-deps", "api", "python", "manage.py", "migrate", "--noinput")
+    compose.run(
+        "run", "-T", "--rm", "--no-deps", "api", "python", "manage.py", "migrate", "--noinput"
+    )
     metadata_path = installation.root / "installation.json"
     metadata = json.loads(metadata_path.read_text())
     metadata["source"] = str(source)

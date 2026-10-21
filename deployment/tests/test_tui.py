@@ -9,7 +9,12 @@ from pathlib import Path
 import pytest
 from deployment.papilio_installer.configuration import Installation, InstallSettings
 from deployment.papilio_installer.tui import ConfigurationForm
-from deployment.tests.installer_terminal import read_until, resize_terminal, wizard_process
+from deployment.tests.installer_terminal import (
+    read_until,
+    resize_terminal,
+    safe_terminal_output,
+    wizard_process,
+)
 
 
 @pytest.mark.parametrize("environment", ["dev", "test", "sandbox", "production"])
@@ -41,6 +46,18 @@ def test_invalid_form_keeps_the_draft_for_correction() -> None:
     assert form.host.value == "panel.test"
     form.http_port.value = "9080"
     assert form.settings().http_port == 9080
+
+
+def test_terminal_failure_diagnostics_redact_grants_and_connection_credentials() -> None:
+    grant = "A" * 43
+    output = (
+        "\x1b[31mConnection failed\x1b[0m postgres://operator:short-secret@postgres/db\n"
+        f"{grant}\nPermission denied"
+    )
+    diagnostic = safe_terminal_output(output.encode())
+    assert grant not in diagnostic and "short-secret" not in diagnostic
+    assert "Permission denied" in diagnostic and "Connection failed" in diagnostic
+    assert "\x1b" not in diagnostic
 
 
 def test_real_terminal_edits_transport_and_keeps_advanced_values(tmp_path: Path) -> None:
