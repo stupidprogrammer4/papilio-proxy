@@ -31,12 +31,18 @@ class Compose:
             "-f",
             str(installation.source / "deployment/compose.yml"),
         ]
-        if installation.settings.environment == "production":
+        environment = os.environ | installation.values
+        environment["PAPILIO_PUBLIC_ORIGIN"] = installation.settings.origin
+        environment["PAPILIO_TRANSPORT_SCHEME"] = installation.values.get(
+            "PAPILIO_TRANSPORT_SCHEME", installation.settings.transport_scheme
+        )
+        if installation.settings.tls_enabled:
             command.extend(["-f", str(installation.source / "deployment/compose.production.yml")])
+            environment["PAPILIO_SITE_ADDRESS"] += f", http://{installation.settings.host}"
         command.extend(arguments)
         result = subprocess.run(
             command,
-            env=os.environ | installation.values,
+            env=environment,
             check=True,
             stdout=subprocess.PIPE if capture else stdout,
             stdin=stdin,

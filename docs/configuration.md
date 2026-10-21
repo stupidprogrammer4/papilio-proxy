@@ -15,13 +15,16 @@ delivered in this foundation. Other panel editors remain pending.
 | --- | --- | --- | --- |
 | Installation | Environment / instance | sandbox / default in bootstrap | Separate persistent state, credentials, Docker network, queues and cache namespace. Immutable installation identity. |
 | Installation | Bind / HTTP port | localhost / 8080; production all interfaces / 80 | Gateway; recreate service after change. Port conflicts checked before first installation. |
-| Installation | HTTPS port / domain | 443 in production; domain required | Caddy automatic TLS; production public issuance needs appropriate DNS and challenge reachability. |
+| Installation | Web scheme (`--scheme`) | HTTPS in production, HTTP elsewhere when omitted | Select HTTP or HTTPS independently in every environment on main; old installation metadata retains its original transport. |
+| Installation | HTTPS port / host | 443 in production, 8443 elsewhere | Used only with HTTPS; Caddy automatic public issuance needs appropriate DNS and challenge reachability. Production HTTP accepts a domain or IPv4 and uses only the HTTP port. |
 | Identity | `PAPILIO_SETUP_TOKEN_TTL_SECONDS` | 300 | New grants; restart API. Existing grant expiry remains its recorded expiry. |
 | Identity | `PAPILIO_PASSWORD_MIN_LENGTH` | 12 | New credentials; restart API. Django common/numeric-password validators also apply. |
 | Identity | `PAPILIO_AUTH_RATE` | 30/min | Anonymous login/setup throttle; restart API. CI deliberately selects a separate test rate. |
 | Identity | `PAPILIO_SESSION_SECONDS` | 86400 | New session expiry; restart API. Cookie names include environment and instance. |
 | Identity | `PAPILIO_SECRET_KEY` | Generated randomly | Private signing key, minimum 50 characters. Restore preserves it; casual replacement invalidates signed material. |
 | Gateway/API | `PAPILIO_ALLOWED_HOSTS`, `PAPILIO_TRUSTED_ORIGINS` | Selected installation address | Native Django host/CSRF checks; restart API. |
+| Gateway/API | `PAPILIO_TRANSPORT_SCHEME` | Selected installer scheme; legacy environment default if absent | Native secure-cookie and redirect defaults follow the web scheme; recreate API/workers after bootstrap changes. |
+| Identity/API | `PAPILIO_SESSION_COOKIE_SECURE`, `PAPILIO_CSRF_COOKIE_SECURE`, `PAPILIO_SECURE_SSL_REDIRECT` | True for HTTPS, false for HTTP | Explicit native Django overrides; recreate API. Installer supplies consistent defaults for the selected scheme. |
 | API | `PAPILIO_BRAND_TITLE` | Papilio | Installation branding; restart API. |
 | API | `PAPILIO_WEB_WORKERS` | 2 | Gunicorn process count; recreate API. |
 | Jobs | `PAPILIO_IO_CONCURRENCY`, `PAPILIO_CPU_CONCURRENCY` | 2 / 1 | Prefork pool size; recreate affected worker. These are operational settings, not account/node limits. |
@@ -41,7 +44,7 @@ delivered in this foundation. Other panel editors remain pending.
 Positive integer settings reject zero and malformed input. Boolean settings reject
 misspellings. Managed schedule intervals fit PostgreSQL's positive integer field;
 that storage bound is not a maximum account count. Development debug is selected
-by `dev`; production enables secure cookies and HTTPS redirects. Internal proxy
+by `dev`; HTTPS enables secure cookies and HTTPS redirects, independently of environment. Internal proxy
 trust is enabled only in the supplied isolated topology, whose API port is not
 published to the host.
 

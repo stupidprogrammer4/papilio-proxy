@@ -3,6 +3,8 @@
 }
 
 {$PAPILIO_SITE_ADDRESS} {
+    @upgrade expression `{http.request.scheme} == "http" && {env.PAPILIO_TRANSPORT_SCHEME} == "https"`
+    redir @upgrade {env.PAPILIO_PUBLIC_ORIGIN}{uri} permanent
     encode zstd gzip
     header {
         X-Content-Type-Options nosniff

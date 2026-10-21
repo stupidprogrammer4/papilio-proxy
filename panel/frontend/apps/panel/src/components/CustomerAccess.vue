@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { v4 as newRequestKey } from "uuid";
 import { computed, ref, watch } from "vue";
 import { item, request, query, ApiError, type Customer, type CustomerAccessState, type CustomerAccessChange, type Page } from "@papilio/api";
 import { useAuth, useResellerAuth } from "@papilio/auth";
@@ -27,7 +28,7 @@ watch(draft, () => { key.value = ""; }, { deep: true }); watch([reason, clock], 
 async function save(): Promise<void> {
   if (!draft.value || !expected.value || busy.value) return;
   const id = props.customer.id; const generation = version;
-  busy.value = true; error.value = ""; notice.value = ""; key.value ||= crypto.randomUUID();
+  busy.value = true; error.value = ""; notice.value = ""; key.value ||= newRequestKey();
   try {
     const row = await item<Customer>(`${base.value}/${id}/access`, "PUT", { request_key: key.value, expected: expected.value, values: draft.value, reason: reason.value.trim(), clock: draft.value.services_enabled ? null : clock.value });
     if (generation !== version) return;

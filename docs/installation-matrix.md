@@ -28,5 +28,11 @@ Compose/browser/recovery behavior and does not replace a clean-host bootstrap te
 Host Python compatibility has a separate 3.10/3.12/3.13 unit matrix; backend Python
 is always 3.13 inside its container.
 
-Production HTTPS issuance, each additional OS/architecture, and each environment's
+On main, the existing-Docker Compose gate additionally exercises production HTTP
+on a browser-mapped non-localhost domain and sandbox HTTPS with a native local
+Caddy CA, including custom-port redirects, cookies, actual workers, bot/node
+onboarding, recovery and synthetic update. These fixtures do not prove public DNS
+or ACME issuance and do not expand the clean-host OS certification above.
+
+Public HTTPS issuance, each additional OS/architecture, and each environment's
 clean bootstrap remain separate checks. Support is reported at the tested scope.

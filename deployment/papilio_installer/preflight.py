@@ -12,9 +12,7 @@ MATRIX = {"ubuntu": {"22.04", "24.04", "26.04"}, "debian": {"12", "13"}}
 
 def check_ports(settings: InstallSettings) -> None:
     ports = (
-        (settings.http_port, settings.https_port)
-        if settings.environment == "production"
-        else (settings.http_port,)
+        (settings.http_port, settings.https_port) if settings.tls_enabled else (settings.http_port,)
     )
     for port in ports:
         try:

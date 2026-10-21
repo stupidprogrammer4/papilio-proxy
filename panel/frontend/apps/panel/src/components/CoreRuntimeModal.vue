@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { v4 as newRequestKey } from "uuid";
 import { computed, ref, watch, onUnmounted } from "vue";
 import Modal from "@papilio/ui/Modal.vue";
 import { ApiError, item, request, query, type CoreInstance, type CoreRuntimeState, type CoreRuntimeRevision, type CoreRuntimeCommand, type RuntimeAction, type Page } from "@papilio/api";
@@ -14,7 +15,7 @@ const revisionPage = ref(1), revisionPages = ref(1), commandPage = ref(1), comma
 const readState = ref<"loading" | "ready" | "error">("loading"), busy = ref(false), error = ref(""), notice = ref("");
 const mode = ref<CoreRuntimeRevision["mode"]>("isolated"), action = ref<RuntimeAction>("validate"), selected = ref<CoreRuntimeRevision | null>(null), reason = ref("");
 const reconcileMode = ref<"observe" | "restore">("observe");
-const expectedRevision = ref<number | null>(null), requestKey = ref(crypto.randomUUID());
+const expectedRevision = ref<number | null>(null), requestKey = ref(newRequestKey());
 const actionLabels = computed<Record<RuntimeAction,string>>(() => ({ validate:t("network.runtime.validate"), apply:t("network.runtime.apply"), restart:t("network.runtime.restart"), stop:t("network.runtime.stop"), rollback:t("network.runtime.rollback"), reconcile:t("network.runtime.reconcile") }));
 const usageModeLabels = computed(() => ({ disabled:t("settingsForm.disabled"), observe:t("network.runtime.observeCounters"), polled_stop:t("network.runtime.polledCounters") }));
 const actions = computed(() => state.value?.allowed_actions ?? []);
@@ -25,7 +26,7 @@ const canWrite = computed(() => auth.can("network", "create") && auth.can("netwo
 let sequence = 0;
 function base(core: CoreInstance): string { return `/v1/admin/network/cores/${core.id}/runtime`; }
 function message(cause: unknown): string { return cause instanceof Error ? cause.message : "Could not complete the runtime operation."; }
-function newRequest(): void { requestKey.value = crypto.randomUUID(); notice.value = ""; }
+function newRequest(): void { requestKey.value = newRequestKey(); notice.value = ""; }
 watch([action, reconcileMode, selected, reason], newRequest);
 async function refresh(): Promise<void> {
   const core = props.core; if (!core) return;

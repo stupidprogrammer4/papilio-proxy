@@ -7,11 +7,21 @@ const base = process.env.PAPILIO_BROWSER_URL;
 const token = process.env.PAPILIO_SETUP_TOKEN;
 const username = process.env.PAPILIO_BROWSER_USERNAME;
 const password = process.env.PAPILIO_BROWSER_PASSWORD;
+const insecureDomain = process.env.PAPILIO_BROWSER_INSECURE_DOMAIN === "true";
 assert(base && token && username && password, "Provide the isolated runtime and setup credentials.");
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, args: insecureDomain ? ["--host-resolver-rules=MAP papilio-http.test 127.0.0.1", "--no-proxy-server"] : [] });
 try {
-  const page = await browser.newPage();
+  // Local TLS uses an isolated Caddy CA; the Python gate separately verifies its chain/hostname.
+  const page = await browser.newPage({ ignoreHTTPSErrors: process.env.PAPILIO_BROWSER_LOCAL_TLS === "true" });
+  const readJson = url => page.evaluate(address => fetch(address).then(response => {
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+  }), url);
   await page.goto(`${base}/setup`);
+  if (insecureDomain) {
+    assert.equal(await page.evaluate(() => window.isSecureContext), false);
+    assert.equal(await page.evaluate(() => typeof crypto.randomUUID), "undefined");
+  }
   await page.getByTestId("setup-token").fill(token);
   await page.getByTestId("setup-username").fill(username);
   await page.getByTestId("setup-password").fill("123");
@@ -28,6 +38,9 @@ try {
   await page.locator('input[autocomplete="current-password"]').fill(password);
   await page.locator('form button[type="submit"], form button.btn').click();
   await page.waitForURL(`${base}/`);
+  const cookies = (await page.context().cookies()).filter(cookie => /_(session|csrf)$/.test(cookie.name));
+  assert.equal(cookies.length, 2);
+  assert(cookies.every(cookie => cookie.secure === (new URL(base).protocol === "https:")));
   await page.getByTestId("system-status").waitFor();
   assert.match(await page.getByTestId("system-status").innerText(), /base01|browser/);
   const schedule = page.getByTestId("schedule-outbox");
@@ -47,8 +60,7 @@ try {
   assert.equal(operation.kind, "io");
   await page.getByTestId("probe-operation").waitFor();
   await expect.poll(async () => {
-    const response = await page.request.get(`${base}/api/v1/system/operations/${operation.id}`);
-    const result = await response.json();
+    const result = await readJson(`${base}/api/v1/system/operations/${operation.id}`);
     return result.status;
   }, { timeout: 35000, intervals: [100, 250, 500] }).toBe("succeeded");
   const [operationRead] = await Promise.all([
@@ -78,7 +90,7 @@ try {
   assert.equal(registered.status(), 202);
   const registration = await registered.json();
   assert.equal(registration.node.runtime.request_timeout_seconds, 7);
-  await expect.poll(async () => (await (await page.request.get(`${base}/api/v1/nodes/${registration.node.id}/operations/${registration.operation.id}`)).json()).status,
+  await expect.poll(async () => (await readJson(`${base}/api/v1/nodes/${registration.node.id}/operations/${registration.operation.id}`)).status,
     { timeout: 35000, intervals: [100, 250, 500] }).toBe("succeeded");
   await page.getByTestId("node-refresh").click();
   const detail = page.getByTestId("node-detail");
@@ -126,7 +138,7 @@ try {
   await expect(page.getByTestId("bot-create-token")).toHaveValue("");
   await expect(page.getByTestId("bot-edit-token")).toHaveValue("");
   const botUrl = `${base}/api/v1/bots/${bot.id}`;
-  await expect.poll(async () => (await (await page.request.get(botUrl)).json()).verified,
+  await expect.poll(async () => (await readJson(botUrl)).verified,
     { timeout: 35000, intervals: [100, 250, 500] }).toBe(true);
   await page.getByTestId("bot-refresh").click();
   await page.getByTestId("bot-pair-create").click();
@@ -137,7 +149,7 @@ try {
   const fixtureProgram = `import http.client,json,sys,urllib.parse; data=json.load(sys.stdin); endpoint=urllib.parse.urlsplit(data['address']); client=http.client.HTTPConnection(endpoint.hostname,endpoint.port,timeout=5); client.request('POST','/bot123456789:fixture/fixturePush',body=json.dumps({'update_id':40,'text':data['text']}).encode(),headers={'Content-Type':'application/json'}); response=client.getresponse(); assert response.status==200; client.close()`;
   execFileSync("docker", ["exec", "-i", process.env.PAPILIO_TEST_TELEGRAM_CONTAINER, "python", "-c", fixtureProgram],
     { input: JSON.stringify({ address: process.env.PAPILIO_TEST_TELEGRAM_API_URL, text: `/start ${pairingParameter}` }) });
-  await expect.poll(async () => (await (await page.request.get(botUrl)).json()).admin_chat_id,
+  await expect.poll(async () => (await readJson(botUrl)).admin_chat_id,
     { timeout: 35000, intervals: [100, 250, 500] }).toBe(456789);
   await page.getByTestId("bot-refresh").click();
   await expect(page.getByTestId("bot-detail")).toContainText("456789");

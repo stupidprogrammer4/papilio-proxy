@@ -2495,6 +2495,38 @@
         "OWNER"
       ],
       "guide": null
+    },
+    {
+      "id": "MIG-REFERENCES",
+      "title": "Migration from reference panels and bots",
+      "owner": "migration",
+      "stage": "unassigned",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Import supported exports from PasarGuard, Rebecca, 3x-ui, Mirza and PGClockBot through explicit source/version mappings; preview supported records, conflicts and unsupported fields before applying changes. Source data is preserved.",
+      "configuration": {
+        "owner": "migration",
+        "parameters": [
+          "source type and version",
+          "export format",
+          "field and ownership mapping",
+          "duplicate/conflict policy",
+          "import scope",
+          "batch/checkpoint settings"
+        ],
+        "defaults": "Source formats, release placement and conflict policies remain to be specified. Private Mirza Pro compatibility requires approved accessible samples."
+      },
+      "acceptance": "For every supported source version, verify exact identities, relationships, counts and monetary units using representative exported fixtures; exercise denied access, duplicates/replay, interrupted import/recovery and reported incompatibilities. No completed claim without actual transfer evidence.",
+      "evidence": [],
+      "sources": [
+        "OWNER",
+        "PG",
+        "REBECCA",
+        "3X",
+        "MIRZA",
+        "CLOCK"
+      ],
+      "guide": "TODO.md#planned-migrations"
     }
   ],
   "configuration_contract": {

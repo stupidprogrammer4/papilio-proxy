@@ -12,6 +12,7 @@
     "@papilio/auth": "workspace:*",
     "@papilio/ui": "workspace:*",
     "pinia": "^2.3.1",
+    "uuid": "14.0.3",
     "vue": "^3.5.13",
     "vue-i18n": "^11",
     "vue-router": "^4.5.0"

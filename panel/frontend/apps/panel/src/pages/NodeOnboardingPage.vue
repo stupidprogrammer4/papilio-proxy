@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { v4 as newRequestKey } from "uuid";
 import { onMounted, onBeforeUnmount, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { request, privateFile, query, type AgentRuntime, type CertificatePolicy, type ManagedNode, type ManagedNodePage, type NodeRegistration, type NodeOperation } from "@papilio/api";
@@ -17,7 +18,7 @@ const total = ref(0);
 const busy = ref(false);
 const error = ref("");
 const lifetime = new AbortController();
-let requestKey = crypto.randomUUID();
+let requestKey = newRequestKey();
 const numericFields = ["request_timeout_seconds", "read_header_timeout_seconds", "idle_timeout_seconds", "shutdown_timeout_seconds", "max_body_bytes", "max_grpc_reply_bytes"] as const;
 const certificateFields = ["validity_seconds", "authority_validity_seconds", "backdate_seconds"] as const;
 onBeforeUnmount(() => lifetime.abort());
@@ -58,7 +59,7 @@ async function create(): Promise<void> {
   if (!defaults.value) return;
   await perform(async () => {
     const result = await request<NodeRegistration>("/v1/nodes", "POST", { name: name.value, endpoint_url: endpoint.value, request_key: requestKey, ...defaults.value }, { signal: lifetime.signal });
-    requestKey = crypto.randomUUID();
+    requestKey = newRequestKey();
     selected.value = result.node;
     operation.value = result.operation;
     name.value = "";
@@ -71,7 +72,7 @@ async function check(): Promise<void> {
   const node = selected.value;
   if (!node) return;
   await perform(async () => {
-    operation.value = await request<NodeOperation>(`/v1/nodes/${node.id}/operations`, "POST", { kind: "check_connection", request_key: crypto.randomUUID() }, { signal: lifetime.signal });
+    operation.value = await request<NodeOperation>(`/v1/nodes/${node.id}/operations`, "POST", { kind: "check_connection", request_key: newRequestKey() }, { signal: lifetime.signal });
   });
 }
 

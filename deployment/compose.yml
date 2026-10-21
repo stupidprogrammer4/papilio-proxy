@@ -84,6 +84,8 @@ services:
     restart: unless-stopped
     environment:
       PAPILIO_SITE_ADDRESS: ${PAPILIO_SITE_ADDRESS:?}
+      PAPILIO_TRANSPORT_SCHEME: ${PAPILIO_TRANSPORT_SCHEME:?}
+      PAPILIO_PUBLIC_ORIGIN: ${PAPILIO_PUBLIC_ORIGIN:?}
     ports:
       - ${PAPILIO_BIND_ADDRESS:?}:${PAPILIO_HTTP_PORT:?}:80
     volumes:

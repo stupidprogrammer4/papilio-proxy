@@ -43,6 +43,16 @@ uses real Chromium and API/DB/queues, checks the application DB role is not
 superuser, creates a backup, mutates test data, restores, stops/starts and reads
 committed outcomes independently. Teardown removes only its own containers/state.
 
+On main, the installed gate runs test/HTTP, production/HTTP and sandbox/HTTPS.
+Production HTTP uses a `.test` domain mapped inside Chromium, explicitly asserts
+an insecure browser context without native `randomUUID`, and exercises actual
+setup/login, worker completion, node/bot onboarding, backup/restore and synthetic
+update. UUIDs come from the pinned `uuid` package using native browser entropy.
+HTTPS checks a real Caddy certificate using its isolated local CA and hostname,
+the custom-port redirect and Secure cookies. Chromium allows that local test CA;
+the separate Python TLS request verifies the chain. No public ACME issuance is
+inferred. The external Telegram API is substituted; internal runtime services run.
+
 The clean-host bootstrap test is separate from these preinstalled-Docker tests.
 Production load, real core/client traffic, financial workflows, Android parsing,
 multi-host scheduling and prior-version migration compatibility are not established

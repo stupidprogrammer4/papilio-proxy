@@ -5,7 +5,7 @@ import os
 import re
 import secrets
 import tempfile
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 ENVIRONMENTS = ("dev", "test", "sandbox", "production")
@@ -32,12 +32,33 @@ class InstallSettings:
     bind_address: str = "127.0.0.1"
     http_port: int = 8080
     https_port: int = 8443
+    scheme: str | None = None
+
+    @property
+    def transport_scheme(self) -> str:
+        return self.scheme or ("https" if self.environment == "production" else "http")
+
+    @property
+    def tls_enabled(self) -> bool:
+        return self.transport_scheme == "https"
+
+    @property
+    def origin(self) -> str:
+        port = self.https_port if self.tls_enabled else self.http_port
+        return f"{self.transport_scheme}://{self.host}:{port}"
 
     @property
     def project(self) -> str:
         return f"papilio-{self.instance}-{self.environment}"
 
+    def matches(self, other: "InstallSettings") -> bool:
+        return replace(self, scheme=self.transport_scheme) == replace(
+            other, scheme=other.transport_scheme
+        )
+
     def validate(self) -> None:
+        if self.scheme is not None and self.scheme not in {"http", "https"}:
+            raise ValueError("Choose http or https as the transport scheme.")
         if self.environment not in ENVIRONMENTS:
             raise ValueError("Choose dev, test, sandbox or production.")
         if re.fullmatch(r"[a-z0-9][a-z0-9-]{0,39}", self.instance) is None:
@@ -48,7 +69,7 @@ class InstallSettings:
             raise ValueError("Choose 127.0.0.1 or 0.0.0.0 as the bind address.")
         if not all(1 <= port <= 65535 for port in (self.http_port, self.https_port)):
             raise ValueError("A port must be between 1 and 65535.")
-        if self.environment == "production" and self.http_port == self.https_port:
+        if self.tls_enabled and self.http_port == self.https_port:
             raise ValueError("HTTP and HTTPS require different ports.")
 
 
@@ -116,17 +137,13 @@ class Installation:
         database_password = secrets.token_urlsafe(36)
         redis_password = secrets.token_urlsafe(36)
         broker_password = secrets.token_urlsafe(36)
-        production = settings.environment == "production"
         values = {
             "PAPILIO_ENV": settings.environment,
             "PAPILIO_INSTANCE": settings.instance,
             "PAPILIO_SECRET_KEY": secrets.token_urlsafe(64),
             "PAPILIO_ALLOWED_HOSTS": f"{settings.host},localhost,127.0.0.1",
-            "PAPILIO_TRUSTED_ORIGINS": (
-                f"https://{settings.host}:{settings.https_port}"
-                if production
-                else f"http://{settings.host}:{settings.http_port}"
-            ),
+            "PAPILIO_TRUSTED_ORIGINS": settings.origin,
+            "PAPILIO_TRANSPORT_SCHEME": settings.transport_scheme,
             "PAPILIO_BEHIND_PROXY": "true",
             "PAPILIO_DB_PASSWORD": database_password,
             "POSTGRES_PASSWORD": secrets.token_urlsafe(36),
@@ -143,7 +160,7 @@ class Installation:
             "PAPILIO_BIND_ADDRESS": settings.bind_address,
             "PAPILIO_HTTP_PORT": str(settings.http_port),
             "PAPILIO_HTTPS_PORT": str(settings.https_port),
-            "PAPILIO_SITE_ADDRESS": settings.host if production else ":80",
+            "PAPILIO_SITE_ADDRESS": settings.host if settings.tls_enabled else ":80",
             "PAPILIO_WEB_WORKERS": "2",
             "PAPILIO_SHUTDOWN_SECONDS": "120",
         }

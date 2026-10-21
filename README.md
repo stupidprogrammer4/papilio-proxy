@@ -45,16 +45,29 @@ sandbox listens on localhost by default. Connect securely with an SSH tunnel:
 ssh -L 8080:127.0.0.1:8080 user@server
 ```
 
-For production transport, point a domain at the server and make HTTP/HTTPS ports
-reachable for certificate issuance:
+The published alpha.1 production installer uses HTTPS. Point a domain at the server
+and make HTTP/HTTPS ports reachable for certificate issuance:
 
 ```sh
 sudo bash -c 'set -euo pipefail; apt-get update; apt-get install -y curl ca-certificates; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.1/install.sh | bash -s -- --environment production --host panel.example.com'
 ```
 
+**On main, HTTPS is optional in every environment.** From a checkout of main,
+install the complete current stack on this server with HTTP:
+
+```sh
+sudo bash ./install.sh --source "$PWD" --environment production --host panel.example.com --scheme http
+```
+
+Use `--scheme https` for automatic Caddy TLS. HTTP also accepts an IPv4 address
+as `--host` and needs only its selected HTTP port. The printed setup URL, login
+cookies and CSRF origin follow that selection. The new `--scheme` flag is not
+part of the immutable alpha.1 package. When omitted, existing defaults remain
+HTTPS for production and HTTP for other environments.
+
 `dev`, `test`, `sandbox` and `production` have separate data, credentials, Docker
 networks, broker queues and cache namespaces. Use `--instance NAME` and a distinct
-`--port PORT` for additional installations. Production also accepts
+`--port PORT` for additional installations. HTTPS also accepts
 `--https-port PORT`. See the [tested support matrix](docs/installation-matrix.md);
 an OS being a candidate does not mean every mode and architecture is certified.
 If another installation already owns `papilio`, the installer creates

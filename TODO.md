@@ -16,6 +16,11 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 
 ## Current component evidence
 
+- Installer on main: explicit HTTP/HTTPS selection in every environment; a public
+  HTTP browser fixture exercises production setup/login, actual worker operations,
+  nodes/bot onboarding and recovery. Faster prebuilt release deployment and the
+  remaining clean-host matrix are still pending.
+
 - On main after the foundation release: runnable Go/mTLS agent and native Xray
   adapter tested through actual HTTPS/core/client traffic, including denied
   certificate scopes and expiry. Django now issues per-node credentials and
@@ -49,3 +54,25 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 Single Port, WARP registration and speed/IP enforcement remain unverified until
 their prototypes and actual client tests pass. No claim is made about unseen
 private Mirza Pro behavior beyond the approved feature list.
+
+## Planned migrations
+
+Migration/import tooling is now part of the roadmap. Supported source formats,
+exact field mappings and release placement will be specified before implementation.
+
+| Source | Initial compatibility target | Status |
+| --- | --- | --- |
+| PasarGuard panel | v5.4.1 | Planned |
+| Rebecca panel | v1.8.1 | Planned |
+| 3x-ui panel | v3.10.2 | Planned |
+| Mirza bot | 0.8 | Planned |
+| PGClockBot | v0.4.21 | Planned |
+| Mirza Pro / documented private bot variants | Approved accessible exports/schema samples | Awaiting source compatibility evidence |
+
+Each supported importer needs a preview, explicit owner/field and duplicate
+handling, exact money/unit conversion, interruption/replay recovery and a transfer
+report. Unsupported fields must be reported. Existing source data stays intact.
+
+مهاجرت از پنل‌ها و بات‌های مرجع به فهرست کارها اضافه شده است. پیش‌نمایش انتقال،
+نگاشت داده و مالکیت، کنترل تکرار، گزارش ناسازگاری و بازیابی انتقال ناتمام باید
+برای هر نسخهٔ پشتیبانی‌شده آزموده شوند؛ ابزار انتقال هنوز پیاده‌سازی نشده است.

@@ -21,20 +21,29 @@ def install(arguments: argparse.Namespace) -> None:
         raise ValueError("Choose an extracted Papilio release as --source.")
     production = arguments.environment == "production"
     if production and not arguments.host:
-        raise ValueError("Production requires --host with a domain pointing to this server.")
+        raise ValueError("Production requires --host with this server's domain or IPv4 address.")
     settings = InstallSettings(
         environment=arguments.environment,
         instance=arguments.instance,
         host=arguments.host or "localhost",
-        bind_address=arguments.bind or ("0.0.0.0" if production else "127.0.0.1"),
-        http_port=arguments.port or (80 if production else 8080),
-        https_port=arguments.https_port or (443 if production else 8443),
+        bind_address=(
+            arguments.bind
+            if arguments.bind is not None
+            else ("0.0.0.0" if production else "127.0.0.1")
+        ),
+        http_port=arguments.port if arguments.port is not None else (80 if production else 8080),
+        https_port=(
+            arguments.https_port
+            if arguments.https_port is not None
+            else (443 if production else 8443)
+        ),
+        scheme=arguments.scheme,
     )
     settings.validate()
     root = arguments.home.resolve() / settings.environment / settings.instance
     if root.exists():
         installation = Installation.load(root)
-        if installation.settings != settings or installation.source != source:
+        if not installation.settings.matches(settings) or installation.source != source:
             raise ValueError(
                 "This installation already exists with different settings. "
                 "Use its lifecycle commands."
@@ -51,9 +60,7 @@ def install(arguments: argparse.Namespace) -> None:
     compose.run("up", "-d", "--wait", "postgres", "redis", "rabbitmq")
     compose.run("run", "--rm", "--no-deps", "api", "python", "manage.py", "migrate", "--noinput")
     compose.start()
-    scheme = "https" if production else "http"
-    port = settings.https_port if production else settings.http_port
-    print(f"Open {scheme}://{settings.host}:{port}/setup and enter the single-use token:")
+    print(f"Open {settings.origin}/setup and enter the single-use token:")
     compose.run("exec", "-T", "api", "python", "manage.py", "owner_setup_token", "--if-needed")
     launcher.write(source)
 
@@ -109,6 +116,7 @@ def parser() -> argparse.ArgumentParser:
     setup = commands.add_parser("install")
     setup.add_argument("--source", type=Path, default=Path(__file__).resolve().parents[2])
     setup.add_argument("--host")
+    setup.add_argument("--scheme", choices=("http", "https"))
     setup.add_argument("--bind")
     setup.add_argument("--port", type=int)
     setup.add_argument("--https-port", type=int)

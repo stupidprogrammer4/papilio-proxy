@@ -1,14 +1,18 @@
 """Exercise the shipped CLI, real browser and PostgreSQL restore on owned resources."""
 
+import http.client
+import json
 import os
 import select
 import shutil
 import socket
+import ssl
 import subprocess
 import sys
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
+from urllib.request import urlopen
 from uuid import uuid4
 
 import pytest
@@ -82,19 +86,27 @@ def telegram_api(compose: Compose, instance: str) -> Iterator[tuple[str, str]]:
             process.stdout.close()
 
 
-def test_install_browser_backup_restore_and_restart_preserve_data(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("environment", "scheme"), [("test", "http"), ("production", "http"), ("sandbox", "https")]
+)
+def test_install_browser_backup_restore_and_restart_preserve_data(
+    tmp_path: Path, environment: str, scheme: str
+) -> None:
     home = tmp_path / "installation"
     instance = f"browser-{uuid4().hex[:10]}"
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        tls_port = listener.getsockname()[1]
     command = [
         sys.executable,
         str(PROJECT / "deployment/papilio.py"),
         "--home",
         str(home),
         "--environment",
-        "test",
+        environment,
         "--instance",
         instance,
     ]
@@ -109,6 +121,14 @@ def test_install_browser_backup_restore_and_restart_preserve_data(tmp_path: Path
                 str(PROJECT),
                 "--port",
                 str(port),
+                "--scheme",
+                scheme,
+                "--https-port",
+                str(tls_port),
+                "--bind",
+                "127.0.0.1",
+                "--host",
+                "papilio-http.test" if environment == "production" else "localhost",
                 "--allow-unverified-host",
                 "--command-path",
                 str(launcher),
@@ -117,8 +137,34 @@ def test_install_browser_backup_restore_and_restart_preserve_data(tmp_path: Path
             capture_output=True,
             timeout=900,
         )
-        installation = Installation.load(home / "test" / instance)
+        installation = Installation.load(home / environment / instance)
         compose = Compose(installation)
+        rendered = json.loads(compose.run("config", "--format", "json", capture=True).stdout)
+        assert len(rendered["services"]["gateway"]["ports"]) == (2 if scheme == "https" else 1)
+        if scheme == "https":
+            authority = compose.run(
+                "exec",
+                "-T",
+                "gateway",
+                "cat",
+                "/data/caddy/pki/authorities/local/root.crt",
+                capture=True,
+            ).stdout.decode()
+            context = ssl.create_default_context(cadata=authority)
+            with urlopen(
+                f"https://localhost:{tls_port}/health/live", context=context, timeout=10
+            ) as response:
+                assert response.status == 200
+            with closing(http.client.HTTPConnection("127.0.0.1", port, timeout=5)) as connection:
+                connection.request(
+                    "GET", "/login?next=%2Fbots", headers={"Host": f"localhost:{port}"}
+                )
+                response = connection.getresponse()
+                assert response.status in {301, 308}
+                assert (
+                    response.headers["Location"]
+                    == f"https://localhost:{tls_port}/login?next=%2Fbots"
+                )
         token = (
             compose.run(
                 "exec", "-T", "api", "python", "manage.py", "owner_setup_token", capture=True
@@ -126,8 +172,14 @@ def test_install_browser_backup_restore_and_restart_preserve_data(tmp_path: Path
             .stdout.decode()
             .strip()
         )
+        browser_host = "papilio-http.test" if environment == "production" else "127.0.0.1"
+        if scheme == "https":
+            browser_host = "localhost"
+        browser_port = tls_port if scheme == "https" else port
         browser_environment = os.environ | {
-            "PAPILIO_BROWSER_URL": f"http://127.0.0.1:{port}",
+            "PAPILIO_BROWSER_URL": f"{scheme}://{browser_host}:{browser_port}",
+            "PAPILIO_BROWSER_INSECURE_DOMAIN": str(environment == "production").lower(),
+            "PAPILIO_BROWSER_LOCAL_TLS": str(scheme == "https").lower(),
             "PAPILIO_SETUP_TOKEN": token,
             "PAPILIO_BROWSER_USERNAME": "browser-owner",
             "PAPILIO_BROWSER_PASSWORD": "isolated-browser-test-password-749!",
@@ -262,7 +314,7 @@ def test_install_browser_backup_restore_and_restart_preserve_data(tmp_path: Path
         )
         assert upgraded_state.stdout.strip() == b"synthetic-upgrade-passed"
     finally:
-        root = home / "test" / instance
+        root = home / environment / instance
         if (root / "installation.json").exists():
             installation = Installation.load(root)
         if installation is not None:
@@ -280,7 +332,7 @@ def test_install_browser_backup_restore_and_restart_preserve_data(tmp_path: Path
                     "python:3.13-slim-bookworm",
                     "python",
                     "-c",
-                    f"import shutil; shutil.rmtree('/owned/test/{instance}/state')",
+                    f"import shutil; shutil.rmtree('/owned/{environment}/{instance}/state')",
                 ],
                 check=True,
                 capture_output=True,

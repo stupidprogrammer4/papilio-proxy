@@ -43,15 +43,29 @@ sudo bash -c 'set -euo pipefail; apt-get update; apt-get install -y curl ca-cert
 ssh -L 8080:127.0.0.1:8080 user@server
 ```
 
-برای حالت production، دامنه را به سرور متصل و پورت‌های صدور گواهی را در دسترس کنید:
+نصاب منتشرشدهٔ alpha.1 در production از HTTPS استفاده می‌کند؛ دامنه را به سرور
+متصل و پورت‌های صدور گواهی را در دسترس کنید:
 
 ```sh
 sudo bash -c 'set -euo pipefail; apt-get update; apt-get install -y curl ca-certificates; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.1/install.sh | bash -s -- --environment production --host panel.example.com'
 ```
 
+**در main، استفاده از HTTPS در همهٔ محیط‌ها اختیاری است.** از پوشهٔ سورس main،
+کل سرویس‌های فعلی را با HTTP روی همین سرور نصب کنید:
+
+```sh
+sudo bash ./install.sh --source "$PWD" --environment production --host panel.example.com --scheme http
+```
+
+برای TLS خودکار Caddy، گزینهٔ `--scheme https` را انتخاب کنید. در HTTP می‌توان
+به‌جای دامنه، IPv4 سرور را به `--host` داد؛ فقط پورت HTTP انتخابی لازم است.
+آدرس راه‌اندازی، کوکی ورود و مبدأ CSRF مطابق همین انتخاب تنظیم می‌شوند.
+گزینهٔ تازهٔ `--scheme` در بستهٔ ثابت alpha.1 وجود ندارد. در صورت حذف آن، پیش‌فرض
+قبلی حفظ می‌شود: HTTPS برای production و HTTP برای محیط‌های دیگر.
+
 محیط‌های `dev`، `test`، `sandbox` و `production` داده، کلید، شبکهٔ Docker، صف و کش
 جدا دارند. نصب‌های اضافه با `--instance NAME` و پورت مجزا از `--port PORT` ساخته
-می‌شوند. production گزینهٔ `--https-port PORT` هم دارد.
+می‌شوند. برای HTTPS گزینهٔ `--https-port PORT` هم وجود دارد.
 [ماتریس آزمون نصب](docs/installation-matrix.md) مشخص می‌کند کدام ترکیب واقعاً اجرا
 شده؛ همهٔ نسخه‌ها، معماری‌ها و سیستم‌عامل‌ها هنوز تأیید نشده‌اند.
 اگر فرمان `papilio` متعلق به نصب دیگری باشد، نصاب فرمان مستقل

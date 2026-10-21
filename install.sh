@@ -9,6 +9,7 @@ papilio_home=/opt/papilio
 papilio_source=
 papilio_allow_unverified=false
 papilio_has_host=false
+papilio_has_scheme=false
 papilio_install_arguments=()
 while (($#)); do
     case "$1" in
@@ -21,12 +22,17 @@ while (($#)); do
             papilio_allow_unverified=true
             papilio_install_arguments+=(--allow-unverified-host)
             shift ;;
+        --scheme)
+            case "${2:?scheme required}" in http|https) ;; *) echo 'Choose http or https.' >&2; exit 2 ;; esac
+            papilio_has_scheme=true
+            papilio_install_arguments+=(--scheme "$2")
+            shift 2 ;;
         --host|--bind|--port|--https-port)
             if [[ "$1" == --host ]]; then papilio_has_host=true; fi
             papilio_install_arguments+=("$1" "${2:?value required}")
             shift 2 ;;
         --help)
-            printf '%s\n' 'Usage: install.sh --environment dev|test|sandbox|production --host DOMAIN [--instance NAME] [--port PORT] [--home PATH]'
+            printf '%s\n' 'Usage: install.sh --environment dev|test|sandbox|production --host DOMAIN_OR_IP [--scheme http|https] [--instance NAME] [--port PORT] [--home PATH]'
             exit 0 ;;
         *) printf 'Unknown installer option: %s\n' "$1" >&2; exit 2 ;;
     esac
@@ -36,10 +42,16 @@ done
 case "$papilio_environment" in dev|test|sandbox|production) ;; *) echo 'Invalid environment.' >&2; exit 2 ;; esac
 if [[ "$papilio_environment" == production ]] && ! $papilio_has_host; then
     if [[ -r /dev/tty ]]; then
-        read -r -p 'Public domain pointing to this server: ' papilio_domain </dev/tty
+        read -r -p 'Domain or IPv4 address of this server: ' papilio_domain </dev/tty
         papilio_install_arguments+=(--host "$papilio_domain")
+        if ! $papilio_has_scheme; then
+            read -r -p 'Web access (http/https) [https]: ' papilio_scheme </dev/tty
+            papilio_scheme=${papilio_scheme:-https}
+            case "$papilio_scheme" in http|https) ;; *) echo 'Choose http or https.' >&2; exit 2 ;; esac
+            papilio_install_arguments+=(--scheme "$papilio_scheme")
+        fi
     else
-        echo 'Production requires --host DOMAIN.' >&2
+        echo 'Production requires --host DOMAIN_OR_IP.' >&2
         exit 2
     fi
 fi
@@ -118,10 +130,11 @@ parser.add_argument("--instance")
 parser.add_argument("--port", type=int)
 parser.add_argument("--https-port", type=int)
 parser.add_argument("--host")
+parser.add_argument("--scheme", choices=("http", "https"))
 parser.add_argument("--bind")
 parser.add_argument("--allow-unverified-host", action="store_true")
 args = parser.parse_args()
-settings = InstallSettings(environment=args.environment, http_port=args.port or (80 if args.environment == "production" else 8080), https_port=args.https_port or (443 if args.environment == "production" else 8443), bind_address=args.bind or ("0.0.0.0" if args.environment == "production" else "127.0.0.1"))
+settings = InstallSettings(environment=args.environment, instance=args.instance, host=args.host or "localhost", scheme=args.scheme, http_port=args.port if args.port is not None else (80 if args.environment == "production" else 8080), https_port=args.https_port if args.https_port is not None else (443 if args.environment == "production" else 8443), bind_address=args.bind if args.bind is not None else ("0.0.0.0" if args.environment == "production" else "127.0.0.1"))
 settings.validate()
 if not (args.home / args.environment / args.instance / "installation.json").exists():
     check_ports(settings)

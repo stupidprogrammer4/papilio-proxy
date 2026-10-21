@@ -1,5 +1,22 @@
 # Foundation user guide
 
+## Select HTTP or HTTPS on main
+
+The current source installer accepts `--scheme http` or `--scheme https` with any
+of `dev`, `test`, `sandbox` and `production`. For example, from a main checkout:
+
+```sh
+sudo bash ./install.sh --source "$PWD" --environment production --host panel.example.com --scheme http
+```
+
+All current services run together on this server. HTTP uses the selected `--port`
+and does not publish a TLS listener or redirect to HTTPS. For HTTPS, choose
+`--scheme https`, point the domain at the server and provide certificate challenge
+reachability; `--https-port` selects the public TLS port. Web transport selection
+does not change the node agent's separate mTLS contract. Existing installations
+without a recorded scheme retain their original behavior. This flag is newer
+than the published alpha.1 installer.
+
 ## Create the owner
 
 1. Run the installer from the README.

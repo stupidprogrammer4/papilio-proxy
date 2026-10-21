@@ -34,6 +34,16 @@ def boolean(name: str, default: bool) -> bool:
     return raw in {"true", "1"}
 
 
+def transport_scheme(environment: str) -> str:
+    """Select browser transport independently of the deployment environment."""
+    scheme = os.environ.get(
+        "PAPILIO_TRANSPORT_SCHEME", "https" if environment == "production" else "http"
+    )
+    if scheme not in {"http", "https"}:
+        raise ImproperlyConfigured("PAPILIO_TRANSPORT_SCHEME must be http or https.")
+    return scheme
+
+
 def deployment_identity() -> tuple[str, str]:
     """Return the validated environment and instance namespace."""
     environment = os.environ.get("PAPILIO_ENV", "dev")

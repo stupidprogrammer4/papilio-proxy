@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { v4 as newRequestKey } from "uuid";
 import { onMounted, onBeforeUnmount, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { request, query, type BotDefaults, type BotDraft, type BotPairingGrant, type ManagedBot, type ManagedBotPage } from "@papilio/api";
@@ -19,7 +20,7 @@ const busy = ref(false);
 const error = ref("");
 const notice = ref("");
 const lifetime = new AbortController();
-let requestKey = crypto.randomUUID();
+let requestKey = newRequestKey();
 onBeforeUnmount(() => lifetime.abort());
 
 function edit(bot: ManagedBot): void {
@@ -63,7 +64,7 @@ async function create(): Promise<void> {
   if (!draft) return;
   await perform(async () => {
     const result = await request<ManagedBot>("/v1/bots", "POST", { ...draft, request_key: requestKey }, { signal: lifetime.signal });
-    requestKey = crypto.randomUUID();
+    requestKey = newRequestKey();
     selected.value = result;
     edit(result);
     draft.token = "";

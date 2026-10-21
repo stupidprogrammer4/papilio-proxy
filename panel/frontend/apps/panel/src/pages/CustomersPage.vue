@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { v4 as newRequestKey } from "uuid";
 import Modal from "@papilio/ui/Modal.vue";
 import CustomerConfigurations from "../components/CustomerConfigurations.vue";
 import PlanConfigurations from "../components/PlanConfigurations.vue";
@@ -81,7 +82,7 @@ async function topup(): Promise<void> {
 async function purchase(): Promise<void> {
   if (!selected.value || !chosenPlan.value) return;
   busy.value = true; error.value = ""; notice.value = "";
-  if (!purchaseKey.value) purchaseKey.value = crypto.randomUUID();
+  if (!purchaseKey.value) purchaseKey.value = newRequestKey();
   try {
     const result = await item<Subscription>("/v1/admin/subscriptions", "POST", { purchase_key: purchaseKey.value, customer_id: selected.value.id, plan_id: chosenPlan.value.id, expected_price_rial: chosenPlan.value.price_rial, auto_renew: autoRenew.value });
     wallet.value = (await item<WalletBalance>(`/v1/admin/payments/wallets/${selected.value.id}`)).balance_rial;

@@ -182,6 +182,10 @@ def restore(installation: Installation, source: Path, safety_backup: Path) -> No
                 "PAPILIO_SITE_ADDRESS",
                 "PAPILIO_ALLOWED_HOSTS",
                 "PAPILIO_TRUSTED_ORIGINS",
+                "PAPILIO_TRANSPORT_SCHEME",
+                "PAPILIO_SESSION_COOKIE_SECURE",
+                "PAPILIO_CSRF_COOKIE_SECURE",
+                "PAPILIO_SECURE_SSL_REDIRECT",
             }
         }
         restored_values = previous_values | retained

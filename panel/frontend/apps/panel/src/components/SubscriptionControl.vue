@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { v4 as newRequestKey } from "uuid";
 import { onMounted, ref, watch } from "vue";
 import { useAuth } from "@papilio/auth";
 import { item, query, request, type Page, type Subscription, type SubscriptionControlRecord } from "@papilio/api";
@@ -23,7 +24,7 @@ async function act(operation: "suspension" | "resumption"): Promise<void> {
   const id = props.subscription.id;
   if (busy.value || !auth.can("subscriptions", "update") || reason.value.trim().length < 3) return;
   if(operation === "suspension" && !clock.value) return;
-  if(!attemptKey.value) attemptKey.value=crypto.randomUUID();
+  if(!attemptKey.value) attemptKey.value=newRequestKey();
   busy.value = true; error.value = ""; notice.value = "";
   try { const result = await item<Subscription>(`/v1/admin/subscriptions/${id}/${operation}`, "PUT", { request_key: attemptKey.value, reason: reason.value.trim(), ...(operation === "suspension" ? { clock: clock.value } : {}) });
     if (props.subscription.id !== id) return;

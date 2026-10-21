@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { v4 as newRequestKey } from "uuid";
 import { onMounted, onBeforeUnmount, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { request } from "@papilio/api";
@@ -52,7 +53,7 @@ async function probe(kind: "io" | "cpu"): Promise<void> {
   busy.value = true;
   error.value = "";
   try {
-    operation.value = await request<DiagnosticOperation>("/v1/system/probes", "POST", { kind, request_key: crypto.randomUUID() }, { signal: lifetime.signal });
+    operation.value = await request<DiagnosticOperation>("/v1/system/probes", "POST", { kind, request_key: newRequestKey() }, { signal: lifetime.signal });
   } catch (cause) {
     if (!lifetime.signal.aborted) error.value = cause instanceof Error ? cause.message : t("login.failed");
   } finally {
