@@ -1,0 +1,15 @@
+{
+  "deployment_id": "86d26585-29d7-4faf-b426-eb01d050ca74",
+  "node_id": "2d2756bd-c48e-4498-b0f7-4425f72f0e7b",
+  "listen_address": "127.0.0.1:9443",
+  "xray_api_address": "127.0.0.1:10085",
+  "tls_certificate_file": "server.crt",
+  "tls_key_file": "server.key",
+  "client_ca_file": "client-ca.crt",
+  "request_timeout_seconds": 15,
+  "read_header_timeout_seconds": 5,
+  "idle_timeout_seconds": 60,
+  "shutdown_timeout_seconds": 20,
+  "max_body_bytes": 1048576,
+  "max_grpc_reply_bytes": 16777216
+}

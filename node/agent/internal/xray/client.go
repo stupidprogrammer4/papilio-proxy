@@ -28,7 +28,11 @@ type Client struct {
 }
 
 // Dial accepts loopback IPs only; the agent's remote control channel uses mTLS.
-func Dial(address string) (*Client, error) {
+func Dial(options ConnectionOptions) (*Client, error) {
+	address := options.Address
+	if options.MaxReplyBytes <= 0 {
+		return nil, ErrInvalidInput
+	}
 	host, port, err := net.SplitHostPort(address)
 	if err != nil {
 		return nil, ErrInvalidInput
@@ -38,7 +42,7 @@ func Dial(address string) (*Client, error) {
 	if err != nil || portNumber < 1 || portNumber > 65535 || ip == nil || !ip.IsLoopback() {
 		return nil, ErrInvalidInput
 	}
-	connection, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	connection, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(options.MaxReplyBytes)))
 	if err != nil {
 		return nil, ErrCoreUnavailable
 	}
@@ -55,6 +59,9 @@ func coreError(ctx context.Context, err error) error {
 	}
 	if status.Code(err) == codes.Unavailable {
 		return ErrCoreUnavailable
+	}
+	if status.Code(err) == codes.ResourceExhausted {
+		return ErrCoreResourceLimit
 	}
 	return ErrCoreRejected
 }
@@ -157,11 +164,11 @@ func (client *Client) Traffic(ctx context.Context) (TrafficSnapshot, error) {
 	if err != nil {
 		return TrafficSnapshot{}, coreError(ctx, err)
 	}
-	system, err := client.statistics.GetSysStats(ctx, &statscommand.SysStatsRequest{})
+	system, err := client.Status(ctx)
 	if err != nil {
-		return TrafficSnapshot{}, coreError(ctx, err)
+		return TrafficSnapshot{}, err
 	}
-	snapshot := TrafficSnapshot{Counters: make([]TrafficCounter, 0, len(result.Stat)), UptimeSeconds: system.Uptime}
+	snapshot := TrafficSnapshot{Counters: make([]TrafficCounter, 0, len(result.Stat)), UptimeSeconds: system.UptimeSeconds}
 	for _, stat := range result.Stat {
 		parts := strings.Split(stat.Name, ">>>")
 		if len(parts) != 4 || parts[0] != "user" || parts[2] != "traffic" {
@@ -174,4 +181,12 @@ func (client *Client) Traffic(ctx context.Context) (TrafficSnapshot, error) {
 		snapshot.Counters = append(snapshot.Counters, TrafficCounter{Email: parts[1], Direction: direction, Bytes: stat.Value})
 	}
 	return snapshot, nil
+}
+
+func (client *Client) Status(ctx context.Context) (RuntimeStatus, error) {
+	system, err := client.statistics.GetSysStats(ctx, &statscommand.SysStatsRequest{})
+	if err != nil {
+		return RuntimeStatus{}, coreError(ctx, err)
+	}
+	return RuntimeStatus{UptimeSeconds: system.Uptime}, nil
 }

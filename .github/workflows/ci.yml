@@ -40,7 +40,7 @@ jobs:
           target.chmod(0o755)
           PY
       - run: go mod verify
-      - run: test -z "$(gofmt -l internal)"
+      - run: test -z "$(gofmt -l cmd internal)"
       - run: go vet ./...
       - run: go test -race -count=1 ./...
 

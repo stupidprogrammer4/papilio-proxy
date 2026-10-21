@@ -68,3 +68,25 @@ Core-common identity/lifecycle will be separate from per-core settings and
 credentials. Capabilities require real runtime/version probes. Go/mTLS node
 management, Timescale telemetry, invoice policy snapshots and offline bot intake
 are specified targets, not delivered implementations in this release.
+
+## Network implementation on main
+
+The current Go executable binds a node/deployment identity to mutual TLS and
+adapts node-scoped HTTP requests to the official local Xray gRPC API. Its server
+certificate carries the node's `/agent` URI, and the control client carries that
+same node's `/control` URI. Native X.509 verification also runs per request so
+an existing connection cannot extend an expired control credential's lifetime.
+
+```mermaid
+flowchart LR
+  Control[Authorized control client] -->|TLS 1.3| Agent[Go node agent]
+  Agent -->|Loopback gRPC| Xray[Xray core]
+  Client[Actual Xray client] -->|VLESS in local tests| Xray
+  Xray --> Origin[Isolated HTTP origin]
+  Worker[Django provisioning worker] -. Planned integration .-> Agent
+```
+
+Tests exercise the complete solid-arrow path and the actual compiled agent.
+Core process supervision, enrollment/rotation, Django provisioning, durable desired
+state and public VPN transport remain pending. Diagnostic jobs do not stand in
+for these capabilities. [Agent contract and limits](../node/agent/README.md).

@@ -7,8 +7,14 @@ var (
 	ErrInvalidInput       = errors.New("invalid Xray control input")
 	ErrCoreRejected       = errors.New("the Xray core rejected the operation")
 	ErrCoreUnavailable    = errors.New("the local Xray API is unavailable")
+	ErrCoreResourceLimit  = errors.New("the core API reached a configured resource limit")
 	ErrUnsupportedAccount = errors.New("the account uses an unsupported Xray type")
 )
+
+type ConnectionOptions struct {
+	Address       string
+	MaxReplyBytes int
+}
 
 type UserIdentity struct {
 	InboundTag string `json:"inbound_tag"`
@@ -40,4 +46,8 @@ type TrafficCounter struct {
 type TrafficSnapshot struct {
 	Counters      []TrafficCounter `json:"counters"`
 	UptimeSeconds uint32           `json:"uptime_seconds"`
+}
+
+type RuntimeStatus struct {
+	UptimeSeconds uint32 `json:"uptime_seconds"`
 }

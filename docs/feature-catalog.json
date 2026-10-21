@@ -271,7 +271,7 @@
       "title": "Go agent and mutual TLS",
       "owner": "nodes",
       "stage": "first",
-      "status": "planned",
+      "status": "in_progress",
       "completed_in": null,
       "expected_behavior": "An untrusted, expired or wrong-node certificate cannot execute a core operation.",
       "configuration": {
@@ -284,11 +284,16 @@
         "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
       },
       "acceptance": "An untrusted, expired or wrong-node certificate cannot execute a core operation.",
-      "evidence": [],
+      "evidence": [
+        "node/agent/internal/control/server_integration_test.go",
+        "node/agent/internal/control/deadline_linux_test.go",
+        "node/agent/cmd/papilio-agent/main_integration_test.go"
+      ],
       "sources": [
         "OWNER"
       ],
-      "guide": null
+      "guide": null,
+      "verified_scope": "Runnable agent and actual mutual TLS -> native Xray -> client traffic; node/deployment certificate binding, existing-connection expiry and denied-write state. Enrollment, process supervision, panel setup and durable provisioning remain pending."
     },
     {
       "id": "FLOW-XRAY",
@@ -318,7 +323,7 @@
         "PG"
       ],
       "guide": null,
-      "verified_scope": "Go adapter -> actual local Xray gRPC -> actual Xray client -> isolated HTTP origin; no mTLS agent or Django provisioning path yet. Removal denies new connections; existing-session termination is unverified."
+      "verified_scope": "Go executable -> mutual TLS HTTP -> actual local Xray gRPC -> actual client -> isolated HTTP origin. No Django provisioning or public VPN TLS transport yet. Removal denies new connections; existing-session termination is unverified."
     },
     {
       "id": "FLOW-SUB",

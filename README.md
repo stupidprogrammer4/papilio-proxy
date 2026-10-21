@@ -2,8 +2,8 @@
 
 [فارسی](README.fa.md) · [Feature status](TODO.md) · [User guide](docs/user-guide.en.md)
 
-An independent MIT panel being rebuilt with Django, Vue and a future Go node
-agent. The staged target includes core/node management, subscriptions, sales,
+An independent MIT panel being rebuilt with Django, Vue and a Go node agent
+under construction. The staged target includes core/node management, subscriptions, sales,
 payments, Telegram bots and the preserved Android bridge.
 
 ## Current release
@@ -16,6 +16,11 @@ editable schedules, isolated installation profiles and a backup/restore CLI.
 Xray provisioning, subscriptions, sales, connected bots and Android payment
 matching are subsequent deliveries. Existing client source is preserved; its
 presence does not establish backend feature support.
+
+On main, the runnable Go/mTLS agent now controls actual Xray and is tested through
+real client traffic. Enrollment, process management, panel integration and sales
+remain in progress. This work is not included in the foundation release above.
+See the [agent's current scope](node/agent/README.md).
 
 ## Install
 

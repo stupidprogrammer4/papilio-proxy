@@ -57,5 +57,9 @@ cancellation. One Linux fault test pauses its own core to verify queued request
 cancellation. No internal gRPC implementation is mocked.
 
 Commands and limitations are in [the adapter guide](../node/agent/README.md).
-This code is newer than the foundation release. It does not establish mTLS node
-enrollment, Django provisioning, quota enforcement or a completed bot purchase.
+This code is newer than the foundation release. Additional tests exercise actual
+mutual TLS, node/deployment-bound certificates, expiry on a reused connection,
+body/reply limits and paused-core timeout/recovery. An actual race-instrumented
+agent executable loads selected native credentials, provisions a traffic-carrying
+user and shuts down. This does not establish node enrollment, core supervision,
+Django provisioning, public VPN transport, quotas or a completed bot purchase.
