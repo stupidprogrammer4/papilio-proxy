@@ -1,0 +1,2452 @@
+{
+  "format": 1,
+  "baseline": "Approved staged Django implementation; features are independently implemented.",
+  "reference_coverage": "Reconciliation remains open until each pinned reference capability is accounted for. Mirza Pro acceptance uses the approved owner list; unseen private behavior is not claimed.",
+  "references": {
+    "PG": {
+      "name": "PasarGuard",
+      "version": "5.4.1",
+      "url": "https://github.com/PasarGuard/panel/tree/v5.4.1"
+    },
+    "MIRZA": {
+      "name": "Mirza",
+      "version": "0.8",
+      "url": "https://github.com/mahdiMGF2/mirzabot/releases/tag/0.8"
+    },
+    "CLOCK": {
+      "name": "PGClockBot",
+      "version": "0.4.21",
+      "url": "https://github.com/Mrclocks/PGClockBot/releases/tag/v0.4.21"
+    },
+    "REBECCA": {
+      "name": "Rebecca",
+      "version": "1.8.1",
+      "url": "https://github.com/rebeccapanel/Rebecca/tree/v1.8.1"
+    },
+    "3X": {
+      "name": "3x-ui",
+      "version": "3.10.2",
+      "url": "https://github.com/MHSanaei/3x-ui/tree/v3.10.2"
+    },
+    "OWNER": {
+      "name": "Approved Papilio requirements",
+      "version": "2026-10-21",
+      "url": null
+    }
+  },
+  "features": [
+    {
+      "id": "BASE-SETUP",
+      "title": "Single-use first-owner setup",
+      "owner": "identity",
+      "stage": "foundation",
+      "status": "implemented",
+      "completed_in": null,
+      "expected_behavior": "Two concurrent valid grants create exactly one owner; expired and invalid grants leave no owner.",
+      "configuration": {
+        "owner": "identity",
+        "parameters": [
+          "token lifetime",
+          "password policy"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Two concurrent valid grants create exactly one owner; expired and invalid grants leave no owner.",
+      "evidence": [
+        "panel/backend/tests/test_owner_setup.py"
+      ],
+      "sources": [
+        "OWNER",
+        "PG"
+      ],
+      "guide": "docs/user-guide.en.md"
+    },
+    {
+      "id": "BASE-AUTH",
+      "title": "Session login, CSRF and logout",
+      "owner": "identity",
+      "stage": "foundation",
+      "status": "implemented",
+      "completed_in": null,
+      "expected_behavior": "HTTP rejects missing CSRF and non-staff login; logout revokes the session.",
+      "configuration": {
+        "owner": "identity",
+        "parameters": [
+          "session duration",
+          "cookie security",
+          "authentication rate"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "HTTP rejects missing CSRF and non-staff login; logout revokes the session.",
+      "evidence": [
+        "panel/backend/tests/test_owner_setup.py"
+      ],
+      "sources": [
+        "OWNER"
+      ],
+      "guide": "docs/user-guide.en.md"
+    },
+    {
+      "id": "BASE-OUTBOX",
+      "title": "Durable queued operations",
+      "owner": "jobs",
+      "stage": "foundation",
+      "status": "implemented",
+      "completed_in": null,
+      "expected_behavior": "A request survives RabbitMQ outage, resumes after recovery and produces one committed result on replay.",
+      "configuration": {
+        "owner": "jobs",
+        "parameters": [
+          "delivery interval",
+          "batch size",
+          "redelivery delay",
+          "retry budget"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "A request survives RabbitMQ outage, resumes after recovery and produces one committed result on replay.",
+      "evidence": [
+        "panel/backend/tests/test_runtime.py",
+        "panel/backend/tests/test_job_contract.py"
+      ],
+      "sources": [
+        "OWNER"
+      ],
+      "guide": "docs/user-guide.en.md"
+    },
+    {
+      "id": "BASE-WORKERS",
+      "title": "Separate I/O and CPU workers",
+      "owner": "jobs",
+      "stage": "foundation",
+      "status": "implemented",
+      "completed_in": null,
+      "expected_behavior": "Real prefork processes on their own queues persist independent results and fresh heartbeat observations.",
+      "configuration": {
+        "owner": "jobs",
+        "parameters": [
+          "concurrency",
+          "task deadlines",
+          "heartbeat interval",
+          "freshness"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Real prefork processes on their own queues persist independent results and fresh heartbeat observations.",
+      "evidence": [
+        "panel/backend/tests/test_runtime.py"
+      ],
+      "sources": [
+        "OWNER"
+      ],
+      "guide": "docs/user-guide.en.md"
+    },
+    {
+      "id": "BASE-SCHEDULES",
+      "title": "Editable database schedules",
+      "owner": "jobs",
+      "stage": "foundation",
+      "status": "implemented",
+      "completed_in": null,
+      "expected_behavior": "An owner edit survives migrations and a concurrent Beat run; stale edits are rejected.",
+      "configuration": {
+        "owner": "jobs",
+        "parameters": [
+          "enabled state",
+          "interval seconds"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "An owner edit survives migrations and a concurrent Beat run; stale edits are rejected.",
+      "evidence": [
+        "panel/backend/tests/test_schedules.py"
+      ],
+      "sources": [
+        "OWNER"
+      ],
+      "guide": "docs/user-guide.en.md"
+    },
+    {
+      "id": "BASE-INSTALL",
+      "title": "Isolated one-command installation",
+      "owner": "installation",
+      "stage": "foundation",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "A clean candidate host installs dependencies and all services; conflicting ports are rejected.",
+      "configuration": {
+        "owner": "installation",
+        "parameters": [
+          "environment",
+          "instance",
+          "domain",
+          "bind address",
+          "ports"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "A clean candidate host installs dependencies and all services; conflicting ports are rejected.",
+      "evidence": [],
+      "sources": [
+        "OWNER"
+      ],
+      "guide": "docs/user-guide.en.md"
+    },
+    {
+      "id": "BASE-LIFECYCLE",
+      "title": "Lifecycle and diagnostics CLI",
+      "owner": "installation",
+      "stage": "foundation",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Stop/start retains owner data; doctor checks real DB/cache/worker observations.",
+      "configuration": {
+        "owner": "installation",
+        "parameters": [
+          "shutdown grace",
+          "readiness timeout",
+          "log tail"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Stop/start retains owner data; doctor checks real DB/cache/worker observations.",
+      "evidence": [],
+      "sources": [
+        "OWNER",
+        "CLOCK"
+      ],
+      "guide": "docs/user-guide.en.md"
+    },
+    {
+      "id": "BASE-BACKUP",
+      "title": "Compressed CLI backup and restore",
+      "owner": "installation",
+      "stage": "foundation",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "A backup restores committed data and signing key, retains destination infrastructure identity and rejects unsafe archives.",
+      "configuration": {
+        "owner": "installation",
+        "parameters": [
+          "destination",
+          "instance",
+          "environment"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "A backup restores committed data and signing key, retains destination infrastructure identity and rejects unsafe archives.",
+      "evidence": [],
+      "sources": [
+        "OWNER",
+        "CLOCK"
+      ],
+      "guide": "docs/user-guide.en.md"
+    },
+    {
+      "id": "FLOW-AGENT",
+      "title": "Go agent and mutual TLS",
+      "owner": "nodes",
+      "stage": "first",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "An untrusted, expired or wrong-node certificate cannot execute a core operation.",
+      "configuration": {
+        "owner": "nodes",
+        "parameters": [
+          "trust roots",
+          "certificate lifetime",
+          "allowed endpoints"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "An untrusted, expired or wrong-node certificate cannot execute a core operation.",
+      "evidence": [],
+      "sources": [
+        "OWNER"
+      ],
+      "guide": null
+    },
+    {
+      "id": "FLOW-XRAY",
+      "title": "Actual Xray provisioning",
+      "owner": "cores",
+      "stage": "first",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "A newly provisioned account connects with a real client and transfers traffic; revocation prevents new connections.",
+      "configuration": {
+        "owner": "cores",
+        "parameters": [
+          "protocol",
+          "inbound",
+          "transport",
+          "credentials"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "A newly provisioned account connects with a real client and transfers traffic; revocation prevents new connections.",
+      "evidence": [],
+      "sources": [
+        "OWNER",
+        "PG"
+      ],
+      "guide": null
+    },
+    {
+      "id": "FLOW-SUB",
+      "title": "User and subscription delivery",
+      "owner": "subscriptions",
+      "stage": "first",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "A created user receives a valid subscription containing only its permitted active service.",
+      "configuration": {
+        "owner": "subscriptions",
+        "parameters": [
+          "quota",
+          "expiry",
+          "delivery format"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "A created user receives a valid subscription containing only its permitted active service.",
+      "evidence": [],
+      "sources": [
+        "OWNER",
+        "PG"
+      ],
+      "guide": null
+    },
+    {
+      "id": "FLOW-PRODUCT",
+      "title": "Products shared by panel and bot",
+      "owner": "catalog",
+      "stage": "first",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "The same published product terms are shown and purchased through both adapters.",
+      "configuration": {
+        "owner": "catalog",
+        "parameters": [
+          "price",
+          "currency",
+          "volume",
+          "duration",
+          "availability"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "The same published product terms are shown and purchased through both adapters.",
+      "evidence": [],
+      "sources": [
+        "OWNER",
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "FLOW-WALLET",
+      "title": "Exact wallet ledger",
+      "owner": "wallets",
+      "stage": "first",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Concurrent top-ups or purchases preserve integer minor-unit balances and one effect per operation.",
+      "configuration": {
+        "owner": "wallets",
+        "parameters": [
+          "currency",
+          "credit policy"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Concurrent top-ups or purchases preserve integer minor-unit balances and one effect per operation.",
+      "evidence": [],
+      "sources": [
+        "OWNER",
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "FLOW-MANUAL",
+      "title": "Receipt and manual settlement",
+      "owner": "payments",
+      "stage": "first",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "An admin reviews an unsettled receipt in every payment mode; repeated approval credits only the base amount once.",
+      "configuration": {
+        "owner": "payments",
+        "parameters": [
+          "manual/automatic/both",
+          "receiving destination"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "An admin reviews an unsettled receipt in every payment mode; repeated approval credits only the base amount once.",
+      "evidence": [],
+      "sources": [
+        "OWNER",
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "FLOW-IDENTIFIER",
+      "title": "Signed random payment adjustment",
+      "owner": "payments",
+      "stage": "first",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Positive and negative identifiers produce unique positive live payable amounts; signed adjustment is recorded separately.",
+      "configuration": {
+        "owner": "payments",
+        "parameters": [
+          "identifier digits",
+          "reservation lifetime",
+          "invoice expiry"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Positive and negative identifiers produce unique positive live payable amounts; signed adjustment is recorded separately.",
+      "evidence": [],
+      "sources": [
+        "OWNER"
+      ],
+      "guide": null
+    },
+    {
+      "id": "FLOW-CHECKOUT",
+      "title": "Purchase through service delivery",
+      "owner": "orders",
+      "stage": "first",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "A paid order provisions the purchased service; broker outage cannot lose the order or financial event.",
+      "configuration": {
+        "owner": "orders",
+        "parameters": [
+          "product availability",
+          "delivery retry policy"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "A paid order provisions the purchased service; broker outage cannot lose the order or financial event.",
+      "evidence": [],
+      "sources": [
+        "OWNER",
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "FLOW-BOT",
+      "title": "Connected Telegram purchase bot",
+      "owner": "bot",
+      "stage": "first",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "A real Telegram update reaches the shared module and delivers the purchased subscription to its owner.",
+      "configuration": {
+        "owner": "bot",
+        "parameters": [
+          "token",
+          "webhook",
+          "language",
+          "admin destination"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "A real Telegram update reaches the shared module and delivers the purchased subscription to its owner.",
+      "evidence": [],
+      "sources": [
+        "OWNER",
+        "MIRZA",
+        "CLOCK"
+      ],
+      "guide": null
+    },
+    {
+      "id": "PG-USER-LIFECYCLE",
+      "title": "Complete user lifecycle",
+      "owner": "subscriptions",
+      "stage": "phase1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Create, search, edit, suspend, resume, delete, revoke and transfer users with authoritative owner checks.",
+      "configuration": {
+        "owner": "subscriptions",
+        "parameters": [
+          "status",
+          "expiry",
+          "quota",
+          "owner"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Create, search, edit, suspend, resume, delete, revoke and transfer users with authoritative owner checks.",
+      "evidence": [],
+      "sources": [
+        "PG"
+      ],
+      "guide": null
+    },
+    {
+      "id": "PG-ON-HOLD",
+      "title": "Activation on first use and on-hold",
+      "owner": "subscriptions",
+      "stage": "phase1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "The selected activation policy starts the service clock at the approved event and handles expiry boundaries.",
+      "configuration": {
+        "owner": "subscriptions",
+        "parameters": [
+          "activation policy",
+          "on-hold deadline"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "The selected activation policy starts the service clock at the approved event and handles expiry boundaries.",
+      "evidence": [],
+      "sources": [
+        "PG"
+      ],
+      "guide": null
+    },
+    {
+      "id": "PG-USAGE-RESET",
+      "title": "Usage reset strategies",
+      "owner": "subscriptions",
+      "stage": "phase1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Approved periodic and manual reset policies produce correct live entitlement and recorded usage.",
+      "configuration": {
+        "owner": "subscriptions",
+        "parameters": [
+          "reset strategy",
+          "period",
+          "timezone"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Approved periodic and manual reset policies produce correct live entitlement and recorded usage.",
+      "evidence": [],
+      "sources": [
+        "PG"
+      ],
+      "guide": null
+    },
+    {
+      "id": "PG-NEXT-PLAN",
+      "title": "Scheduled next plan",
+      "owner": "subscriptions",
+      "stage": "phase1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "A queued next plan applies once at its selected transition and preserves its commercial snapshot.",
+      "configuration": {
+        "owner": "subscriptions",
+        "parameters": [
+          "transition rule",
+          "next plan"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "A queued next plan applies once at its selected transition and preserves its commercial snapshot.",
+      "evidence": [],
+      "sources": [
+        "PG"
+      ],
+      "guide": null
+    },
+    {
+      "id": "PG-BULK",
+      "title": "Independent single and batch user operations",
+      "owner": "subscriptions",
+      "stage": "phase1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Mixed batches identify every result; DB operations are set-based and live-core fan-out is bounded and cancellable.",
+      "configuration": {
+        "owner": "subscriptions",
+        "parameters": [
+          "batch bound",
+          "fan-out concurrency",
+          "replay policy"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Mixed batches identify every result; DB operations are set-based and live-core fan-out is bounded and cancellable.",
+      "evidence": [],
+      "sources": [
+        "PG",
+        "OWNER"
+      ],
+      "guide": null
+    },
+    {
+      "id": "PG-ADMINS",
+      "title": "Administrators and roles",
+      "owner": "identity",
+      "stage": "phase1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Permissions and delegated limits apply through HTTP, bot and worker entrypoints, including cross-owner attempts.",
+      "configuration": {
+        "owner": "identity",
+        "parameters": [
+          "role grants",
+          "quota",
+          "delegation scope"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Permissions and delegated limits apply through HTTP, bot and worker entrypoints, including cross-owner attempts.",
+      "evidence": [],
+      "sources": [
+        "PG",
+        "CLOCK"
+      ],
+      "guide": null
+    },
+    {
+      "id": "PG-API-KEYS",
+      "title": "API key lifecycle",
+      "owner": "identity",
+      "stage": "phase1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Create, rotate and revoke keys; expired or revoked credentials cannot read or mutate records.",
+      "configuration": {
+        "owner": "identity",
+        "parameters": [
+          "scopes",
+          "expiry",
+          "rotation"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Create, rotate and revoke keys; expired or revoked credentials cannot read or mutate records.",
+      "evidence": [],
+      "sources": [
+        "PG"
+      ],
+      "guide": null
+    },
+    {
+      "id": "PG-GROUPS",
+      "title": "Inbound and user groups",
+      "owner": "groups",
+      "stage": "phase1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Group memberships determine eligible service delivery without exposing another owner's records.",
+      "configuration": {
+        "owner": "groups",
+        "parameters": [
+          "membership",
+          "inbound selection",
+          "ordering"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Group memberships determine eligible service delivery without exposing another owner's records.",
+      "evidence": [],
+      "sources": [
+        "PG"
+      ],
+      "guide": null
+    },
+    {
+      "id": "PG-HOSTS",
+      "title": "Hosts and group-specific overrides",
+      "owner": "hosts",
+      "stage": "phase1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Each group receives its allowed address, port and transport overrides without changing unrelated groups.",
+      "configuration": {
+        "owner": "hosts",
+        "parameters": [
+          "address",
+          "port",
+          "SNI",
+          "path",
+          "group overrides"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Each group receives its allowed address, port and transport overrides without changing unrelated groups.",
+      "evidence": [],
+      "sources": [
+        "PG",
+        "OWNER"
+      ],
+      "guide": null
+    },
+    {
+      "id": "PG-USER-TEMPLATES",
+      "title": "User creation templates",
+      "owner": "templates",
+      "stage": "phase1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Create/update/apply templates through panel and bot with allowed field and permission validation.",
+      "configuration": {
+        "owner": "templates",
+        "parameters": [
+          "quota",
+          "duration",
+          "groups",
+          "editable fields"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Create/update/apply templates through panel and bot with allowed field and permission validation.",
+      "evidence": [],
+      "sources": [
+        "PG",
+        "CLOCK"
+      ],
+      "guide": null
+    },
+    {
+      "id": "PG-SUB-TEMPLATES",
+      "title": "Client and subscription templates",
+      "owner": "templates",
+      "stage": "phase1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "The selected client/version gets a valid independently parsed subscription output.",
+      "configuration": {
+        "owner": "templates",
+        "parameters": [
+          "client detection",
+          "output template",
+          "branding"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "The selected client/version gets a valid independently parsed subscription output.",
+      "evidence": [],
+      "sources": [
+        "PG"
+      ],
+      "guide": null
+    },
+    {
+      "id": "PG-FORMATS",
+      "title": "Subscription formats",
+      "owner": "subscriptions",
+      "stage": "phase1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Real clients parse supported link/base64, Xray, sing-box, Clash/Meta, WireGuard and Outline outputs.",
+      "configuration": {
+        "owner": "subscriptions",
+        "parameters": [
+          "formats",
+          "ordering",
+          "host policy"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Real clients parse supported link/base64, Xray, sing-box, Clash/Meta, WireGuard and Outline outputs.",
+      "evidence": [],
+      "sources": [
+        "PG"
+      ],
+      "guide": null
+    },
+    {
+      "id": "PG-STATS",
+      "title": "Usage and operational statistics",
+      "owner": "telemetry",
+      "stage": "phase1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Fresh authoritative usage reconciles with per-user, per-node and time-period summaries.",
+      "configuration": {
+        "owner": "telemetry",
+        "parameters": [
+          "retention",
+          "aggregation interval",
+          "usage coefficient"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Fresh authoritative usage reconciles with per-user, per-node and time-period summaries.",
+      "evidence": [],
+      "sources": [
+        "PG"
+      ],
+      "guide": null
+    },
+    {
+      "id": "PG-NODES",
+      "title": "Node lifecycle and monitoring",
+      "owner": "nodes",
+      "stage": "phase1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Register, inspect, reconnect, disable and update a node without losing acknowledged operation state.",
+      "configuration": {
+        "owner": "nodes",
+        "parameters": [
+          "endpoint",
+          "probe interval",
+          "timeout",
+          "maintenance"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Register, inspect, reconnect, disable and update a node without losing acknowledged operation state.",
+      "evidence": [],
+      "sources": [
+        "PG"
+      ],
+      "guide": null
+    },
+    {
+      "id": "PG-CORE-CONFIG",
+      "title": "Core configuration and capabilities",
+      "owner": "cores",
+      "stage": "phase1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Only capabilities proven for the installed type/version/node are advertised and applied.",
+      "configuration": {
+        "owner": "cores",
+        "parameters": [
+          "core type",
+          "version",
+          "routing",
+          "inbounds",
+          "outbounds"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Only capabilities proven for the installed type/version/node are advertised and applied.",
+      "evidence": [],
+      "sources": [
+        "PG",
+        "OWNER"
+      ],
+      "guide": null
+    },
+    {
+      "id": "PG-UPDATES",
+      "title": "Core and geodata updates",
+      "owner": "cores",
+      "stage": "phase1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "A verified update records the new version, validates configuration and supports recovery on failure.",
+      "configuration": {
+        "owner": "cores",
+        "parameters": [
+          "artifact source",
+          "version",
+          "update schedule"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "A verified update records the new version, validates configuration and supports recovery on failure.",
+      "evidence": [],
+      "sources": [
+        "PG"
+      ],
+      "guide": null
+    },
+    {
+      "id": "PG-LATENCY-LOGS",
+      "title": "Node logs and outbound diagnostics",
+      "owner": "nodes",
+      "stage": "phase1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Authorized diagnostics expose scoped logs and measured outbound results without credentials.",
+      "configuration": {
+        "owner": "nodes",
+        "parameters": [
+          "log policy",
+          "probe target",
+          "timeout"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Authorized diagnostics expose scoped logs and measured outbound results without credentials.",
+      "evidence": [],
+      "sources": [
+        "PG"
+      ],
+      "guide": null
+    },
+    {
+      "id": "PG-ALERTS",
+      "title": "Panel notifications and integrations",
+      "owner": "notifications",
+      "stage": "phase1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Configured Telegram/Discord/webhook notifications reflect committed events and survive retries.",
+      "configuration": {
+        "owner": "notifications",
+        "parameters": [
+          "channels",
+          "templates",
+          "event selection",
+          "retries"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Configured Telegram/Discord/webhook notifications reflect committed events and survive retries.",
+      "evidence": [],
+      "sources": [
+        "PG"
+      ],
+      "guide": null
+    },
+    {
+      "id": "PG-SUB-SECURITY",
+      "title": "Subscription revocation and access controls",
+      "owner": "subscriptions",
+      "stage": "phase1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Revocation invalidates the old link; optional HWID is enforced only when enabled.",
+      "configuration": {
+        "owner": "subscriptions",
+        "parameters": [
+          "token rotation",
+          "HWID default off",
+          "device policy"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Revocation invalidates the old link; optional HWID is enforced only when enabled.",
+      "evidence": [],
+      "sources": [
+        "PG",
+        "OWNER"
+      ],
+      "guide": null
+    },
+    {
+      "id": "PG-2FA",
+      "title": "Optional two-factor authentication",
+      "owner": "identity",
+      "stage": "phase1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Default-off enrollment, recovery and revocation are verified through actual login flows.",
+      "configuration": {
+        "owner": "identity",
+        "parameters": [
+          "enabled default off",
+          "recovery policy"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Default-off enrollment, recovery and revocation are verified through actual login flows.",
+      "evidence": [],
+      "sources": [
+        "OWNER"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-CUSTOM",
+      "title": "Custom volume/time services and tiered pricing",
+      "owner": "catalog",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Boundary quantities select the approved range and group/core price without binary floating-point money.",
+      "configuration": {
+        "owner": "catalog",
+        "parameters": [
+          "ranges",
+          "groups",
+          "core types",
+          "rounding"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Boundary quantities select the approved range and group/core price without binary floating-point money.",
+      "evidence": [],
+      "sources": [
+        "MIRZA",
+        "OWNER"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-TRIAL",
+      "title": "Trials and eligibility",
+      "owner": "catalog",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Eligible users receive the configured trial once under concurrent requests.",
+      "configuration": {
+        "owner": "catalog",
+        "parameters": [
+          "eligibility",
+          "quota",
+          "duration",
+          "claim policy"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Eligible users receive the configured trial once under concurrent requests.",
+      "evidence": [],
+      "sources": [
+        "MIRZA",
+        "CLOCK"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-ADDONS",
+      "title": "Extra time, volume and users",
+      "owner": "subscriptions",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Each add-on charges and extends exactly the purchased resource once, showing the resulting expiry.",
+      "configuration": {
+        "owner": "subscriptions",
+        "parameters": [
+          "resource price",
+          "eligibility",
+          "bounds"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Each add-on charges and extends exactly the purchased resource once, showing the resulting expiry.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-LOCATION",
+      "title": "Paid location change",
+      "owner": "subscriptions",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "An authorized change applies its price and creation policy, including admin-initiated changes.",
+      "configuration": {
+        "owner": "subscriptions",
+        "parameters": [
+          "location prices",
+          "creation limits",
+          "allowed destinations"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "An authorized change applies its price and creation policy, including admin-initiated changes.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-MANUAL-SALE",
+      "title": "Manual and bulk configuration sales",
+      "owner": "catalog",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Imported configurations have explicit inventory and per-item sale results; sold inventory is not delivered twice.",
+      "configuration": {
+        "owner": "catalog",
+        "parameters": [
+          "inventory",
+          "bulk policy",
+          "pricing",
+          "visibility"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Imported configurations have explicit inventory and per-item sale results; sold inventory is not delivered twice.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-RENEWAL",
+      "title": "Renewal methods and pre-invoices",
+      "owner": "subscriptions",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Configured reset/remaining-resource behavior and renewal thresholds match the invoice snapshot.",
+      "configuration": {
+        "owner": "subscriptions",
+        "parameters": [
+          "renewal method",
+          "threshold",
+          "invoice text"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Configured reset/remaining-resource behavior and renewal thresholds match the invoice snapshot.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-REFUNDS",
+      "title": "Deletion, refunds, problems and ratings",
+      "owner": "subscriptions",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Authorized deletion/refund affects money once, reports the amount and retains problem/rating records.",
+      "configuration": {
+        "owner": "subscriptions",
+        "parameters": [
+          "refund rule",
+          "eligibility",
+          "rating policy"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Authorized deletion/refund affects money once, reports the amount and retains problem/rating records.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-USERNAME",
+      "title": "Username generation and unpaid cleanup",
+      "owner": "orders",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Configured username strategies remain unique; timed cleanup preserves paid or reviewed orders.",
+      "configuration": {
+        "owner": "orders",
+        "parameters": [
+          "generation strategy",
+          "cleanup deadline"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Configured username strategies remain unique; timed cleanup preserves paid or reviewed orders.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-GUEST",
+      "title": "Guest and template purchases",
+      "owner": "orders",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Guest purchase and template/custom creation deliver to the established authorized identity.",
+      "configuration": {
+        "owner": "orders",
+        "parameters": [
+          "guest mode",
+          "template",
+          "identity verification"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Guest purchase and template/custom creation deliver to the established authorized identity.",
+      "evidence": [],
+      "sources": [
+        "CLOCK"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-DELIVERY",
+      "title": "QR, Happ and subscription delivery options",
+      "owner": "subscriptions",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "A real client reads the QR or selected link; toggles change only permitted delivery formats.",
+      "configuration": {
+        "owner": "subscriptions",
+        "parameters": [
+          "QR template",
+          "Happ link",
+          "send-config/send-sub toggles"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "A real client reads the QR or selected link; toggles change only permitted delivery formats.",
+      "evidence": [],
+      "sources": [
+        "MIRZA",
+        "CLOCK"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-CARD",
+      "title": "Receiving cards and payment instructions",
+      "owner": "payments",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "The selected/random receiving card and immutable issued instructions reconcile to the correct invoice.",
+      "configuration": {
+        "owner": "payments",
+        "parameters": [
+          "destinations",
+          "selection",
+          "receipt text"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "The selected/random receiving card and immutable issued instructions reconcile to the correct invoice.",
+      "evidence": [],
+      "sources": [
+        "MIRZA",
+        "OWNER"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-IRAN-GATEWAYS",
+      "title": "Iranian and currency gateways",
+      "owner": "payments",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Each approved gateway verifies a real or controlled external transaction and settles once.",
+      "configuration": {
+        "owner": "payments",
+        "parameters": [
+          "Zarinpal",
+          "Aqayepardakht",
+          "IranPay",
+          "additional approved providers"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Each approved gateway verifies a real or controlled external transaction and settles once.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-CRYPTO",
+      "title": "Crypto and offline TRON payments",
+      "owner": "payments",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Provider verification and chain/currency precision are explicit; duplicate notifications do not credit twice.",
+      "configuration": {
+        "owner": "payments",
+        "parameters": [
+          "NowPayments",
+          "Plisio",
+          "CubePay",
+          "Tronado",
+          "PerfectMoney",
+          "offline TRON",
+          "cashback"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Provider verification and chain/currency precision are explicit; duplicate notifications do not credit twice.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-STARS",
+      "title": "Telegram Stars",
+      "owner": "payments",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Telegram payment identity, amount and currency reconcile before one settlement.",
+      "configuration": {
+        "owner": "payments",
+        "parameters": [
+          "Stars product and refund policy"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Telegram payment identity, amount and currency reconcile before one settlement.",
+      "evidence": [],
+      "sources": [
+        "CLOCK"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-CUSTOM-GATEWAYS",
+      "title": "Configurable custom gateways",
+      "owner": "payments",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "An admin-defined gateway uses restricted destinations and typed parameters without arbitrary code execution.",
+      "configuration": {
+        "owner": "payments",
+        "parameters": [
+          "API contract",
+          "files",
+          "proxy",
+          "parameters"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "An admin-defined gateway uses restricted destinations and typed parameters without arbitrary code execution.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-GATEWAY-VISIBILITY",
+      "title": "Gateway targeting and ordering",
+      "owner": "payments",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Join-time, payment-count and individual visibility rules apply consistently in panel and bot.",
+      "configuration": {
+        "owner": "payments",
+        "parameters": [
+          "targeting",
+          "color",
+          "order",
+          "per-user visibility"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Join-time, payment-count and individual visibility rules apply consistently in panel and bot.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-CREDIT",
+      "title": "Credit, wallet changes and mass top-ups",
+      "owner": "wallets",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Every credit change retains before/after balances and reason; mixed batches report identities explicitly.",
+      "configuration": {
+        "owner": "wallets",
+        "parameters": [
+          "credit limit",
+          "approval",
+          "mass-charge policy"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Every credit change retains before/after balances and reason; mixed batches report identities explicitly.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-RESELLER-N",
+      "title": "Normal reseller and branded bot",
+      "owner": "resellers",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "An agent can sell only permitted products and cannot undercut the approved base price.",
+      "configuration": {
+        "owner": "resellers",
+        "parameters": [
+          "products",
+          "base prices",
+          "core visibility",
+          "brand"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "An agent can sell only permitted products and cannot undercut the approved base price.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-RESELLER-N2",
+      "title": "Advanced reseller credit and expiry",
+      "owner": "resellers",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Agency expiry, purchase caps and bounded negative credit are enforced concurrently.",
+      "configuration": {
+        "owner": "resellers",
+        "parameters": [
+          "expiry",
+          "cap",
+          "debt limit"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Agency expiry, purchase caps and bounded negative credit are enforced concurrently.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-PAYG",
+      "title": "Reseller wallet settlement and PAYG",
+      "owner": "resellers",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Customer purchases debit the correct reseller wallet; usage bills reconcile with the chart.",
+      "configuration": {
+        "owner": "resellers",
+        "parameters": [
+          "payer policy",
+          "usage unit",
+          "rate",
+          "billing interval"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Customer purchases debit the correct reseller wallet; usage bills reconcile with the chart.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-AGENT-BOT",
+      "title": "Dedicated reseller bot management",
+      "owner": "resellers",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Reseller admins search/manage services, prices, renewals, refunds, gateways, reports and QR within their own scope.",
+      "configuration": {
+        "owner": "resellers",
+        "parameters": [
+          "delegation",
+          "gateways",
+          "templates",
+          "bulk-update policy"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Reseller admins search/manage services, prices, renewals, refunds, gateways, reports and QR within their own scope.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-AGENT-PANEL",
+      "title": "Reseller web panel and API",
+      "owner": "resellers",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Scoped API/JWT rotation, service filters, price tiers and before/after balance charts match the ledger.",
+      "configuration": {
+        "owner": "resellers",
+        "parameters": [
+          "token policy",
+          "branding",
+          "creation limits",
+          "price tiers",
+          "prefix"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Scoped API/JWT rotation, service filters, price tiers and before/after balance charts match the ledger.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-PHONE",
+      "title": "Phone verification and anti-spam",
+      "owner": "customers",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Verified phone/channel membership and anti-spam policies enforce the selected eligibility mode.",
+      "configuration": {
+        "owner": "customers",
+        "parameters": [
+          "country policy",
+          "verification",
+          "membership",
+          "rate limits"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Verified phone/channel membership and anti-spam policies enforce the selected eligibility mode.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-DISCOUNTS",
+      "title": "Discount and gift codes",
+      "owner": "discounts",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Concurrent claims obey product/user/usage/time limits and record exact discounts.",
+      "configuration": {
+        "owner": "discounts",
+        "parameters": [
+          "scope",
+          "expiry",
+          "first purchase",
+          "usage limits"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Concurrent claims obey product/user/usage/time limits and record exact discounts.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-SIGNUP-GIFTS",
+      "title": "Signup and bulk resource gifts",
+      "owner": "discounts",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Each eligible gift is granted once with explicit per-member outcomes.",
+      "configuration": {
+        "owner": "discounts",
+        "parameters": [
+          "signup policy",
+          "volume",
+          "time",
+          "recipients"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Each eligible gift is granted once with explicit per-member outcomes.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-REFERRALS",
+      "title": "Referral commissions and promotional links",
+      "owner": "referrals",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Eligible purchase/renewal commissions settle once and reject self/fake referral rules.",
+      "configuration": {
+        "owner": "referrals",
+        "parameters": [
+          "percent",
+          "minimum purchase",
+          "start gift",
+          "renewals",
+          "banner"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Eligible purchase/renewal commissions settle once and reject self/fake referral rules.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-LOTTERY",
+      "title": "Lottery and wheel of fortune",
+      "owner": "growth",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Configured eligibility and prize allocation produce auditable results and no duplicate awards.",
+      "configuration": {
+        "owner": "growth",
+        "parameters": [
+          "campaign",
+          "eligibility",
+          "prize pool",
+          "draw policy"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Configured eligibility and prize allocation produce auditable results and no duplicate awards.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-TICKETS",
+      "title": "Support, tickets and service problems",
+      "owner": "support",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Only authorized parties read/reply; read ticks, reactions and direct replies retain the correct conversation.",
+      "configuration": {
+        "owner": "support",
+        "parameters": [
+          "roles",
+          "statuses",
+          "reactions",
+          "notifications"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Only authorized parties read/reply; read ticks, reactions and direct replies retain the correct conversation.",
+      "evidence": [],
+      "sources": [
+        "MIRZA",
+        "OWNER"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-TUTORIALS",
+      "title": "Tutorials and editable bot texts",
+      "owner": "content",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Create/edit/delete content and localized bot messages without application deployment.",
+      "configuration": {
+        "owner": "content",
+        "parameters": [
+          "languages",
+          "texts",
+          "buttons",
+          "emoji",
+          "ordering"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Create/edit/delete content and localized bot messages without application deployment.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-BROADCAST",
+      "title": "Previewed bounded broadcasts",
+      "owner": "broadcasts",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Preview/edit text or image, then send with cancellation, real member results and retry semantics.",
+      "configuration": {
+        "owner": "broadcasts",
+        "parameters": [
+          "concurrency",
+          "recipients",
+          "preview",
+          "link display",
+          "support button"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Preview/edit text or image, then send with cancellation, real member results and retry semantics.",
+      "evidence": [],
+      "sources": [
+        "MIRZA",
+        "OWNER"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-REPORTS",
+      "title": "Sales, user, reseller and nightly reports",
+      "owner": "reports",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Full-scope totals and authorized breakdowns reconcile with detail and include an Excel summary sheet.",
+      "configuration": {
+        "owner": "reports",
+        "parameters": [
+          "period",
+          "timezone",
+          "groups",
+          "comparison",
+          "units"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Full-scope totals and authorized breakdowns reconcile with detail and include an Excel summary sheet.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-SURVEYS",
+      "title": "Order surveys and inactive-user follow-up",
+      "owner": "surveys",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Configured surveys and no-connection notifications target only their authorized eligible users.",
+      "configuration": {
+        "owner": "surveys",
+        "parameters": [
+          "survey",
+          "threshold",
+          "schedule",
+          "channel"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Configured surveys and no-connection notifications target only their authorized eligible users.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-REPORT-CHANNEL",
+      "title": "Topic-based report channels",
+      "owner": "notifications",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Events and reseller reports reach the configured topic without leaking another agent's data.",
+      "configuration": {
+        "owner": "notifications",
+        "parameters": [
+          "channel",
+          "topic",
+          "event selection"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Events and reseller reports reach the configured topic without leaking another agent's data.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-AUTOMATION",
+      "title": "Configurable operational jobs",
+      "owner": "automation",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Trial cleanup, expiry/volume alerts, deletion and monitoring execute through real Beat/queues/workers.",
+      "configuration": {
+        "owner": "automation",
+        "parameters": [
+          "per-job enablement",
+          "intervals",
+          "thresholds"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Trial cleanup, expiry/volume alerts, deletion and monitoring execute through real Beat/queues/workers.",
+      "evidence": [],
+      "sources": [
+        "MIRZA",
+        "CLOCK"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-ADMIN",
+      "title": "Bot administration parity",
+      "owner": "bot",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Authorized bot admins manage users, admins, groups, hosts, nodes and templates through shared module interfaces.",
+      "configuration": {
+        "owner": "bot",
+        "parameters": [
+          "role grants",
+          "quotas",
+          "confirmation policy"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Authorized bot admins manage users, admins, groups, hosts, nodes and templates through shared module interfaces.",
+      "evidence": [],
+      "sources": [
+        "CLOCK"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-OFFLINE",
+      "title": "Standalone bot durable offline intake",
+      "owner": "bot",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Panel outage retains orders/receipts/events; balances show pending sync and cannot be spent before panel settlement.",
+      "configuration": {
+        "owner": "bot",
+        "parameters": [
+          "storage",
+          "retention",
+          "retry",
+          "admin notifications"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Panel outage retains orders/receipts/events; balances show pending sync and cannot be spent before panel settlement.",
+      "evidence": [],
+      "sources": [
+        "OWNER"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-MINIAPP",
+      "title": "Mini App and standalone bot interfaces",
+      "owner": "miniapp",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Top-up, renewal, service details and tickets use verified Telegram identity and shared policies.",
+      "configuration": {
+        "owner": "miniapp",
+        "parameters": [
+          "branding",
+          "palette",
+          "animation",
+          "language"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Top-up, renewal, service details and tickets use verified Telegram identity and shared policies.",
+      "evidence": [],
+      "sources": [
+        "MIRZA",
+        "OWNER"
+      ],
+      "guide": null
+    },
+    {
+      "id": "BOT-PRESENTATION",
+      "title": "Multilingual Telegram presentation",
+      "owner": "bot",
+      "stage": "sales",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "English/Persian/Russian/Chinese texts, premium emoji, colored/glass keyboards and Business updates render correctly.",
+      "configuration": {
+        "owner": "bot",
+        "parameters": [
+          "language",
+          "emoji detection",
+          "keyboard",
+          "Telegram Business"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "English/Persian/Russian/Chinese texts, premium emoji, colored/glass keyboards and Business updates render correctly.",
+      "evidence": [],
+      "sources": [
+        "MIRZA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "NET-HYSTERIA",
+      "title": "Hysteria2 core",
+      "owner": "cores",
+      "stage": "network",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "A real supported client transfers traffic and revocation applies on the tested core version.",
+      "configuration": {
+        "owner": "cores",
+        "parameters": [
+          "authentication",
+          "UDP",
+          "bandwidth",
+          "transport"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "A real supported client transfers traffic and revocation applies on the tested core version.",
+      "evidence": [],
+      "sources": [
+        "OWNER",
+        "REBECCA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "NET-WIREGUARD",
+      "title": "WireGuard core",
+      "owner": "cores",
+      "stage": "network",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "A real peer handshakes and transfers traffic; removal and usage observations are tested.",
+      "configuration": {
+        "owner": "cores",
+        "parameters": [
+          "keys",
+          "addresses",
+          "allowed IPs",
+          "endpoint"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "A real peer handshakes and transfers traffic; removal and usage observations are tested.",
+      "evidence": [],
+      "sources": [
+        "OWNER",
+        "REBECCA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "NET-OPENVPN",
+      "title": "OpenVPN core",
+      "owner": "cores",
+      "stage": "network",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "A real client connects with issued credentials; expiry/revocation disconnects or prevents access as contracted.",
+      "configuration": {
+        "owner": "cores",
+        "parameters": [
+          "profiles",
+          "certificates",
+          "revocation",
+          "transport"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "A real client connects with issued credentials; expiry/revocation disconnects or prevents access as contracted.",
+      "evidence": [],
+      "sources": [
+        "OWNER",
+        "REBECCA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "NET-EXTRA-CORES",
+      "title": "Additional reference core capabilities",
+      "owner": "cores",
+      "stage": "network",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Independently implemented optional capabilities are advertised only after runtime/version probes and real client tests.",
+      "configuration": {
+        "owner": "cores",
+        "parameters": [
+          "AmneziaWG",
+          "TUIC",
+          "MTProto and reconciled reference capabilities"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Independently implemented optional capabilities are advertised only after runtime/version probes and real client tests.",
+      "evidence": [],
+      "sources": [
+        "3X",
+        "REBECCA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "NET-SSL",
+      "title": "Certificate issuance, renewal and distribution",
+      "owner": "certificates",
+      "stage": "network",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "A real challenge/renewal distributes the right certificate to authorized nodes and retains usable rollback material.",
+      "configuration": {
+        "owner": "certificates",
+        "parameters": [
+          "issuer",
+          "challenge",
+          "domain",
+          "renewal schedule",
+          "distribution"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "A real challenge/renewal distributes the right certificate to authorized nodes and retains usable rollback material.",
+      "evidence": [],
+      "sources": [
+        "OWNER",
+        "REBECCA",
+        "3X"
+      ],
+      "guide": null
+    },
+    {
+      "id": "NET-SINGLE-PORT",
+      "title": "Single Port compatibility",
+      "owner": "routing",
+      "stage": "network",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "A technical prototype and real clients prove each claimed protocol/transport combination on one port.",
+      "configuration": {
+        "owner": "routing",
+        "parameters": [
+          "listener",
+          "ALPN",
+          "SNI",
+          "routing policy"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "A technical prototype and real clients prove each claimed protocol/transport combination on one port.",
+      "evidence": [],
+      "sources": [
+        "OWNER",
+        "REBECCA",
+        "3X"
+      ],
+      "guide": null
+    },
+    {
+      "id": "NET-WARP",
+      "title": "WARP lifecycle and routing",
+      "owner": "routing",
+      "stage": "network",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Real registration, route selection, health checks and recovery are observed before marking support.",
+      "configuration": {
+        "owner": "routing",
+        "parameters": [
+          "registration",
+          "egress",
+          "routes",
+          "retry policy"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Real registration, route selection, health checks and recovery are observed before marking support.",
+      "evidence": [],
+      "sources": [
+        "OWNER",
+        "REBECCA",
+        "3X"
+      ],
+      "guide": null
+    },
+    {
+      "id": "NET-SPEED",
+      "title": "Configurable speed control",
+      "owner": "limits",
+      "stage": "network",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "The prototype measures actual enforcement for each claimed core/OS combination under concurrent traffic.",
+      "configuration": {
+        "owner": "limits",
+        "parameters": [
+          "rate",
+          "scope",
+          "burst",
+          "measurement policy"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "The prototype measures actual enforcement for each claimed core/OS combination under concurrent traffic.",
+      "evidence": [],
+      "sources": [
+        "OWNER",
+        "REBECCA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "NET-IP",
+      "title": "IP and device connection controls",
+      "owner": "limits",
+      "stage": "network",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Real concurrent clients test the selected policy, expiry, IPv6 and disconnection behavior; no inferred enforcement claims.",
+      "configuration": {
+        "owner": "limits",
+        "parameters": [
+          "policy",
+          "threshold",
+          "grace",
+          "HWID default off"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Real concurrent clients test the selected policy, expiry, IPv6 and disconnection behavior; no inferred enforcement claims.",
+      "evidence": [],
+      "sources": [
+        "OWNER",
+        "REBECCA",
+        "3X"
+      ],
+      "guide": null
+    },
+    {
+      "id": "NET-PANEL-INSTALL",
+      "title": "Node installation from the panel",
+      "owner": "nodes",
+      "stage": "network",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "An authorized operation installs an agent on the selected host and reports actual bounded outcomes.",
+      "configuration": {
+        "owner": "nodes",
+        "parameters": [
+          "host",
+          "bootstrap method",
+          "trust",
+          "timeout"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "An authorized operation installs an agent on the selected host and reports actual bounded outcomes.",
+      "evidence": [],
+      "sources": [
+        "OWNER"
+      ],
+      "guide": null
+    },
+    {
+      "id": "NET-PUBLIC-PAGES",
+      "title": "Unified and subscription pages",
+      "owner": "subscriptions",
+      "stage": "network",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Real subscriptions render accessible localized client instructions without exposing ads on the subscription page.",
+      "configuration": {
+        "owner": "subscriptions",
+        "parameters": [
+          "template",
+          "clients",
+          "branding",
+          "language"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Real subscriptions render accessible localized client instructions without exposing ads on the subscription page.",
+      "evidence": [],
+      "sources": [
+        "OWNER",
+        "REBECCA"
+      ],
+      "guide": null
+    },
+    {
+      "id": "NET-AUTO-BACKUP",
+      "title": "Scheduled, optionally encrypted off-site backups",
+      "owner": "backups",
+      "stage": "network",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "A real Beat job creates one compressed archive, optionally password-encrypts/splits it, delivers it to Telegram/Discord and restores through panel/CLI.",
+      "configuration": {
+        "owner": "backups",
+        "parameters": [
+          "encryption default off",
+          "password",
+          "destination",
+          "schedule",
+          "part size"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "A real Beat job creates one compressed archive, optionally password-encrypts/splits it, delivers it to Telegram/Discord and restores through panel/CLI.",
+      "evidence": [],
+      "sources": [
+        "OWNER"
+      ],
+      "guide": null
+    },
+    {
+      "id": "NET-TIMESCALE",
+      "title": "Optional time-series storage",
+      "owner": "telemetry",
+      "stage": "network",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "An independent extension migration and representative time-series queries preserve operational PostgreSQL data.",
+      "configuration": {
+        "owner": "telemetry",
+        "parameters": [
+          "retention",
+          "aggregation",
+          "extension enablement"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "An independent extension migration and representative time-series queries preserve operational PostgreSQL data.",
+      "evidence": [],
+      "sources": [
+        "OWNER"
+      ],
+      "guide": null
+    },
+    {
+      "id": "SMS-PAIRING",
+      "title": "Secure Android pairing and signed uploads",
+      "owner": "devices",
+      "stage": "android",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "A paired device can upload only to its configured scope; replayed or revoked credentials are rejected.",
+      "configuration": {
+        "owner": "devices",
+        "parameters": [
+          "device key",
+          "lifetime",
+          "rotation",
+          "destination"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "A paired device can upload only to its configured scope; replayed or revoked credentials are rejected.",
+      "evidence": [],
+      "sources": [
+        "OWNER"
+      ],
+      "guide": null
+    },
+    {
+      "id": "SMS-PARSER",
+      "title": "On-device bank amount extraction",
+      "owner": "parsing",
+      "stage": "android",
+      "status": "blocked",
+      "completed_in": null,
+      "expected_behavior": "Representative real masked bank samples establish amount/unit/timestamp behavior and uncertain messages go to review.",
+      "configuration": {
+        "owner": "parsing",
+        "parameters": [
+          "bank format",
+          "currency",
+          "precision",
+          "timestamp policy"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Representative real masked bank samples establish amount/unit/timestamp behavior and uncertain messages go to review.",
+      "evidence": [],
+      "sources": [
+        "OWNER"
+      ],
+      "guide": null,
+      "blocker": "Representative masked real bank SMS samples are required."
+    },
+    {
+      "id": "SMS-OFFLINE",
+      "title": "Android offline queue and relay",
+      "owner": "devices",
+      "stage": "android",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Messages collected offline retain identity across restarts and reconcile once after reconnection.",
+      "configuration": {
+        "owner": "devices",
+        "parameters": [
+          "retention",
+          "retry",
+          "batch size"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Messages collected offline retain identity across restarts and reconcile once after reconnection.",
+      "evidence": [],
+      "sources": [
+        "OWNER"
+      ],
+      "guide": null
+    },
+    {
+      "id": "SMS-MATCH",
+      "title": "Configurable automatic matching",
+      "owner": "payments",
+      "stage": "android",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Manual and automatic concurrent confirmation credit once; late, ambiguous and uncertain messages enter manual review.",
+      "configuration": {
+        "owner": "payments",
+        "parameters": [
+          "mode",
+          "identifier",
+          "deadline",
+          "destination",
+          "matching policy"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Manual and automatic concurrent confirmation credit once; late, ambiguous and uncertain messages enter manual review.",
+      "evidence": [],
+      "sources": [
+        "OWNER"
+      ],
+      "guide": null
+    },
+    {
+      "id": "ADS-CAMPAIGNS",
+      "title": "Advertisements and owner administration",
+      "owner": "ads",
+      "stage": "v1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Configured campaigns and cached bundles render in allowed locations; subscription pages remain ad-free.",
+      "configuration": {
+        "owner": "ads",
+        "parameters": [
+          "campaign",
+          "schedule",
+          "placement",
+          "bundle retention"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Configured campaigns and cached bundles render in allowed locations; subscription pages remain ad-free.",
+      "evidence": [],
+      "sources": [
+        "OWNER"
+      ],
+      "guide": null
+    },
+    {
+      "id": "ADS-LICENSE",
+      "title": "Ads-only signed entitlement",
+      "owner": "licensing",
+      "stage": "v1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Removing ads requires a verified entitlement while all product features remain free.",
+      "configuration": {
+        "owner": "licensing",
+        "parameters": [
+          "token TTL",
+          "offline grace",
+          "expiry grace",
+          "verification schedule"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Removing ads requires a verified entitlement while all product features remain free.",
+      "evidence": [],
+      "sources": [
+        "OWNER"
+      ],
+      "guide": null
+    },
+    {
+      "id": "ADS-OWNER",
+      "title": "Owner license panel and bot",
+      "owner": "licensing",
+      "stage": "v1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "The owner configures the currently unset license price, sells licenses and inspects authoritative payments.",
+      "configuration": {
+        "owner": "licensing",
+        "parameters": [
+          "price",
+          "currency",
+          "payment mode",
+          "notifications"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "The owner configures the currently unset license price, sells licenses and inspects authoritative payments.",
+      "evidence": [],
+      "sources": [
+        "OWNER"
+      ],
+      "guide": null
+    },
+    {
+      "id": "V1-RECOVERY",
+      "title": "Upgrade, recovery and complete accepted coverage",
+      "owner": "releases",
+      "stage": "v1",
+      "status": "planned",
+      "completed_in": null,
+      "expected_behavior": "Every accepted row has real execution evidence, a completed release and a usage guide; upgrade preserves prior supported data.",
+      "configuration": {
+        "owner": "releases",
+        "parameters": [
+          "upgrade policy",
+          "backup",
+          "recovery",
+          "compatibility matrix"
+        ],
+        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+      },
+      "acceptance": "Every accepted row has real execution evidence, a completed release and a usage guide; upgrade preserves prior supported data.",
+      "evidence": [],
+      "sources": [
+        "OWNER"
+      ],
+      "guide": null
+    }
+  ]
+}

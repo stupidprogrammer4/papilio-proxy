@@ -1,0 +1,25 @@
+name: Publish experimental release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+  publish:
+    needs: verify
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build source artifact from this verified commit
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 deployment/package_release.py --output dist --tag "$RELEASE_TAG"
+      - name: Publish artifact and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release create "$RELEASE_TAG" dist/papilio-*.tar.gz dist/SHA256SUMS --verify-tag --prerelease --title "Papilio $RELEASE_TAG — experimental foundation" --notes-file docs/release-notes.md
