@@ -8,6 +8,7 @@ from papilio_panel.modules.jobs.routers.health import liveness, readiness_view
 urlpatterns = [
     path("api/v1/", include("papilio_panel.modules.identity.routers.urls")),
     path("api/v1/", include("papilio_panel.modules.jobs.routers.urls")),
+    path("api/v1/", include("papilio_panel.modules.nodes.routers.urls")),
     path("health/live", liveness),
     path("health/ready", readiness_view),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),

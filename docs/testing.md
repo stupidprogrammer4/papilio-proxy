@@ -63,3 +63,23 @@ body/reply limits and paused-core timeout/recovery. An actual race-instrumented
 agent executable loads selected native credentials, provisions a traffic-carrying
 user and shuts down. This does not establish node enrollment, core supervision,
 Django provisioning, public VPN transport, quotas or a completed bot purchase.
+
+
+## Django-to-node boundary on main
+
+Set `PAPILIO_AGENT_BINARY` to the built Go agent and `PAPILIO_XRAY_BINARY` to the
+verified official core before running backend tests. CI supplies both; missing
+binaries explicitly skip this boundary locally. `test_node_runtime.py` traverses
+HTTP API, real PostgreSQL, native Beat/RabbitMQ/CPU and I/O workers, issued files,
+actual Go mTLS and actual Xray status, then stops its agent and observes failure.
+It also checks replay and unchanged encrypted credentials. It does not create a
+subscription or send customer VPN traffic through Django provisioning.
+
+`test_node_transport.py` uses a controlled external HTTPS agent double with real
+TLS/crypto to test malformed response and identity/authority rejection. It is
+transport integration, not a real-Go/core test. No internal reader, queue or
+repository is mocked. The installed browser gate covers Nodes registration,
+advanced values, actual CPU issuance, private download and reload; restore and
+synthetic update independently verify node settings, encrypted-key decryption and
+the disabled node schedule survive. The migration test upgrades a nonempty native
+foundation schema; it is not a complete prior-release binary deployment test.

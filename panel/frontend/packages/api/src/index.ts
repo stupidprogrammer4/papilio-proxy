@@ -1,3 +1,4 @@
+export * from "./nodes";
 export * from "./ipPolicies";
 export * from "./system";
 import type { PurchasedIpPolicyRead, EffectiveIpPolicyRead, PlanIpPolicyRead, IpLimitCapacityRead, IpPolicyTransitionOptions } from "./ipPolicies";
@@ -364,9 +365,9 @@ export interface ReceiptAnnotationWrite { expected_revision: number; fields: Rec
 export interface AccountPreferences { receipts: ReceiptPolicy; brand_title: string; payment_instructions: string | null; support_handle: string | null; topup_options_rial: number[]; checkout: CheckoutPolicy }
 export interface AccountDelivery { entitlement_kind: "paid"|"trial"; subscription_id: number; status: string; auto_renew: boolean; feed_url: string | null; portal_url: string | null; can_rotate_link: boolean }
 
-export async function privateFile(path: string): Promise<Blob> {
+export async function privateFile(path: string, method = "GET", options: RequestOptions = {}): Promise<Blob> {
   let response: Response;
-  try { response = await fetch(`/api${path}`, { credentials: "include" }); }
+  try { response = await fetch(`/api${path}`, { method, credentials: "include", signal: options.signal, headers: csrf ? { "X-CSRF-Token": csrf } : {} }); }
   catch { throw new ApiError(0,"network","Could not connect to the server."); }
   if (!response.ok) throw errorMessage(await response.json().catch(() => null), response.status);
   return response.blob();

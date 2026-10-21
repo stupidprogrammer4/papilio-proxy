@@ -9,13 +9,13 @@ from django.db.models import F, Q
 from django.utils import timezone
 
 from papilio_panel.shared.errors import Missing
+from papilio_panel.shared.operations import OperationStatus
 
 from ..domain import (
     Delivery,
     ExecutionClaim,
     OperationCreation,
     OperationRead,
-    OperationStatus,
     ProbeKind,
     ProbeResult,
     ProbeSubmission,

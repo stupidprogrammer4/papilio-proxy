@@ -1,0 +1,51 @@
+{
+  "title": "Nodes",
+  "help": "Register a node, issue its private bootstrap and check its actual connection.",
+  "create": "Register node",
+  "name": "Name",
+  "endpoint": "Agent HTTPS address",
+  "advanced": "Advanced settings",
+  "runtimeHelp": "These values are saved for this node and included in its bootstrap. The agent reads them at startup.",
+  "search": "Search nodes",
+  "total": "{count} nodes",
+  "connection": "Connection",
+  "unchecked": "Not checked",
+  "reachable": "Reachable",
+  "unreachable": "Unreachable",
+  "credentialsReady": "Credentials issued",
+  "credentialsPending": "Waiting for credential issuance",
+  "expires": "Certificate expiry",
+  "bootstrapHelp": "Keep the download private: it contains this node’s server key. Extract it beside the agent and start the agent with agent.json. Xray must already be running with its local API enabled.",
+  "download": "Download private bootstrap",
+  "check": "Check connection",
+  "limits": "This step registers and checks an existing agent. Core process installation, configuration editing and certificate renewal are still being implemented.",
+  "failed": "The operation failed.",
+  "fields": {
+    "listen_address": "Agent listen address",
+    "xray_api_address": "Xray API loopback address",
+    "request_timeout_seconds": "Request timeout (seconds)",
+    "read_header_timeout_seconds": "Header timeout (seconds)",
+    "idle_timeout_seconds": "Idle timeout (seconds)",
+    "shutdown_timeout_seconds": "Shutdown timeout (seconds)",
+    "max_body_bytes": "Maximum request body (bytes)",
+    "max_grpc_reply_bytes": "Maximum core response (bytes)",
+    "validity_seconds": "Certificate lifetime (seconds)",
+    "authority_validity_seconds": "Authority lifetime (seconds)",
+    "backdate_seconds": "Certificate clock allowance (seconds)"
+  },
+  "kinds": {
+    "issue_credentials": "Credential issuance",
+    "check_connection": "Connection check"
+  },
+  "errors": {
+    "tls_rejected": "TLS authentication rejected",
+    "connection_failed": "Could not connect to agent",
+    "invalid_node_response": "Invalid agent response",
+    "node_identity_mismatch": "Node identity mismatch",
+    "node_response_limit": "Agent response exceeds limit",
+    "node_not_ready": "Agent or Xray is not ready",
+    "credentials_pending": "Credentials are not ready",
+    "access_revoked": "Operator access was revoked",
+    "retry_exhausted": "Retry limit reached"
+  }
+}

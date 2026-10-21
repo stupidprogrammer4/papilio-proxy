@@ -5,7 +5,9 @@ import uuid
 from django.conf import settings
 from django.db import models
 
-from .domain import OperationStatus, ProbeKind
+from papilio_panel.shared.operations import OperationStatus
+
+from .domain import ProbeKind
 
 
 class Operation(models.Model):

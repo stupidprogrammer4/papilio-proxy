@@ -32,6 +32,17 @@
   "interval": "فاصلهٔ اجرا به ثانیه",
   "enabled": "فعال",
   "save": "ذخیره",
-  "scheduleNames": { "io-heartbeat": "گزارش worker ارتباطی", "cpu-heartbeat": "گزارش worker پردازشی", "outbox": "تحویل پیام‌های ثبت‌شده" },
-  "states": { "queued": "در صف", "running": "در حال اجرا", "succeeded": "موفق", "failed": "ناموفق", "cancelled": "لغوشده" }
+  "scheduleNames": {
+    "io-heartbeat": "گزارش worker ارتباطی",
+    "cpu-heartbeat": "گزارش worker پردازشی",
+    "outbox": "تحویل پیام‌های ثبت‌شده",
+    "node-outbox": "ارسال عملیات نود"
+  },
+  "states": {
+    "queued": "در صف",
+    "running": "در حال اجرا",
+    "succeeded": "موفق",
+    "failed": "ناموفق",
+    "cancelled": "لغوشده"
+  }
 }

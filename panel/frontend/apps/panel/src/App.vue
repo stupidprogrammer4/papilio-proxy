@@ -54,6 +54,7 @@ const navigation=computed(()=>dealer.value?[
  {path:"/subscriptions",label:"Subscriptions",icon:"link",scope:"subscriptions",group:"Workspace"},
  {path:"/loyalty",label:"Loyalty & discounts",icon:"users",scope:"catalog",group:"Finance"},
  {path:"/payments",label:"Payments",icon:"wallet",scope:"payments",group:"Finance"},
+ {path:"/nodes",label:"Nodes",icon:"server",scope:"nodes",group:"Infrastructure"},
  {path:"/network",label:"Nodes",icon:"server",scope:"network",group:"Infrastructure"},
  {path:"/configurations",label:"Configurations",icon:"layers",scope:"network",group:"Infrastructure"},
  {path:"/connection-lab",label:"Connection lab",icon:"bolt",scope:"network",group:"Infrastructure"},

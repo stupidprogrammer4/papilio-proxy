@@ -287,13 +287,18 @@
       "evidence": [
         "node/agent/internal/control/server_integration_test.go",
         "node/agent/internal/control/deadline_linux_test.go",
-        "node/agent/cmd/papilio-agent/main_integration_test.go"
+        "node/agent/cmd/papilio-agent/main_integration_test.go",
+        "panel/backend/tests/test_node_runtime.py",
+        "panel/backend/tests/test_nodes.py",
+        "panel/backend/tests/test_node_transport.py",
+        "panel/backend/tests/test_node_migration.py",
+        "panel/frontend/tests/foundation.browser.mjs"
       ],
       "sources": [
         "OWNER"
       ],
-      "guide": null,
-      "verified_scope": "Runnable agent and actual mutual TLS -> native Xray -> client traffic; node/deployment certificate binding, existing-connection expiry and denied-write state. Enrollment, process supervision, panel setup and durable provisioning remain pending."
+      "guide": "docs/user-guide.en.md",
+      "verified_scope": "Executable Go mTLS/core/client traffic plus owner-scoped Django onboarding, CPU-issued encrypted node keys and actual I/O-worker HTTPS identity/core-status checks. Panel registration, advanced creation fields, search and private download. Existing-node editing/rotation, automatic installation, process supervision and subscription provisioning remain pending."
     },
     {
       "id": "FLOW-XRAY",

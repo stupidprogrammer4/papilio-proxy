@@ -1,0 +1,51 @@
+{
+  "title": "نودها",
+  "help": "نود را ثبت کنید، فایل خصوصی راه‌اندازی بگیرید و اتصال واقعی آن را بررسی کنید.",
+  "create": "ثبت نود",
+  "name": "نام",
+  "endpoint": "نشانی HTTPS عامل",
+  "advanced": "تنظیمات پیشرفته",
+  "runtimeHelp": "مقادیر برای این نود ذخیره و در فایل راه‌اندازی درج می‌شوند. عامل آن‌ها را هنگام شروع می‌خواند.",
+  "search": "جستجوی نودها",
+  "total": "{count} نود",
+  "connection": "اتصال",
+  "unchecked": "بررسی نشده",
+  "reachable": "در دسترس",
+  "unreachable": "دور از دسترس",
+  "credentialsReady": "گواهی‌ها صادر شده‌اند",
+  "credentialsPending": "در انتظار صدور گواهی",
+  "expires": "انقضای گواهی",
+  "bootstrapHelp": "فایل دانلودی حاوی کلید خصوصی سرور نود است؛ آن را محرمانه نگه دارید. فایل‌ها را کنار عامل استخراج و عامل را با agent.json اجرا کنید. Xray باید از قبل با API محلی فعال اجرا شده باشد.",
+  "download": "دانلود فایل خصوصی راه‌اندازی",
+  "check": "بررسی اتصال",
+  "limits": "این مرحله عامل موجود را ثبت و بررسی می‌کند. نصب فرایند هسته، ویرایش تنظیمات و تمدید گواهی هنوز در حال پیاده‌سازی هستند.",
+  "failed": "عملیات انجام نشد.",
+  "fields": {
+    "listen_address": "نشانی شنود عامل",
+    "xray_api_address": "نشانی loopback برای API هستهٔ Xray",
+    "request_timeout_seconds": "مهلت درخواست (ثانیه)",
+    "read_header_timeout_seconds": "مهلت خواندن هدر (ثانیه)",
+    "idle_timeout_seconds": "مهلت اتصال بی‌کار (ثانیه)",
+    "shutdown_timeout_seconds": "مهلت توقف (ثانیه)",
+    "max_body_bytes": "حداکثر بدنهٔ درخواست (بایت)",
+    "max_grpc_reply_bytes": "حداکثر پاسخ هسته (بایت)",
+    "validity_seconds": "عمر گواهی (ثانیه)",
+    "authority_validity_seconds": "عمر مرجع صدور (ثانیه)",
+    "backdate_seconds": "اختلاف ساعت مجاز گواهی (ثانیه)"
+  },
+  "kinds": {
+    "issue_credentials": "صدور گواهی",
+    "check_connection": "بررسی اتصال"
+  },
+  "errors": {
+    "tls_rejected": "احراز هویت TLS رد شد",
+    "connection_failed": "اتصال به عامل برقرار نشد",
+    "invalid_node_response": "پاسخ عامل نامعتبر است",
+    "node_identity_mismatch": "هویت نود تطبیق ندارد",
+    "node_response_limit": "پاسخ عامل از حد مجاز بزرگ‌تر است",
+    "node_not_ready": "عامل یا Xray آماده نیست",
+    "credentials_pending": "گواهی‌ها آماده نیستند",
+    "access_revoked": "دسترسی اپراتور لغو شده",
+    "retry_exhausted": "تعداد تلاش‌ها به حد مجاز رسید"
+  }
+}

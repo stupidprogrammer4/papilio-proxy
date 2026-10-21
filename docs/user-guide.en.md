@@ -79,3 +79,30 @@ available release and checks its published checksum, builds it, creates a recove
 backup and runs native migrations. Release-specific compatibility must be tested
 before publication. No migration from the intentionally removed implementation
 is provided. `stop` retains data and `status` does not deploy a new version.
+
+## Node onboarding on main (newer than alpha.1)
+
+1. Open **Nodes** as the installation owner. Enter a name and the agent's HTTPS
+   address. Advanced settings select listen/API addresses, timeouts, byte limits
+   and certificate lifetimes. These values are saved per node; the initial UI
+   defaults come from the backend, not a second client configuration.
+2. Register, then refresh until credential issuance succeeds. The CPU worker
+   creates per-node CA, server and control credentials. The connection remains
+   **Not checked** until a separate actual probe succeeds.
+3. Download the private bootstrap. It contains `agent.json`, `server.crt`,
+   `server.key` and public `client-ca.crt`; keep all files private. It never contains
+   the CA private key or panel control key. Unzip into a private directory beside
+   the agent executable. Follow [the agent guide](../node/agent/README.md) to build
+   and start it. Xray with its loopback API must already be running; this is not
+   automatic core installation.
+4. Select **Check connection**, then refresh. An I/O worker verifies the issued
+   CA, HTTPS hostname and deployment/node identity before reading live Xray uptime.
+   A successful check proves that boundary; it does not provision a subscription
+   or establish any unsupported core feature.
+
+The overview's **Node operation delivery** schedule can be disabled or have its
+interval changed. Pausing stops future outbox scans; already delivered tasks can
+finish. Migrations and restarts preserve the chosen schedule. Bootstrap settings
+apply when the agent starts. Editing an existing node, certificate renewal/rotation
+and automatic installation remain pending. Retain the installation secret key
+with backups: it is needed to decrypt node keys after restore.

@@ -5,18 +5,12 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
+from papilio_panel.shared.operations import OperationStatus
+
 
 class ProbeKind(StrEnum):
     IO = "io"
     CPU = "cpu"
-
-
-class OperationStatus(StrEnum):
-    QUEUED = "queued"
-    RUNNING = "running"
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
 
 
 @dataclass(frozen=True)
@@ -110,6 +104,7 @@ class SystemStatus:
 
 
 class ScheduleKind(StrEnum):
+    NODE_OUTBOX = "node-outbox"
     IO_HEARTBEAT = "io-heartbeat"
     CPU_HEARTBEAT = "cpu-heartbeat"
     OUTBOX = "outbox"

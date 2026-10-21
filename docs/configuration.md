@@ -72,3 +72,29 @@ remain pending. Their enabled defaults will be off where the approved plan says 
   operator's choice. Issued invoices retain the approved configuration snapshot.
 
 These are acceptance requirements, not claims that the pending editors exist.
+
+
+## Node onboarding on main
+
+These settings are newer than alpha.1. The owner chooses them at registration in
+Nodes, including its advanced section; values persist per node. Existing-node
+editing, rotation and automatic runtime application are not delivered yet.
+
+| Owner | Setting | Initial default | Application |
+| --- | --- | --- | --- |
+| Nodes | Agent endpoint | Required HTTPS URL | I/O worker connection; issued server certificate covers its hostname. |
+| Nodes | Listen / Xray API | `0.0.0.0:9443` / `127.0.0.1:10085` | Agent startup; Xray API must be literal loopback. |
+| Nodes | Request / header / idle / shutdown timeout | 15 / 5 / 60 / 20 seconds | Agent startup; request timeout also bounds the panel's HTTPS probe. |
+| Nodes | Request body / core reply limit | 1048576 / 16777216 bytes | Agent startup; reply limit also bounds status reads. |
+| Nodes | Leaf / authority lifetime | 2592000 / 31536000 seconds | Next initial credential issuance; no automatic renewal yet. |
+| Nodes | Certificate backdate | 60 seconds | Initial issuance tolerates bounded clock skew. |
+| Jobs/Nodes | Node outbox schedule | Enabled; 1 second | Native Beat database entry, editable live on the overview. Existing edits survive seeds. |
+
+Initial issuance is a CPU task. Probes are I/O tasks; their hard task deadline is
+three request timeouts plus ten seconds, with the soft deadline five seconds
+before it. Database operation leases add thirty seconds. Shared outbox batch,
+redelivery and attempt settings also apply to node work. These technical settings
+still require their future panel editors; they are not claimed fully configurable
+from the UI. Node bootstrap downloads include the server private key; responses
+are private/no-store and scoped to the owner. Database private keys use authenticated
+Fernet encryption derived from the installation secret. Restore must preserve it.

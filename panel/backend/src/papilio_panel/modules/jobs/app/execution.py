@@ -6,8 +6,9 @@ from uuid import UUID
 from django.utils import timezone
 
 from papilio_panel.modules.identity.interfaces import AdminAccessCapability
+from papilio_panel.shared.operations import OperationStatus
 
-from ..domain import ExecutionOutcome, OperationStatus, ProbeKind
+from ..domain import ExecutionOutcome, ProbeKind
 from ..interfaces import OperationStorage, ProbeChecks
 
 

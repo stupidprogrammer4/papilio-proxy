@@ -64,6 +64,47 @@ try {
   await page.reload();
   await page.getByTestId("system-status").waitFor();
   assert.equal(new URL(page.url()).pathname, "/");
+  await page.getByRole("link", { name: "Nodes", exact: true }).click();
+  await page.waitForURL(`${base}/nodes`);
+  await page.getByTestId("node-name").fill("browser-node");
+  await page.getByTestId("node-endpoint").fill("https://127.0.0.1:19443");
+  await page.getByTestId("node-advanced").click();
+  await page.getByTestId("node-request_timeout_seconds").fill("7");
+  const [registered] = await Promise.all([
+    page.waitForResponse(response => response.url().endsWith("/api/v1/nodes") && response.request().method() === "POST"),
+    page.getByTestId("node-create").click(),
+  ]);
+  assert.equal(registered.status(), 202);
+  const registration = await registered.json();
+  assert.equal(registration.node.runtime.request_timeout_seconds, 7);
+  await expect.poll(async () => (await (await page.request.get(`${base}/api/v1/nodes/${registration.node.id}/operations/${registration.operation.id}`)).json()).status,
+    { timeout: 35000, intervals: [100, 250, 500] }).toBe("succeeded");
+  await page.getByTestId("node-refresh").click();
+  const detail = page.getByTestId("node-detail");
+  await expect(detail).toContainText("Succeeded");
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByTestId("node-bootstrap").click(),
+  ]);
+  assert.equal(download.suggestedFilename(), `papilio-node-${registration.node.id}.zip`);
+  await page.getByTestId("node-search").fill("browser-node");
+  await page.getByTestId("node-search-submit").click();
+  await expect(page.getByTestId("node-list")).toContainText("browser-node");
+  await page.reload();
+  await expect(page.getByTestId("node-list")).toContainText("browser-node");
+  await page.getByTestId("node-row").click();
+  await expect(page.getByTestId("node-detail")).toContainText("https://127.0.0.1:19443");
+  await page.getByRole("link", { name: "Overview", exact: true }).click();
+  const deliverySchedule = page.getByTestId("schedule-node-outbox");
+  await deliverySchedule.locator('input[type="number"]').fill("9");
+  await deliverySchedule.locator('input[type="checkbox"]').uncheck();
+  const [paused] = await Promise.all([
+    page.waitForResponse(response => response.url().endsWith("/api/v1/system/schedules/node-outbox") && response.request().method() === "PUT"),
+    deliverySchedule.getByRole("button", { name: "Save", exact: true }).click(),
+  ]);
+  assert.equal(paused.status(), 200);
+  assert.equal((await paused.json()).enabled, false);
+  console.log("Real node registration, CPU credential issuance, private download and persisted panel state passed.");
   console.log("Real setup, CSRF login, authenticated status, outbox submission and session reload passed.");
 } finally {
   await browser.close();

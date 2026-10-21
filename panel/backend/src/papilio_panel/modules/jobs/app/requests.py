@@ -6,8 +6,9 @@ from django.db import transaction
 
 from papilio_panel.modules.identity.interfaces import AdminAccessCapability
 from papilio_panel.shared.errors import Conflict
+from papilio_panel.shared.operations import OperationStatus
 
-from ..domain import OperationRead, OperationStatus, ProbeSubmission
+from ..domain import OperationRead, ProbeSubmission
 from ..interfaces import OperationStorage
 
 

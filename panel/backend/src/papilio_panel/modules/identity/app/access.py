@@ -29,3 +29,7 @@ class AdminAccess:
         self.authorize(principal)
         if not principal.is_superuser:
             raise AuthenticationRejected("Only the installation owner can change this setting.")
+
+    def owner_permitted(self, actor_id: int) -> bool:
+        principal = self.storage.read(actor_id)
+        return principal.is_active and principal.is_staff and principal.is_superuser

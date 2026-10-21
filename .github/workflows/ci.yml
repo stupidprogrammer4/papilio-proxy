@@ -25,20 +25,7 @@ jobs:
           cache-dependency-path: node/agent/go.sum
       - name: Fetch the verified official Xray baseline
         run: |
-          python3 - <<'PY'
-          import hashlib, io, os, pathlib, urllib.request, zipfile
-          address = "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip"
-          with urllib.request.urlopen(address, timeout=90) as response:
-              content = response.read()
-          expected = "23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae"
-          if hashlib.sha256(content).hexdigest() != expected:
-              raise SystemExit("Official Xray archive checksum mismatch.")
-          target = pathlib.Path(os.environ["PAPILIO_XRAY_BINARY"])
-          target.parent.mkdir(parents=True, exist_ok=True)
-          with zipfile.ZipFile(io.BytesIO(content)) as archive:
-              target.write_bytes(archive.read("xray"))
-          target.chmod(0o755)
-          PY
+          python3 tools/fetch_test_xray.py
       - run: go mod verify
       - run: test -z "$(gofmt -l cmd internal)"
       - run: go vet ./...
@@ -74,8 +61,19 @@ jobs:
       PAPILIO_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
       PAPILIO_AUTH_RATE: 10000/min
       PYTHONPATH: ${{ github.workspace }}/panel/backend/src
+      PAPILIO_XRAY_BINARY: ${{ github.workspace }}/.ci/xray
+      PAPILIO_AGENT_BINARY: ${{ github.workspace }}/.ci/papilio-agent
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.x"
+          cache-dependency-path: node/agent/go.sum
+      - name: Build the actual node agent and fetch the verified core
+        run: |
+          python3 node/agent/tools/fetch_test_xray.py
+          cd node/agent
+          go build -o "$PAPILIO_AGENT_BINARY" ./cmd/papilio-agent
       - name: Configure test-owned integration connections
         env:
           DATABASE_URL: postgresql://papilio_test:integration-only@127.0.0.1:${{ job.services.postgres.ports[5432] }}/papilio_test

@@ -18,8 +18,9 @@ matching are subsequent deliveries. Existing client source is preserved; its
 presence does not establish backend feature support.
 
 On main, the runnable Go/mTLS agent now controls actual Xray and is tested through
-real client traffic. Enrollment, process management, panel integration and sales
-remain in progress. This work is not included in the foundation release above.
+real client traffic. Django now issues per-node mTLS bootstrap files in the CPU
+worker; the Nodes panel registers and checks an existing agent through the I/O
+worker. Automatic installation, process management and sales remain in progress. This work is not included in the foundation release above.
 See the [agent's current scope](node/agent/README.md).
 
 ## Install

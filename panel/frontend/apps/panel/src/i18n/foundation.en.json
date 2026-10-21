@@ -32,6 +32,17 @@
   "interval": "Interval in seconds",
   "enabled": "Enabled",
   "save": "Save",
-  "scheduleNames": { "io-heartbeat": "I/O worker heartbeat", "cpu-heartbeat": "CPU worker heartbeat", "outbox": "Durable message delivery" },
-  "states": { "queued": "Queued", "running": "Running", "succeeded": "Succeeded", "failed": "Failed", "cancelled": "Cancelled" }
+  "scheduleNames": {
+    "io-heartbeat": "I/O worker heartbeat",
+    "cpu-heartbeat": "CPU worker heartbeat",
+    "outbox": "Durable message delivery",
+    "node-outbox": "Node operation delivery"
+  },
+  "states": {
+    "queued": "Queued",
+    "running": "Running",
+    "succeeded": "Succeeded",
+    "failed": "Failed",
+    "cancelled": "Cancelled"
+  }
 }

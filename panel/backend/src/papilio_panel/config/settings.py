@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "django_celery_beat",
     "papilio_panel.modules.identity",
     "papilio_panel.modules.jobs",
+    "papilio_panel.modules.nodes",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

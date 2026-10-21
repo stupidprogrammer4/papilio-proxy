@@ -132,6 +132,14 @@ def test_install_browser_backup_restore_and_restart_preserve_data(tmp_path: Path
             "from django.contrib.auth.models import User; "
             "assert User.objects.filter(username='browser-owner', is_superuser=True).exists(); "
             "assert not User.objects.filter(username='after-backup').exists(); "
+            "from papilio_panel.modules.nodes.models import Node; "
+            "from papilio_panel.modules.nodes.providers import nodes; "
+            "n=Node.objects.get(name='browser-node'); "
+            "assert n.runtime.request_timeout_seconds == 7; "
+            "assert len(nodes.bootstrap(n.id, n.owner_id)) > 100; "
+            "from django_celery_beat.models import PeriodicTask; "
+            "schedule=PeriodicTask.objects.get(name__endswith='.node-outbox'); "
+            "assert not schedule.enabled and schedule.interval.every == 9; "
             "print('independent-read-passed')",
             capture=True,
         )
@@ -172,6 +180,11 @@ def test_install_browser_backup_restore_and_restart_preserve_data(tmp_path: Path
             "from django.contrib.auth.models import User; "
             "assert __version__ == '0.1.0-alpha.2'; "
             "assert User.objects.filter(username='browser-owner').exists(); "
+            "from papilio_panel.modules.nodes.models import Node; "
+            "assert Node.objects.get(name='browser-node').runtime.request_timeout_seconds == 7; "
+            "from django_celery_beat.models import PeriodicTask; "
+            "schedule=PeriodicTask.objects.get(name__endswith='.node-outbox'); "
+            "assert not schedule.enabled and schedule.interval.every == 9; "
             "print('synthetic-upgrade-passed')",
             capture=True,
         )
