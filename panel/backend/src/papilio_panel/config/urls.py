@@ -1,0 +1,14 @@
+"""Public transport composition only."""
+
+from django.urls import include, path
+from drf_spectacular.views import SpectacularAPIView
+
+from papilio_panel.modules.jobs.routers.health import liveness, readiness_view
+
+urlpatterns = [
+    path("api/v1/", include("papilio_panel.modules.identity.routers.urls")),
+    path("api/v1/", include("papilio_panel.modules.jobs.routers.urls")),
+    path("health/live", liveness),
+    path("health/ready", readiness_view),
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+]

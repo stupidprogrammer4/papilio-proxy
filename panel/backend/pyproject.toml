@@ -1,61 +1,56 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
 
 [project]
-name = "papilio-api"
-version = "0.1.0"
-requires-python = ">=3.13"
+name = "papilio-panel"
+version = "0.1.0a1"
+description = "Independent, integrated proxy management and commerce panel"
+requires-python = ">=3.13,<3.14"
+license = "MIT"
 dependencies = [
-  "aiohttp>=3.11,<4",
-  "anyio>=4.13,<5",
-  "papilio[server,mysql,crypto,passwords,rate-limit-redis] @ https://codeload.github.com/stupidprogrammer4/papilio/tar.gz/e026dbc9aa335ab4f6cc79f7ff2aecb198bd93ad",
-  "papilio-tasks[scheduler-redis,events-nats] @ https://codeload.github.com/stupidprogrammer4/papilio-tasks/tar.gz/bca239763eab5c0d176b5ac8af9e878edb6997a7",
-  "Pillow>=11,<13",
-  "qrcode[pil]>=8.2,<9",
-  "aiomysql>=0.2,<1",
-  "PyMySQL==1.1.2",
-  "sqlmodel>=0.0.24,<1",
-  "sqlalchemy[asyncio]>=2.0.14,<2.1",
-  "alembic>=1.16,<2",
-  "taskiq>=0.12.6,<0.13",
-  "taskiq-redis>=1.2.3,<1.2.4",
+  "Django>=5.2,<5.3",
+  "djangorestframework>=3.16,<3.17",
+  "drf-spectacular>=0.28,<1",
+  "psycopg[binary]>=3.2,<4",
+  "redis>=6,<8",
+  "celery>=5.6,<5.7",
+  "django-celery-beat>=2.8,<3",
+  "gunicorn>=23,<26",
 ]
 
 [project.optional-dependencies]
-dev = ["ruff>=0.16,<1", "pyright>=1.1.400,<2", "pytest>=8,<10", "httpx>=0.28,<1"]
+dev = [
+  "pytest>=8,<10",
+  "pytest-django>=4.11,<5",
+  "pytest-timeout>=2.3,<3",
+  "ruff>=0.12,<1",
+  "pyright>=1.1.400,<2",
+  "django-stubs>=5.2,<6",
+  "djangorestframework-stubs>=3.16,<4",
+  "types-redis>=4",
+]
 
-[tool.hatch.metadata]
-allow-direct-references = true
+[tool.setuptools.packages.find]
+where = ["src"]
 
-[tool.hatch.build.targets.wheel]
-packages = ["src"]
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "papilio_panel.config.settings"
+testpaths = ["tests"]
+addopts = "--strict-markers --strict-config"
+markers = ["runtime: real Celery/Beat/broker integration", "installer: isolated installer/CLI behavior"]
+timeout = 60
 
 [tool.ruff]
-line-length = 79
+line-length = 100
 target-version = "py313"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "W"]
+select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.pyright]
 include = ["src", "tests"]
 pythonVersion = "3.13"
 typeCheckingMode = "standard"
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "--import-mode=importlib --strict-markers"
-markers = [
-  "accounts: customer, staff, reseller identity and access contracts",
-  "billing: payment, SMS settlement and wallet contracts",
-  "sales: catalogue, checkout, fulfillment, renewal and loyalty contracts",
-  "network: configurations, cores, nodes, usage and IP enforcement contracts",
-  "operations: automation, monitoring and notification contracts",
-  "bot: backend Telegram consumer contracts",
-  "support: customer support contracts",
-  "platform: framework, lifecycle, migrations and performance contracts",
-  "unit: isolated behavior",
-  "integration: isolated real infrastructure",
-  "api: HTTP contracts",
-]
+venvPath = "../.."
+venv = ".venv"

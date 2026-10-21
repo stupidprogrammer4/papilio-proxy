@@ -1,4 +1,5 @@
 export * from "./ipPolicies";
+export * from "./system";
 import type { PurchasedIpPolicyRead, EffectiveIpPolicyRead, PlanIpPolicyRead, IpLimitCapacityRead, IpPolicyTransitionOptions } from "./ipPolicies";
 export * from "./smsOrigins";
 
@@ -235,6 +236,12 @@ export function setApiErrorTranslator(translator: ApiErrorTranslator): void {
 function errorMessage(body: unknown, status: number): ApiError {
   const envelope = body && typeof body === "object" ? body as Record<string, unknown> : {};
   const value = envelope.error && typeof envelope.error === "object" ? envelope.error as Record<string, unknown> : envelope;
+  if (typeof value.message_code !== "string" && status < 500) {
+    const detail = typeof value.detail === "string" ? value.detail : Object.values(value)
+      .flatMap(field => Array.isArray(field) ? field.filter((message): message is string => typeof message === "string") : []);
+    const message = typeof detail === "string" ? detail : detail.join(" ");
+    if (message) return new ApiError(status, typeof value.code === "string" ? value.code : "validation_error", message);
+  }
   const code = typeof value.message_code === "string" ? value.message_code : "request_failed";
   return new ApiError(status, code, errorTranslator?.(code, status) ?? messages[code] ?? (status === 429 ? "Too many requests. Try again later." : status === 413 ? "The request exceeds the allowed size." : status >= 500 ? "Server error. Try again." : "The request could not be completed. Check your input."));
 }

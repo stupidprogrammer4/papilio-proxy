@@ -17,6 +17,8 @@ export const useAuth = defineStore("auth", () => {
     }
   }
   async function login(username: string, password: string): Promise<void> {
+    const csrf = await request<{ csrf_token: string }>("/v1/admin/auth/csrf");
+    setCsrf(csrf.csrf_token);
     session.value = await request<Session>("/v1/admin/auth/login", "POST", { username, password });
     setCsrf(session.value.csrf_token);
     checked.value = true;
