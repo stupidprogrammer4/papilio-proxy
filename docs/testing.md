@@ -47,3 +47,15 @@ The clean-host bootstrap test is separate from these preinstalled-Docker tests.
 Production load, real core/client traffic, financial workflows, Android parsing,
 multi-host scheduling and prior-version migration compatibility are not established
 by foundation diagnostics or passing unit counts.
+
+## Xray adapter boundary on main
+
+The Go adapter tests start actual official Xray server/client processes and send
+HTTP traffic through VLESS to a controlled local origin. They exercise user
+creation/removal, credential rotation, counters, replay, concurrent requests and
+cancellation. One Linux fault test pauses its own core to verify queued request
+cancellation. No internal gRPC implementation is mocked.
+
+Commands and limitations are in [the adapter guide](../node/agent/README.md).
+This code is newer than the foundation release. It does not establish mTLS node
+enrollment, Django provisioning, quota enforcement or a completed bot purchase.

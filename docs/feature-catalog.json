@@ -295,7 +295,7 @@
       "title": "Actual Xray provisioning",
       "owner": "cores",
       "stage": "first",
-      "status": "planned",
+      "status": "in_progress",
       "completed_in": null,
       "expected_behavior": "A newly provisioned account connects with a real client and transfers traffic; revocation prevents new connections.",
       "configuration": {
@@ -309,12 +309,16 @@
         "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
       },
       "acceptance": "A newly provisioned account connects with a real client and transfers traffic; revocation prevents new connections.",
-      "evidence": [],
+      "evidence": [
+        "node/agent/internal/xray/client_integration_test.go",
+        "node/agent/internal/xray/client_linux_test.go"
+      ],
       "sources": [
         "OWNER",
         "PG"
       ],
-      "guide": null
+      "guide": null,
+      "verified_scope": "Go adapter -> actual local Xray gRPC -> actual Xray client -> isolated HTTP origin; no mTLS agent or Django provisioning path yet. Removal denies new connections; existing-session termination is unverified."
     },
     {
       "id": "FLOW-SUB",

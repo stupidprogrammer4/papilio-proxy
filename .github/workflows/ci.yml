@@ -9,6 +9,41 @@ permissions:
   contents: read
 
 jobs:
+  xray-adapter:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: node/agent
+    env:
+      PAPILIO_XRAY_BINARY: ${{ github.workspace }}/.ci/xray
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.x"
+          cache-dependency-path: node/agent/go.sum
+      - name: Fetch the verified official Xray baseline
+        run: |
+          python3 - <<'PY'
+          import hashlib, io, os, pathlib, urllib.request, zipfile
+          address = "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip"
+          with urllib.request.urlopen(address, timeout=90) as response:
+              content = response.read()
+          expected = "23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae"
+          if hashlib.sha256(content).hexdigest() != expected:
+              raise SystemExit("Official Xray archive checksum mismatch.")
+          target = pathlib.Path(os.environ["PAPILIO_XRAY_BINARY"])
+          target.parent.mkdir(parents=True, exist_ok=True)
+          with zipfile.ZipFile(io.BytesIO(content)) as archive:
+              target.write_bytes(archive.read("xray"))
+          target.chmod(0o755)
+          PY
+      - run: go mod verify
+      - run: test -z "$(gofmt -l internal)"
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...
+
   backend:
     runs-on: ubuntu-24.04
     timeout-minutes: 20

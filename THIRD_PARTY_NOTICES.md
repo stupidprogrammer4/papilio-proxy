@@ -3,7 +3,8 @@
 Papilio's original application code is licensed under MIT. This does not relicense
 external components. Runtime images retain their package/license materials and
 dependency metadata. Source dependency versions and integrity hashes are recorded
-in `panel/backend/requirements*.lock` and `panel/frontend/pnpm-lock.yaml`.
+in `panel/backend/requirements*.lock`, `panel/frontend/pnpm-lock.yaml` and
+`node/agent/go.mod` / `node/agent/go.sum`.
 
 Primary upstream license locations:
 
@@ -16,6 +17,11 @@ Primary upstream license locations:
 - [RabbitMQ](https://github.com/rabbitmq/rabbitmq-server/blob/main/LICENSE)
 - [Vue](https://github.com/vuejs/core/blob/main/LICENSE)
 - [Caddy](https://github.com/caddyserver/caddy/blob/master/LICENSE)
+- [Xray-core v26.3.27 / MPL 2.0](https://github.com/XTLS/Xray-core/blob/v26.3.27/LICENSE)
+- [gRPC Go](https://github.com/grpc/grpc-go/blob/master/LICENSE)
+- [Protocol Buffers Go](https://github.com/protocolbuffers/protobuf-go/blob/master/LICENSE)
+- [Google UUID](https://github.com/google/uuid/blob/master/LICENSE)
+- [Go synchronization extensions](https://cs.opensource.google/go/x/sync/+/master:LICENSE)
 
 Reference panel/bot repositories are feature references. Their implementation
 code is not bundled. Future Xray/Hysteria2/WireGuard/OpenVPN artifacts and their

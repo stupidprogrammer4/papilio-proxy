@@ -7,7 +7,7 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 | Stage | Status | Completed version | Remaining acceptance |
 | --- | --- | --- | --- |
 | Foundation | Experimental release | 0.1.0-alpha.1 | Additional OS/environment combinations and later panel settings editors remain pending. |
-| First practical release | Planned | — | Real Xray/client traffic, users/subscriptions, connected bot, products, wallet, receipts, purchase and delivery. |
+| First practical release | In progress | — | Connect the verified Xray adapter to mTLS agent/panel provisioning, then subscriptions, bot, products, wallet, receipts, purchase and delivery. |
 | PasarGuard phase one | Planned | — | Reconcile and execute the complete v5.4.1 feature baseline. |
 | Full sales and bot | Planned | — | Approved Mirza/PGClock capabilities, resellers, Mini App and offline intake. |
 | Network and additional cores | Planned | — | Four complete cores and verified reference extras, certificates, Single Port, WARP, speed/IP controls. |
@@ -15,6 +15,10 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 | Version 1 completion | Planned | — | Ads-only licensing, owner interfaces, upgrade/recovery and all accepted rows. |
 
 ## Current component evidence
+
+- On main after the foundation release: a native Go/Xray adapter is being verified
+  against actual server/client traffic. Agent mTLS, panel provisioning and service
+  purchase/delivery remain incomplete. See [adapter scope](node/agent/README.md).
 
 - Real PostgreSQL: atomic owner setup, session/CSRF, ownership and revocation.
 - Real RabbitMQ/Celery/Beat: separate worker queues, durable outbox, replay and
