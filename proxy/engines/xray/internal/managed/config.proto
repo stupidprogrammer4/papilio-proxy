@@ -1,5 +1,0 @@
-syntax = "proto3";
-package papilio.managed.xray;
-option go_package = "papilio-proxy/engines/xray/internal/managed";
-// Typed feature marker. Operational policy is owned by the embedding process.
-message DispatcherConfig {}

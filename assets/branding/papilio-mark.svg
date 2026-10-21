@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-labelledby="title">
-  <title id="title">Papilio butterfly mark</title>
-  <defs><linearGradient id="brand" x2="1" y2="1"><stop stop-color="#7565e7"/><stop offset="1" stop-color="#5142bc"/></linearGradient></defs>
-  <rect width="108" height="108" rx="30" fill="url(#brand)"/>
-  <path fill="#fff" d="M50 51C49 36 32 25 26 32C18 42 33 57 50 51ZM58 51C59 36 76 25 82 32C90 42 75 57 58 51Z"/>
-  <path fill="#c9c1ff" d="M50 57C38 51 26 59 32 70C38 81 49 70 50 57ZM58 57C70 51 82 59 76 70C70 81 59 70 58 57Z"/>
-  <path fill="#fff" d="M54 43C56 43 57 45 57 48V65C57 69 56 72 54 74C52 72 51 69 51 65V48C51 45 52 43 54 43Z"/>
-  <path fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" d="M53 44L48 37M55 44L60 37"/>
-</svg>
