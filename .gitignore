@@ -1,49 +1,32 @@
-# Runtime secrets and local state
+# Credentials and instance state
 .env
 .env.*
 !.env.example
+runtime.env
 *.pem
 *.key
 *.crt
-data/
-backups/
-!panel/backend/src/modules/operations/backups/
-!panel/backend/src/modules/operations/backups/**
+/backups/
+/data/
+/state/
 
-# Python / Go build output
+# Python, frontend and generated dependency maps
+.venv/
 __pycache__/
 *.py[cod]
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.venv/
-bin/
-coverage.xml
 *.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+coverage.xml
 node_modules/
 dist/
-panel/backend/config.yml
-proxy/config.json
+graphify-out/
 
-# Internal planning stays local; reviewed usage/release documents are public.
-docs/*
-!docs/development.md
-!docs/deployment.md
-!docs/release-notes.md
-!docs/managed-runtime.md
-!docs/testing.md
-!docs/feature-reference.en.md
-!docs/getting-started.en.md
-!docs/getting-started.fa.md
-!docs/user-guide.en.md
-!docs/user-guide.fa.md
-AGENTS.md
-START-HERE.fa.md
-PROJECT-BRIEF.md
-TASKS.md
-proxy/PROTOCOL-POLICY.md
+# Original private handoff; public feature and usage guides are tracked.
+/docs/xray-panel-project-spec-final.md
 
-# Android local tools and generated packages
+# Android machine-specific configuration and generated packages
 .gradle/
 **/local.properties
 android/**/build/

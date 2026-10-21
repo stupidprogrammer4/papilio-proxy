@@ -1,0 +1,39 @@
+# Test-owned infrastructure only; never points at an installed Papilio instance.
+services:
+  postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_USER: papilio_test
+      POSTGRES_DB: papilio_test
+      POSTGRES_PASSWORD: ${PAPILIO_TEST_PASSWORD:?test password required}
+    ports:
+      - "127.0.0.1:${PAPILIO_TEST_DB_PORT:?test DB port required}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U papilio_test -d papilio_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 40
+    tmpfs:
+      - /var/lib/postgresql/data
+  redis:
+    image: redis:8-bookworm
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:${PAPILIO_TEST_REDIS_PORT:?test Redis port required}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 40
+  rabbitmq:
+    image: rabbitmq:4.3-management
+    environment:
+      RABBITMQ_DEFAULT_USER: papilio_test
+      RABBITMQ_DEFAULT_PASS: ${PAPILIO_TEST_PASSWORD:?test password required}
+    ports:
+      - "127.0.0.1:${PAPILIO_TEST_AMQP_PORT:?test AMQP port required}:5672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 3s
+      timeout: 5s
+      retries: 40

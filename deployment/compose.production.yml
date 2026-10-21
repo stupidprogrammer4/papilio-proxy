@@ -1,0 +1,4 @@
+services:
+  gateway:
+    ports:
+      - ${PAPILIO_BIND_ADDRESS:?}:${PAPILIO_HTTPS_PORT:?}:443
