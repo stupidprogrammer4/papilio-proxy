@@ -38,13 +38,22 @@ jobs:
       PAPILIO_SECRET_KEY: ci-only-not-a-production-secret-key-000000000000000000000000000000
       PAPILIO_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
       PAPILIO_AUTH_RATE: 10000/min
-      DATABASE_URL: postgresql://papilio_test:integration-only@127.0.0.1:${{ job.services.postgres.ports[5432] }}/papilio_test
-      PAPILIO_CACHE_URL: redis://127.0.0.1:${{ job.services.redis.ports[6379] }}/0
-      CELERY_BROKER_URL: amqp://papilio_test:integration-only@127.0.0.1:${{ job.services.rabbitmq.ports[5672] }}//
-      PAPILIO_TEST_BROKER_CONTAINER: ${{ job.services.rabbitmq.id }}
       PYTHONPATH: ${{ github.workspace }}/panel/backend/src
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Configure test-owned integration connections
+        env:
+          DATABASE_URL: postgresql://papilio_test:integration-only@127.0.0.1:${{ job.services.postgres.ports[5432] }}/papilio_test
+          PAPILIO_CACHE_URL: redis://127.0.0.1:${{ job.services.redis.ports[6379] }}/0
+          CELERY_BROKER_URL: amqp://papilio_test:integration-only@127.0.0.1:${{ job.services.rabbitmq.ports[5672] }}//
+          PAPILIO_TEST_BROKER_CONTAINER: ${{ job.services.rabbitmq.id }}
+        run: |
+          python3 - <<'PY'
+          import os
+          with open(os.environ["GITHUB_ENV"], "a") as output:
+              for name in ("DATABASE_URL", "PAPILIO_CACHE_URL", "CELERY_BROKER_URL", "PAPILIO_TEST_BROKER_CONTAINER"):
+                  output.write(f"{name}={os.environ[name]}\n")
+          PY
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
