@@ -8,13 +8,15 @@ payments, Telegram bots and the preserved Android bridge.
 
 ## Current release
 
-**0.1.0-alpha.3 is an experimental release candidate. The VPN sales MVP is still in progress.**
+**0.1.0-alpha.3 is an experimental release. The VPN sales MVP is still in progress.**
 [Release status](https://github.com/stupidprogrammer4/papilio-proxy/releases/tag/v0.1.0-alpha.3).
 
 Alpha.3 corrects the native image ID mismatch found on a fresh Docker29 host.
 Its OCI bundles declare both manifest and configuration digests, and publication
 requires execution on classic and containerd storage for both architectures.
-Public alpha.3 artifact installation on a clean host is still pending.
+Public alpha.3 production/HTTP installation on fresh Ubuntu24.04 amd64 passed
+owner setup/login, edited schedules and actual queued worker execution.
+See the [installation evidence](docs/installation-matrix.md) for scope and timings.
 
 It ships owner setup and CSRF/session login, diagnostics, separate real CPU/I/O
 workers, editable database schedules, node registration/mTLS bootstrap, operator
@@ -34,8 +36,12 @@ inspection is separate from real bot commerce.
 On a clean candidate Ubuntu/Debian server:
 
 ```sh
-sudo bash -c 'set -euo pipefail; if ! command -v curl >/dev/null || [ ! -s /etc/ssl/certs/ca-certificates.crt ]; then apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates; fi; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.3/install.sh | bash -s --'
+sudo bash -c 'set -euo pipefail; if ! command -v curl >/dev/null || [ ! -s /etc/ssl/certs/ca-certificates.crt ]; then apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates; fi; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/main/install.sh | bash -s --'
 ```
+
+The bootstrap follows main and currently installs the immutable alpha.3 release
+assets. It skips installed download prerequisites and refreshes only Docker
+metadata unless missing dependencies require the system indexes.
 
 The terminal wizard selects environment, domain/IP and HTTP or HTTPS. F3 opens
 instance, ports, bind address and image mode; F2 reviews, Tab/arrows navigate and
@@ -45,7 +51,7 @@ package is installed. The bootstrap starts with production selected.
 For unattended single-server HTTP installation:
 
 ```sh
-sudo bash -c 'set -euo pipefail; if ! command -v curl >/dev/null || [ ! -s /etc/ssl/certs/ca-certificates.crt ]; then apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates; fi; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.3/install.sh | bash -s -- --non-interactive --environment production --host panel.example.com --scheme http'
+sudo bash -c 'set -euo pipefail; if ! command -v curl >/dev/null || [ ! -s /etc/ssl/certs/ca-certificates.crt ]; then apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates; fi; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/main/install.sh | bash -s -- --non-interactive --environment production --host panel.example.com --scheme http'
 ```
 
 HTTP accepts a domain or IPv4 and publishes only its selected HTTP port. HTTPS is

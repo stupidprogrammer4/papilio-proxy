@@ -7,13 +7,14 @@
 
 ## وضعیت فعلی
 
-**نسخهٔ 0.1.0-alpha.3 نامزد انتشار آزمایشی است؛ MVP فروش سرویس هنوز در حال ساخت است.**
+**نسخهٔ 0.1.0-alpha.3 یک انتشار آزمایشی است؛ MVP فروش سرویس هنوز در حال ساخت است.**
 [وضعیت انتشار](https://github.com/stupidprogrammer4/papilio-proxy/releases/tag/v0.1.0-alpha.3).
 
 Alpha.3 تفاوت شناسهٔ ایمیج در Docker29 تمیز را اصلاح می‌کند. بستهٔ OCI هر دو
 شناسهٔ manifest و config را ثبت می‌کند؛ انتشار به آزمون واقعی هر دو نوع مخزن
-classic و containerd روی دو معماری وابسته است. نصب بستهٔ عمومی alpha.3 روی سرور
-تمیز هنوز باقی است.
+classic و containerd روی دو معماری وابسته است. نصب عمومی alpha.3 در حالت
+production/HTTP روی Ubuntu24.04 amd64 تمیز، ورود مالک، تغییر زمان‌بندی و اجرای
+واقعی worker را گذرانده است. [جزئیات نصب و زمان‌ها](docs/installation-matrix.md).
 
 راه‌اندازی مالک، ورود با نشست و CSRF، عملیات پس‌زمینه، workerهای CPU و ارتباطی،
 زمان‌بندی قابل ویرایش، ثبت نود و صدور فایل mTLS، تنظیم بات هر اپراتور و اتصال ادمین،
@@ -31,8 +32,12 @@ classic و containerd روی دو معماری وابسته است. نصب بس�
 روی سرور تمیز Ubuntu/Debian از ماتریس اولیه:
 
 ```sh
-sudo bash -c 'set -euo pipefail; if ! command -v curl >/dev/null || [ ! -s /etc/ssl/certs/ca-certificates.crt ]; then apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates; fi; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.3/install.sh | bash -s --'
+sudo bash -c 'set -euo pipefail; if ! command -v curl >/dev/null || [ ! -s /etc/ssl/certs/ca-certificates.crt ]; then apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates; fi; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/main/install.sh | bash -s --'
 ```
+
+اسکریپت راه‌انداز از main دریافت می‌شود و فعلاً بسته‌های ثابت alpha.3 را نصب می‌کند.
+پیش‌نیازهای موجود دوباره نصب نمی‌شوند؛ فهرست مخزن Docker جدا دریافت می‌شود و
+فهرست کامل سیستم فقط در صورت کمبود وابستگی لازم است.
 
 ویزارد، محیط، دامنه/IP و HTTP یا HTTPS را می‌گیرد. F3 تنظیمات شناسه، پورت، نشانی
 شنود و روش ایمیج‌ها را باز می‌کند؛ F2 مرور تنظیمات، Tab و کلیدهای جهت برای حرکت و
@@ -42,7 +47,7 @@ Esc برای لغو هستند. مقادیر نصب قبلی حفظ می‌شو�
 نصب بدون تعامل با HTTP روی یک سرور:
 
 ```sh
-sudo bash -c 'set -euo pipefail; if ! command -v curl >/dev/null || [ ! -s /etc/ssl/certs/ca-certificates.crt ]; then apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates; fi; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.3/install.sh | bash -s -- --non-interactive --environment production --host panel.example.com --scheme http'
+sudo bash -c 'set -euo pipefail; if ! command -v curl >/dev/null || [ ! -s /etc/ssl/certs/ca-certificates.crt ]; then apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates; fi; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/main/install.sh | bash -s -- --non-interactive --environment production --host panel.example.com --scheme http'
 ```
 
 HTTP با دامنه یا IPv4 کار می‌کند و فقط پورت HTTP انتخابی باز می‌شود. HTTPS اختیاری

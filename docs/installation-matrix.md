@@ -39,7 +39,7 @@ clean bootstrap remain separate checks. Support is reported at the tested scope.
 
 ## Alpha.2 cold-host finding and alpha.3 correction
 
-A fresh Ubuntu24.04 amd64 VM installed Docker29.9.2/containerd and downloaded/loaded
+A fresh Ubuntu 24.04 amd64 VM installed Docker29.9.2/containerd and downloaded/loaded
 all five public alpha.2 images, then failed exact ID verification before database
 startup. This is a reproduced release limitation; it does not add a supported row.
 The native OCI and classic config IDs differ. Explicit build mode is its workaround.
@@ -47,4 +47,32 @@ The native OCI and classic config IDs differ. Explicit build mode is its workaro
 The alpha.3 candidate records both native identities and requires the same OCI
 archives through native classic/containerd CI consumers on both architectures.
 A real tiny OCI archive already demonstrates correct native matching and rejected
-tampered digests on both stores. Full public alpha.3 clean-host proof is pending.
+tampered digests on both stores. Public alpha.3 clean-host production/HTTP
+installation passed on the same
+Ubuntu 24.04.5 amd64 base, with both worker queues observed and independent
+Chromium owner setup/login, schedule editing and a new queued operation. Its
+same-command resume retained owner/password, the edited 2 s schedule and runtime
+credentials, verified through an independent login and unchanged runtime.env SHA.
+The domain was browser-mapped to the disposable VM; this does not prove public
+DNS or ACME. Other OS/architecture/environment cells remain pending.
+
+## Cold installation timing
+
+Both observations used the same official Ubuntu 24.04.5 amd64 cloud-image base,
+2 vCPU / 4 GiB KVM, no installed Docker/Papilio or image cache, production/HTTP, and
+actual public alpha.3 source/native image downloads. The new bootstrap uses
+native APT repository selection and dependency resolution; no service was dropped.
+
+| Observation | Duration | Scope |
+| --- | --- | --- |
+| Original public one-line command | 326795 ms | Included unconditional full system-index refresh and redundant prerequisite work. |
+| Corrected bootstrap | 186883 ms | Corrected script staged by SCP before timing; actual public release downloads, Docker install, migrations, panel and both worker checks included. |
+
+Corrected-run milestones: first application stage 40263 ms; image preparation
+started 40400 ms and ended 150502 ms; migrations started 159144 ms; final startup
+started 166736 ms. Image preparation therefore took 110102 ms. The measured total
+reduction was 139912 ms. These are single observations, not a universal speed
+guarantee; the script's own initial download is excluded from the corrected run.
+PasarGuard was source-inspected, not benchmarked on this VM. Fast installation
+remains in progress. Independent Chromium setup/login, edited schedule, actual
+worker operation and session reload passed after the corrected cold run.

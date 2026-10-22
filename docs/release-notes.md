@@ -1,7 +1,9 @@
 # 0.1.0-alpha.3 — portable native images and managed core process
 
 Experimental connected foundation; the VPN sales MVP remains in progress.
-Public artifact installation on a fresh OS is a separate pending verification.
+Public alpha.3 production/HTTP installation on fresh Ubuntu 24.04.5 amd64 passed
+owner setup/login, editable schedules and actual worker execution. Public DNS
+and ACME issuance remain separate checks.
 
 This corrective release uses native OCI exports with both exact manifest and
 configuration digests. Alpha.2's classic Docker producer recorded config IDs;
@@ -36,3 +38,19 @@ payment matching and independent offline bot intake remain later work. See TODO.
 No universal OS/version, public ACME or in-place schema downgrade claim. Default
 backups are private/compressed, without optional password encryption. Original
 code is MIT; external dependencies and cores retain their original licenses.
+
+## Bootstrap speed correction after alpha.3
+
+The documented main bootstrap skips available curl/CA prerequisites and duplicate
+APT work. It refreshes Docker metadata separately, preserves existing system
+indexes, and refreshes full indexes if native dependency resolution needs them.
+It still downloads the unchanged, checksum-verified alpha.3 release artifacts.
+
+A fresh 2 vCPU / 4 GiB Ubuntu 24.04.5 amd64 VM with no Docker or image cache completed
+the corrected bootstrap in 186883 ms, compared with 326795 ms for the earlier public
+command. The corrected script was staged before timing; both runs downloaded
+public source/image assets. These are two observations on one host/network, not
+a guaranteed time or a measured comparison against PasarGuard. Native image
+preparation accounted for 110102 ms and remains the next speed bottleneck.
+Independent Chromium setup/login, schedule editing and real worker execution
+passed after installation. See the installation evidence matrix.
