@@ -34,7 +34,7 @@ inspection is separate from real bot commerce.
 On a clean candidate Ubuntu/Debian server:
 
 ```sh
-sudo bash -c 'set -euo pipefail; apt-get update; apt-get install -y curl ca-certificates; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.3/install.sh | bash -s --'
+sudo bash -c 'set -euo pipefail; if ! command -v curl >/dev/null || [ ! -s /etc/ssl/certs/ca-certificates.crt ]; then apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates; fi; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.3/install.sh | bash -s --'
 ```
 
 The terminal wizard selects environment, domain/IP and HTTP or HTTPS. F3 opens
@@ -45,7 +45,7 @@ package is installed. The bootstrap starts with production selected.
 For unattended single-server HTTP installation:
 
 ```sh
-sudo bash -c 'set -euo pipefail; apt-get update; apt-get install -y curl ca-certificates; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.3/install.sh | bash -s -- --non-interactive --environment production --host panel.example.com --scheme http'
+sudo bash -c 'set -euo pipefail; if ! command -v curl >/dev/null || [ ! -s /etc/ssl/certs/ca-certificates.crt ]; then apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates; fi; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.3/install.sh | bash -s -- --non-interactive --environment production --host panel.example.com --scheme http'
 ```
 
 HTTP accepts a domain or IPv4 and publishes only its selected HTTP port. HTTPS is

@@ -77,7 +77,7 @@ case "${ID:-}:${VERSION_ID:-}:$(uname -m)" in
     ubuntu:22.04:x86_64|ubuntu:24.04:x86_64|ubuntu:26.04:x86_64|debian:12:x86_64|debian:13:x86_64|ubuntu:22.04:aarch64|ubuntu:24.04:aarch64|ubuntu:26.04:aarch64|debian:12:aarch64|debian:13:aarch64) ;;
     *) $papilio_allow_unverified || { echo 'OS/architecture outside the candidate matrix.' >&2; exit 1; } ;;
 esac
-if ! command -v python3 >/dev/null || ! command -v curl >/dev/null; then
+if ! command -v python3 >/dev/null || ! command -v curl >/dev/null || [[ ! -s /etc/ssl/certs/ca-certificates.crt ]]; then
     [[ $EUID == 0 ]] || { echo 'Run the bootstrap with sudo to install prerequisites.' >&2; exit 1; }
     apt-get update
     DEBIAN_FRONTEND=noninteractive apt-get install -y python3 curl ca-certificates
@@ -186,8 +186,6 @@ if ! command -v docker >/dev/null || ! docker compose version >/dev/null 2>&1; t
             exit 1
         fi
     fi
-    apt-get update
-    DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl
     install -m 0755 -d /etc/apt/keyrings
     curl --fail --silent --show-error "https://download.docker.com/linux/$ID/gpg" --output /etc/apt/keyrings/docker.asc
     chmod a+r /etc/apt/keyrings/docker.asc
@@ -201,11 +199,19 @@ Architectures: $(dpkg --print-architecture)
 Signed-By: /etc/apt/keyrings/docker.asc
 EOF
     fi
-    apt-get update
+    # Refresh the new repository without downloading unrelated distro indexes.
+    # Preserve existing lists; resolve missing distro dependencies through APT below.
+    apt-get update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/docker.sources \
+        -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0
     if command -v docker >/dev/null; then
-        DEBIAN_FRONTEND=noninteractive apt-get install -y docker-compose-plugin docker-buildx-plugin
+        papilio_docker_packages=(docker-compose-plugin docker-buildx-plugin)
     else
-        DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+        papilio_docker_packages=(docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin)
     fi
+    if ! apt-get --simulate install "${papilio_docker_packages[@]}" >/dev/null 2>&1; then
+        printf '%s\n' 'Refreshing system package indexes for missing Docker dependencies.'
+        apt-get update
+    fi
+    DEBIAN_FRONTEND=noninteractive apt-get install -y "${papilio_docker_packages[@]}"
 fi
 python3 "$papilio_source/deployment/papilio.py" --home "$papilio_home" --environment "$papilio_environment" --instance "$papilio_instance" install --source "$papilio_source" --command-path "$papilio_command_path" "${papilio_install_arguments[@]}"
