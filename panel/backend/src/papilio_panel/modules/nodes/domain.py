@@ -185,3 +185,39 @@ class ProbeObservation:
     reachable: bool
     uptime_seconds: int | None = None
     error_code: str | None = None
+
+
+@dataclass(frozen=True)
+class XrayUserIdentity:
+    inbound_tag: str
+    email: str
+
+
+@dataclass(frozen=True)
+class VlessUser:
+    identity: XrayUserIdentity
+    identifier: UUID = field(repr=False)
+    flow: str = ""
+    level: int = 0
+
+
+@dataclass(frozen=True)
+class XrayApply:
+    actor_id: int
+    node_id: UUID
+    user: VlessUser
+
+
+@dataclass(frozen=True)
+class XrayRemove:
+    actor_id: int
+    node_id: UUID
+    identity: XrayUserIdentity
+
+
+@dataclass(frozen=True)
+class MutationObservation:
+    node_id: UUID
+    succeeded: bool
+    changed: bool | None = None
+    error_code: str | None = None

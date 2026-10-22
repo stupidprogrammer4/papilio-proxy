@@ -4,6 +4,7 @@ import json
 import ssl
 import threading
 from collections.abc import Iterator
+from contextlib import suppress
 from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -16,6 +17,8 @@ from papilio_panel.modules.nodes.domain import (
     CertificateInput,
     CertificatePolicy,
     NodeConnection,
+    VlessUser,
+    XrayUserIdentity,
 )
 from papilio_panel.modules.nodes.infra.agent import NativeAgentGateway, write_private
 from papilio_panel.modules.nodes.infra.certificates import NativeCertificateIssuer
@@ -33,16 +36,27 @@ def agent_endpoint(tmp_path: Path) -> Iterator[tuple[NodeConnection, list[object
         )
     )
     responses: list[object] = [
-        {"node_id": str(node_id), "protocol_version": 1, "core": {"uptime_seconds": 8}}
+        {"node_id": str(node_id), "protocol_version": 1, "core": {"uptime_seconds": 8}},
+        200,
     ]
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             body = json.dumps(responses[0]).encode()
-            self.send_response(200)
+            status = responses[1]
+            assert isinstance(status, int)
+            self.send_response(status)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
-            self.wfile.write(body)
+            # Limit/identity rejection may close before the controlled double replies.
+            with suppress(BrokenPipeError, ConnectionResetError, ssl.SSLEOFError):
+                self.wfile.write(body)
+
+        def do_PUT(self) -> None:
+            self.rfile.read(int(self.headers["Content-Length"]))
+            self.do_GET()
+
+        do_DELETE = do_GET
 
         def log_message(self, format: str, *args: object) -> None:
             pass
@@ -115,3 +129,80 @@ def test_native_mtls_requires_expected_node_identity_and_issued_authority(
     rejected = NativeAgentGateway().check(replace(connection, credentials=other))
     assert rejected.reachable is False
     assert rejected.error_code == "tls_rejected"
+
+
+@pytest.mark.parametrize("method", ["apply", "remove"])
+@pytest.mark.parametrize(
+    "payload", [None, [], {}, {"changed": "yes"}, {"changed": 1}, {"changed": None}]
+)
+def test_invalid_mutation_replies_do_not_claim_success(
+    agent_endpoint: tuple[NodeConnection, list[object]], method: str, payload: object
+) -> None:
+    connection, responses = agent_endpoint
+    responses[0] = (
+        payload | {"node_id": str(connection.node_id)} if isinstance(payload, dict) else payload
+    )
+    identity = XrayUserIdentity("inbound", "native-user")
+    gateway = NativeAgentGateway()
+    if method == "apply":
+        result = gateway.apply_vless(connection, VlessUser(identity, uuid4()))
+    else:
+        result = gateway.remove_xray(connection, identity)
+    assert result.succeeded is False
+    assert result.changed is None
+    assert result.error_code == "invalid_node_response"
+
+
+@pytest.mark.parametrize(
+    "status,code",
+    [
+        (400, "invalid_input"),
+        (409, "unsupported_account"),
+        (408, "request_cancelled"),
+        (502, "core_rejected"),
+        (504, "core_timeout"),
+        (503, "core_unavailable"),
+        (503, "core_resource_limit"),
+    ],
+)
+def test_recognized_agent_errors_remain_typed_technical_failures(
+    agent_endpoint: tuple[NodeConnection, list[object]], status: int, code: str
+) -> None:
+    connection, responses = agent_endpoint
+    responses[:] = [{"code": code}, status]
+    result = NativeAgentGateway().remove_xray(connection, XrayUserIdentity("inbound", "user"))
+    assert result.succeeded is False
+    assert result.changed is None
+    assert result.error_code == code
+
+
+def test_mutations_reject_wrong_node_unknown_errors_and_oversized_responses(
+    agent_endpoint: tuple[NodeConnection, list[object]],
+) -> None:
+    connection, responses = agent_endpoint
+    identity = XrayUserIdentity("inbound", "user")
+    gateway = NativeAgentGateway()
+    responses[0] = {"node_id": str(uuid4()), "changed": True}
+    assert gateway.remove_xray(connection, identity).error_code == "node_identity_mismatch"
+    responses[:] = [{"code": "arbitrary-private-server-error"}, 503]
+    assert gateway.remove_xray(connection, identity).error_code == "invalid_node_response"
+    responses[:] = [{"node_id": str(connection.node_id), "changed": True}, 200]
+    bounded = replace(connection, runtime=replace(connection.runtime, max_grpc_reply_bytes=8))
+    assert gateway.remove_xray(bounded, identity).error_code == "node_response_limit"
+    assert (
+        gateway.apply_vless(
+            replace(connection, node_id=uuid4()), VlessUser(identity, uuid4())
+        ).error_code
+        == "node_identity_mismatch"
+    )
+
+
+def test_oversized_user_payload_stops_before_connection(
+    agent_endpoint: tuple[NodeConnection, list[object]],
+) -> None:
+    connection, _ = agent_endpoint
+    limited = replace(connection, runtime=replace(connection.runtime, max_body_bytes=1))
+    user = VlessUser(XrayUserIdentity("inbound", "user"), uuid4())
+    result = NativeAgentGateway().apply_vless(limited, user)
+    assert result.succeeded is False
+    assert result.error_code == "request_body_limit"

@@ -6,6 +6,7 @@ from uuid import UUID
 from .domain import (
     CertificateInput,
     IssuedCredentials,
+    MutationObservation,
     NodeConnection,
     NodeCreate,
     NodeCreation,
@@ -16,11 +17,15 @@ from .domain import (
     NodeWorkKind,
     NodeWorkRead,
     ProbeObservation,
+    VlessUser,
     WorkClaim,
     WorkCreation,
     WorkDelivery,
     WorkOutcome,
     WorkSubmission,
+    XrayApply,
+    XrayRemove,
+    XrayUserIdentity,
 )
 
 
@@ -46,6 +51,17 @@ class CertificateIssuer(Protocol):
 
 class AgentGateway(Protocol):
     def check(self, connection: NodeConnection) -> ProbeObservation: ...
+    def apply_vless(self, connection: NodeConnection, user: VlessUser) -> MutationObservation: ...
+    def remove_xray(
+        self, connection: NodeConnection, identity: XrayUserIdentity
+    ) -> MutationObservation: ...
+
+
+class NodeXrayControlCapability(Protocol):
+    """Scoped technical control for background service-provisioning use cases."""
+
+    def apply(self, values: XrayApply) -> MutationObservation: ...
+    def remove(self, values: XrayRemove) -> MutationObservation: ...
 
 
 class BootstrapArchive(Protocol):

@@ -45,6 +45,12 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
   configuration editing/renewal, core management, provisioning and purchase
   remain incomplete. See [agent scope](node/agent/README.md).
 
+- Django-to-agent user control on main: typed owner-scoped VLESS apply/remove
+  uses the issued mTLS identity and native Xray API. Actual client traffic,
+  duplicate requests, literal URL characters, foreign owners and revoked access
+  are exercised. This is an internal background provisioning interface; it does
+  not yet provide persisted service accounts, subscriptions or panel/bot purchases.
+
 - Bot onboarding on main: owner-scoped encrypted tokens, editable runtime and native
   per-bot schedules, one-use admin pairing and durable supported message intake.
   Worker and installed-browser paths use a controlled external Telegram double;
