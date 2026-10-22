@@ -135,3 +135,23 @@ chat, chosen values, disabled interval and decryption of the preserved token.
 Internal app/storage/queue paths are not mocked. The Telegram API is substituted;
 no real Telegram purchase conversation is inferred. Separate live read-only
 getMe/getWebhookInfo verification proves identity only and sends no messages.
+
+## Portable native image identity regression
+
+Public alpha.2 classic exports failed ID matching after fresh Docker29/containerd
+import, despite CI passing on its existing engine. Alpha.3 builds native OCI
+archives and binds both exported config and OCI digests to each named image.
+Publication requires full candidate browser/recovery and previous-release checks
+on explicitly configured native classic and containerd Docker29.9.2 engines.
+No operator daemon is changed by the application installer. Local compatibility
+proof uses only an owned VM and a tiny native OCI export: the original matcher
+fails on classic storage, the portable matcher passes, and a wrong config digest
+is rejected. This is an image boundary proof, not a whole installed workflow.
+
+Portable bundle production requires the builder's containerd image store. The
+application installer supports both stores. On a classic development daemon, use
+`PAPILIO_TEST_RELEASE_IMAGES` with verified OCI candidate assets for prebuilt
+fixtures instead of changing an operator's daemon. CI configures its owned engines
+explicitly; no normal host setting is changed. Previous-release checks cover the
+published alpha.1 and alpha.2, selecting explicit source builds for alpha.2's known
+prebuilt import issue and preserving all old installation identity/settings.

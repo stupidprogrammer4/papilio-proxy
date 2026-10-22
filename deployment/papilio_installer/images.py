@@ -31,6 +31,7 @@ class ImageReference:
     role: ImageRole
     reference: str
     content_id: str
+    config_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,7 @@ class ImageBundle:
     sha256: str
     size: int
     images: tuple[ImageReference, ...]
+    format_version: int = 1
 
 
 @dataclass(frozen=True)
@@ -63,7 +65,9 @@ def image_asset_name(version: str, platform: str) -> str:
     return f"papilio-{release_version(version)}-images-{platform.replace('/', '-')}.tar.gz"
 
 
-def read_reference(value: object, version: str, platform: str) -> ImageReference:
+def read_reference(
+    value: object, version: str, platform: str, format_version: int
+) -> ImageReference:
     if not isinstance(value, dict):
         raise ValueError("An image identity must be an object.")
     try:
@@ -76,7 +80,16 @@ def read_reference(value: object, version: str, platform: str) -> ImageReference
         raise ValueError("The image reference is not owned by this release and platform.")
     if not isinstance(content_id, str) or re.fullmatch(r"sha256:[a-f0-9]{64}", content_id) is None:
         raise ValueError("The release image identity is invalid.")
-    return ImageReference(role, reference, content_id)
+    config_id = None
+    if format_version == 2:
+        config_id = value.get("config_id")
+        if (
+            not isinstance(config_id, str)
+            or re.fullmatch(r"sha256:[a-f0-9]{64}", config_id) is None
+            or config_id == content_id
+        ):
+            raise ValueError("A portable image requires distinct native OCI and config digests.")
+    return ImageReference(role, reference, content_id, config_id)
 
 
 def read_image_bundle(source: Path, platform: str) -> ImageBundle | None:
@@ -91,7 +104,7 @@ def read_image_bundle(source: Path, platform: str) -> ImageBundle | None:
         raise ValueError("The release image manifest is not valid JSON.") from error
     if not isinstance(manifest, dict) or type(manifest.get("format")) is not int:
         raise ValueError("The release image manifest has an invalid format.")
-    if manifest["format"] != 1:
+    if manifest["format"] not in {1, 2}:
         raise ValueError("The release image manifest format is not supported.")
     version = release_version((source / "VERSION").read_text().strip())
     if manifest.get("version") != version:
@@ -112,10 +125,12 @@ def read_image_bundle(source: Path, platform: str) -> ImageBundle | None:
     raw_images = bundle.get("images")
     if not isinstance(raw_images, list):
         raise ValueError("The release image identities must be a list.")
-    images = tuple(read_reference(value, version, platform) for value in raw_images)
+    images = tuple(
+        read_reference(value, version, platform, manifest["format"]) for value in raw_images
+    )
     if len(images) != len(ImageRole) or {image.role for image in images} != set(ImageRole):
         raise ValueError("The release must declare each infrastructure image role exactly once.")
-    return ImageBundle(version, platform, asset, checksum, size, images)
+    return ImageBundle(version, platform, asset, checksum, size, images, manifest["format"])
 
 
 def archive_matches(path: Path, bundle: ImageBundle) -> bool:
@@ -238,7 +253,7 @@ def inspect_image_bundle(bundle: ImageBundle) -> bool:
             by_reference[reference] = image
     return all(
         by_reference.get(expected.reference) is not None
-        and by_reference[expected.reference].content_id == expected.content_id
+        and by_reference[expected.reference].content_id in {expected.content_id, expected.config_id}
         and by_reference[expected.reference].platform == bundle.platform
         for expected in bundle.images
     )

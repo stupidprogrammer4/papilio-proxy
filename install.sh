@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # The bootstrap owns prerequisites; Python owns private instance configuration.
-papilio_version=0.1.0-alpha.2
+papilio_version=0.1.0-alpha.3
 papilio_environment=production
 papilio_instance=default
 papilio_home=/opt/papilio

@@ -50,7 +50,7 @@ def package_fixture(tmp_path: Path) -> tuple[Path, Path]:
         asset = assets / f"papilio-{VERSION}-images-linux-{arch}.tar.gz"
         asset.write_bytes(body)
         manifest = {
-            "format": 1,
+            "format": 2,
             "version": VERSION,
             "platforms": {
                 f"linux/{arch}": {
@@ -62,6 +62,7 @@ def package_fixture(tmp_path: Path) -> tuple[Path, Path]:
                             "role": role,
                             "reference": f"papilio/{role}:{VERSION}-{arch}",
                             "id": "sha256:" + str(index) * 64,
+                            "config_id": "sha256:" + "f" * 64,
                         }
                         for index, role in enumerate(ROLES, 1)
                     ],
@@ -135,3 +136,18 @@ def test_incomplete_or_inconsistent_image_artifacts_cannot_publish(
     reason = {"missing_platform": "platform", "checksum": "checksum", "version": "version"}[fault]
     assert reason in result.stderr.lower()
     assert not (output / "SHA256SUMS").exists()
+
+
+def test_classic_only_image_metadata_cannot_be_published_as_portable(tmp_path: Path) -> None:
+    source, assets = package_fixture(tmp_path)
+    for arch in ("amd64", "arm64"):
+        metadata = assets / f"images-linux-{arch}.json"
+        manifest = json.loads(metadata.read_text())
+        manifest["format"] = 1
+        for bundle in manifest["platforms"].values():
+            for identity in bundle["images"]:
+                identity.pop("config_id", None)
+        metadata.write_text(json.dumps(manifest))
+    result = run_package(source, assets, tmp_path / "output")
+    assert result.returncode != 0
+    assert "portable" in result.stderr.lower()

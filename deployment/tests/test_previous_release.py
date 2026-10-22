@@ -20,7 +20,7 @@ pytestmark = [
     pytest.mark.installed,
     pytest.mark.skipif(
         os.environ.get("PAPILIO_RUN_PREVIOUS_RELEASE_TEST") != "1",
-        reason="Opt in to installing the public alpha.1, upgrading and fresh-state recovery.",
+        reason="Opt in to public prior-version installation, upgrade and fresh-state recovery.",
     ),
 ]
 
@@ -47,8 +47,11 @@ def inspect_state(installation: Installation, statement: str) -> bytes:
     return result.stdout.strip()
 
 
-def test_published_alpha_upgrade_and_previous_backup_recovery(tmp_path: Path) -> None:
-    old_source = download_release(tmp_path / "download", "0.1.0-alpha.1")
+@pytest.mark.parametrize("previous_version", ["0.1.0-alpha.1", "0.1.0-alpha.2"])
+def test_published_alpha_upgrade_and_previous_backup_recovery(
+    tmp_path: Path, previous_version: str
+) -> None:
+    old_source = download_release(tmp_path / "download", previous_version)
     instance = f"upgrade-{uuid4().hex[:10]}"
     homes = (tmp_path / "before", tmp_path / "recovered")
     identity = ["--environment", "sandbox", "--instance", instance]
@@ -56,6 +59,9 @@ def test_published_alpha_upgrade_and_previous_backup_recovery(tmp_path: Path) ->
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
     old_command = [sys.executable, str(old_source / "deployment/papilio.py")]
+    previous_image_arguments = (
+        ["--image-mode", "build"] if previous_version != "0.1.0-alpha.1" else []
+    )
     installation = None
     try:
         with prebuilt_release(PROJECT, tmp_path) as candidate:
@@ -77,6 +83,7 @@ def test_published_alpha_upgrade_and_previous_backup_recovery(tmp_path: Path) ->
                     "--allow-unverified-host",
                     "--command-path",
                     str(tmp_path / "commands/old"),
+                    *previous_image_arguments,
                 ]
             )
             installation = Installation.load(homes[0] / "sandbox" / instance)
@@ -91,7 +98,7 @@ def test_published_alpha_upgrade_and_previous_backup_recovery(tmp_path: Path) ->
                 "enabled=False, interval=interval); "
                 "assert PeriodicTask.objects.filter(name__endswith='.outbox').exists()",
             )
-            backup = tmp_path / "alpha1-backup.tar.gz"
+            backup = tmp_path / "previous-backup.tar.gz"
             execute(
                 [
                     *old_command,
@@ -155,6 +162,7 @@ def test_published_alpha_upgrade_and_previous_backup_recovery(tmp_path: Path) ->
                     "--allow-unverified-host",
                     "--command-path",
                     str(tmp_path / "commands/recovered"),
+                    *previous_image_arguments,
                 ]
             )
             installation = Installation.load(homes[1] / "sandbox" / instance)
@@ -169,7 +177,7 @@ def test_published_alpha_upgrade_and_previous_backup_recovery(tmp_path: Path) ->
                     installation,
                     "from papilio_panel import __version__; print(__version__)",
                 )
-                == b"0.1.0-alpha.1"
+                == previous_version.encode()
             )
     finally:
         for home in homes:

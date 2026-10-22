@@ -36,3 +36,15 @@ or ACME issuance and do not expand the clean-host OS certification above.
 
 Public HTTPS issuance, each additional OS/architecture, and each environment's
 clean bootstrap remain separate checks. Support is reported at the tested scope.
+
+## Alpha.2 cold-host finding and alpha.3 correction
+
+A fresh Ubuntu24.04 amd64 VM installed Docker29.9.2/containerd and downloaded/loaded
+all five public alpha.2 images, then failed exact ID verification before database
+startup. This is a reproduced release limitation; it does not add a supported row.
+The native OCI and classic config IDs differ. Explicit build mode is its workaround.
+
+The alpha.3 candidate records both native identities and requires the same OCI
+archives through native classic/containerd CI consumers on both architectures.
+A real tiny OCI archive already demonstrates correct native matching and rejected
+tampered digests on both stores. Full public alpha.3 clean-host proof is pending.

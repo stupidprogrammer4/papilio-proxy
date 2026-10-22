@@ -186,3 +186,29 @@ def test_invalid_transfer_preserves_cache_and_removes_only_its_temporary_file(
         download_image_bundle(bundle, cache, base_url=archive_server.address)
     assert destination.read_bytes() == b"previous-cache-is-preserved"
     assert list(cache.iterdir()) == [destination]
+
+
+def test_portable_manifest_records_exact_oci_and_config_digests(tmp_path: Path) -> None:
+    source, manifest = release_source(tmp_path)
+    manifest["format"] = 2
+    for bundle in manifest["platforms"].values():
+        for identity in bundle["images"]:
+            identity["config_id"] = "sha256:" + "f" * 64
+    (source / "deployment/images.json").write_text(json.dumps(manifest))
+    bundle = read_image_bundle(source, "linux/amd64")
+    assert bundle is not None and bundle.format_version == 2
+    assert all(image.config_id == "sha256:" + "f" * 64 for image in bundle.images)
+
+
+@pytest.mark.parametrize("config_id", [None, "sha256:bad", "sha256:" + "1" * 64])
+def test_portable_manifest_requires_distinct_valid_native_config_digest(
+    tmp_path: Path, config_id: object
+) -> None:
+    source, manifest = release_source(tmp_path)
+    manifest["format"] = 2
+    for bundle in manifest["platforms"].values():
+        for identity in bundle["images"]:
+            identity["config_id"] = config_id
+    (source / "deployment/images.json").write_text(json.dumps(manifest))
+    with pytest.raises(ValueError):
+        read_image_bundle(source, "linux/amd64")

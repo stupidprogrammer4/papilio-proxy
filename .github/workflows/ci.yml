@@ -111,6 +111,17 @@ jobs:
       PAPILIO_RUN_INSTALLER_TESTS: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-docker-action@7ec28a010822b4626af4874f9448a4b05ac6f3e5 # v5.6.0
+        with:
+          version: v29.9.2
+          daemon-config: '{"features":{"containerd-snapshotter":true}}'
+      - name: Verify native containerd image storage
+        run: |
+          python3 - <<'PYCODE'
+          import json, subprocess
+          facts = json.loads(subprocess.check_output(["docker", "info", "--format", "{{json .DriverStatus}}"], text=True))
+          assert dict(facts or []).get("driver-type") == "io.containerd.snapshotter.v1"
+          PYCODE
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"

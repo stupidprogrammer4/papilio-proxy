@@ -18,16 +18,24 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 
 - Installer on main: explicit HTTP/HTTPS selection in every environment; a public
   HTTP browser fixture exercises production setup/login, actual worker operations,
-  nodes/bot onboarding and recovery. Native ready-image build/load and browser/recovery are locally exercised; official
-  alpha.2 images and fresh-host verification remain pending.
+  nodes/bot onboarding and recovery. Native ready-image build/load and browser/recovery are locally exercised; the alpha.3
+  corrective candidate and fresh-host verification remain active.
 - Native installation TUI on main: simple/advanced settings, saved-instance seeds,
   review, cancellation, resize and plain-terminal fallback. Real terminal tests
   exercise the form; the actual bootstrap also reaches a working production HTTP
   installation through that form with non-TTY stdin. This is not in alpha.1.
-- Ready-image candidate alpha.2: selectable persistent auto/prebuilt/build modes,
+- Ready-image candidate alpha.3: selectable persistent auto/prebuilt/build modes,
   native platform/image identities, SHA/size-verified cache and no server build
   in prebuilt mode. The release pipeline requires both native architectures and
-  candidate-image browser/recovery tests. Publication/clean-host checks are pending.
+  candidate-image browser/recovery tests on classic and containerd image stores.
+  Public alpha.2 exposed an identity mismatch on fresh Docker29; its immutable
+  assets remain unchanged, and alpha.3 corrects the portable identity contract.
+  Corrective publication and clean-host checks are pending.
+
+- Native agent process ownership on main: optional managed Xray validates/starts
+  the selected core and performs bounded shutdown. Actual executable/client, core
+  crash and paused-process cleanup pass. Automatic node install and recovery of
+  dynamic users from Django remain unfinished.
 
 - On main after the foundation release: runnable Go/mTLS agent and native Xray
   adapter tested through actual HTTPS/core/client traffic, including denied

@@ -32,7 +32,10 @@ images through `--image-mode auto|prebuilt|build`. Prebuilt downloads are cached
 SHA/size checked before Docker load and verified against every declared image ID
 and platform. No build or registry login runs in that mode. A bad asset stops
 installation; changing only the image mode does not reset identity or secrets.
-Official alpha.2 publication and fresh-host verification are still pending.
+The alpha.3 candidate uses portable OCI/config identities for both Docker storage
+types. Its public artifact and fresh-host checks are still pending. Alpha.2 had a
+reproduced fresh-Docker29 identity mismatch; explicitly selecting build is its
+workaround. Immutable alpha.2 assets are not replaced.
 
 ## Create the owner
 
@@ -104,7 +107,7 @@ starting services. A failed restore is not reported as complete.
 
 ```sh
 sudo papilio update
-sudo papilio update --version 0.1.0-alpha.2
+sudo papilio update --version 0.1.0-alpha.3
 sudo papilio update --source /opt/papilio/releases/papilio-NEW_VERSION
 ```
 

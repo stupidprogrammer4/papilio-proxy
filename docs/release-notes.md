@@ -1,34 +1,38 @@
-# 0.1.0-alpha.2 — experimental connected foundation
+# 0.1.0-alpha.3 — portable native images and managed core process
 
-Release candidate; publication and fresh-host verification are pending.
-This remains an experimental foundation, not the completed VPN sales MVP.
+Experimental connected foundation; the VPN sales MVP remains in progress.
+Public artifact installation on a fresh OS is a separate pending verification.
 
-- Native terminal installation wizard, simple/advanced settings, review, resize,
-  cancellation, plain-terminal fallback and unattended flags.
-- Single-server domain/IP setup with independent HTTP or HTTPS selection.
-- Native amd64/arm64 ready-image packaging for backend, frontend, PostgreSQL,
-  Redis and RabbitMQ. Verified cache, image identities and explicit source-build
-  option; prebuilt mode performs no application build on the target server.
-- Owner-scoped node registration, per-node mTLS bootstrap issuance and actual
-  agent connectivity checks through separate CPU/I/O workers. The Go agent's
-  Xray adapter is tested with real client traffic; automatic core installation,
-  process supervision and Django service provisioning remain unfinished.
-- Per-operator encrypted Telegram credentials, editable runtime/schedules,
-  administrator pairing and durable supported-message intake. Browser and worker
-  checks substitute the external Telegram API. Live identity inspection alone
-  does not prove real bot commerce or delivery.
-- Backup/restore, managed CLI updates and persistence of owner/node/bot/schedule
-  configuration are exercised on owned Compose installations. Actual prior-
-  release upgrade and clean-host artifact checks remain separate pending gates.
-- Migration/import from the reference panels/bots is now tracked; no importer is
-  included in this release.
+This corrective release uses native OCI exports with both exact manifest and
+configuration digests. Alpha.2's classic Docker producer recorded config IDs;
+fresh Docker29 imported those archives under different OCI IDs, so its prebuilt
+installation stopped before the database. Alpha.3 retains strict tag/platform,
+archive SHA/size and native image identity checks across both storage types.
+Old format1 manifests remain readable; publication requires portable format2.
+The release pipeline exercises the same candidate archives on explicit classic
+and containerd engines on native amd64 and arm64 before publication.
 
-Products, wallet, payment approval, subscriptions, bot purchase/delivery, standalone
-bot intake and Android payment matching are not connected yet. See `TODO.md` and
-`docs/feature-catalog.json` for the complete staged scope.
+Included scope:
 
-Public ACME issuance and universal OS/version support are not claimed. Default
-backups are private and compressed, without optional password encryption yet.
-One native database Beat runs per installed instance on one Docker host.
+- Native terminal wizard, simple/advanced settings, review, resize/cancel,
+  plain-terminal fallback and unattended single-server domain/IP installation.
+- Independent HTTP/HTTPS selection and explicit auto/prebuilt/build modes.
+- Owner/session/CSRF, editable database schedules and separate durable worker queues.
+- Node registration, per-node mTLS bootstrap and actual agent connectivity checks.
+- Operator-owned encrypted bot tokens, editable schedules and admin pairing;
+  browser/runtime tests substitute the external Telegram API.
+- Backup/restore and real alpha.1/alpha.2 upgrade with retained owner/password/schedules,
+  followed by native backup recovery on fresh matching prior-version state.
+- Included Go agent source can optionally validate/start/stop a selected Xray
+  process. Actual mTLS/gRPC/client traffic, core death, paused-core cleanup and
+  cancellation are exercised. Automatic node installation and recovery of dynamic
+  user configuration from Django remain unfinished.
+- Migration/import from the reference panels/bots is planned, not implemented.
 
-Original code is MIT; external dependencies and cores retain their licenses.
+Django provisioning, subscriptions, products, wallet, payment approval and bot
+purchase/delivery are still required for the first usable sales MVP. Android
+payment matching and independent offline bot intake remain later work. See TODO.
+
+No universal OS/version, public ACME or in-place schema downgrade claim. Default
+backups are private/compressed, without optional password encryption. Original
+code is MIT; external dependencies and cores retain their original licenses.

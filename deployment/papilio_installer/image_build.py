@@ -5,6 +5,7 @@ import hashlib
 import json
 import shutil
 import subprocess
+import tarfile
 import tempfile
 from dataclasses import replace
 from pathlib import Path
@@ -31,7 +32,7 @@ DEPENDENCY_SERVICES = {
 
 def bundle_manifest(bundle: ImageBundle) -> dict[str, object]:
     return {
-        "format": 1,
+        "format": bundle.format_version,
         "version": bundle.version,
         "platforms": {
             bundle.platform: {
@@ -40,11 +41,88 @@ def bundle_manifest(bundle: ImageBundle) -> dict[str, object]:
                 "size": bundle.size,
                 "images": [
                     {"role": image.role.value, "reference": image.reference, "id": image.content_id}
+                    | ({"config_id": image.config_id} if image.config_id is not None else {})
                     for image in bundle.images
                 ],
             }
         },
     }
+
+
+def archive_blob_digest(archive: tarfile.TarFile, name: str) -> str:
+    """Hash a regular native OCI blob without loading it into memory."""
+    try:
+        member = archive.getmember(name)
+    except KeyError as error:
+        raise ValueError("The native OCI image metadata blob is missing.") from error
+    if not member.isfile():
+        raise ValueError("Native image metadata must contain regular blobs.")
+    blob = archive.extractfile(member)
+    if blob is None:
+        raise ValueError("The native image blob is missing.")
+    digest = hashlib.sha256()
+    with blob:
+        for block in iter(lambda: blob.read(1024 * 1024), b""):
+            digest.update(block)
+    return "sha256:" + digest.hexdigest()
+
+
+def portable_image_identities(
+    path: Path, images: tuple[ImageReference, ...]
+) -> tuple[ImageReference, ...]:
+    """Bind each named image to its exported OCI and configuration digests."""
+    with tarfile.open(path) as archive:
+        names = set(archive.getnames())
+        if "oci-layout" not in names or "manifest.json" not in names:
+            raise ValueError(
+                "Portable releases require native OCI export; enable containerd image storage."
+            )
+        layout_file = archive.extractfile("oci-layout")
+        if layout_file is None:
+            raise ValueError("The native OCI layout metadata is missing.")
+        with layout_file:
+            layout = json.load(layout_file)
+        if not isinstance(layout, dict) or layout.get("imageLayoutVersion") != "1.0.0":
+            raise ValueError("The native OCI archive layout is not supported.")
+        manifest_file = archive.extractfile("manifest.json")
+        if manifest_file is None:
+            raise ValueError("The native image manifest is missing.")
+        with manifest_file:
+            manifest = json.load(manifest_file)
+        if not isinstance(manifest, list):
+            raise ValueError("The native image manifest must contain explicit image records.")
+        references = {image.reference for image in images}
+        configs: dict[str, str] = {}
+        for entry in manifest:
+            if not isinstance(entry, dict) or not isinstance(entry.get("RepoTags"), list):
+                raise ValueError("The native image reference list is invalid.")
+            if not all(isinstance(reference, str) for reference in entry["RepoTags"]):
+                raise ValueError("The native image reference list is invalid.")
+            selected = references.intersection(entry["RepoTags"])
+            if not selected:
+                continue
+            config_path = entry.get("Config")
+            if not isinstance(config_path, str):
+                raise ValueError("The native config blob path is invalid.")
+            config_id = archive_blob_digest(archive, config_path)
+            if config_path != "blobs/sha256/" + config_id.removeprefix("sha256:"):
+                raise ValueError("The native config blob does not match its content digest.")
+            for reference in selected:
+                if reference in configs:
+                    raise ValueError("The native export has duplicate image references.")
+                configs[reference] = config_id
+        portable = []
+        for image in images:
+            config_id = configs.get(image.reference)
+            native_blob = "blobs/sha256/" + image.content_id.removeprefix("sha256:")
+            if config_id is None or config_id == image.content_id:
+                raise ValueError(
+                    "Portable releases require distinct native OCI and config identities."
+                )
+            if archive_blob_digest(archive, native_blob) != image.content_id:
+                raise ValueError("The native OCI descriptor does not match its content digest.")
+            portable.append(replace(image, config_id=config_id))
+    return tuple(portable)
 
 
 def build_image_bundle(source: Path, output: Path) -> ImageBundle:
@@ -92,6 +170,7 @@ def build_image_bundle(source: Path, output: Path) -> ImageBundle:
             ["docker", "image", "save", "--output", str(uncompressed), *references.values()],
             check=True,
         )
+        portable = portable_image_identities(uncompressed, tuple(images))
         with (
             uncompressed.open("rb") as original,
             gzip.open(asset, "xb", compresslevel=3) as compressed,
@@ -102,7 +181,7 @@ def build_image_bundle(source: Path, output: Path) -> ImageBundle:
         for block in iter(lambda: original.read(1024 * 1024), b""):
             digest.update(block)
     bundle = ImageBundle(
-        version, platform, asset.name, digest.hexdigest(), asset.stat().st_size, tuple(images)
+        version, platform, asset.name, digest.hexdigest(), asset.stat().st_size, portable, 2
     )
     metadata = output / f"images-{platform.replace('/', '-')}.json"
     metadata.write_text(json.dumps(bundle_manifest(bundle), indent=2) + "\n")

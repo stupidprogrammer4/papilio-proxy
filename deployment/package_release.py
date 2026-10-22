@@ -36,6 +36,10 @@ def image_manifest(images: Path, version: str) -> tuple[bytes, dict[str, str]]:
             bundle = read_image_bundle(root, platform)
             if bundle is None:
                 raise ValueError("A required image platform manifest is missing.")
+            if bundle.format_version != 2:
+                raise ValueError(
+                    "Public image bundles must declare portable OCI and config identities."
+                )
             if not archive_matches(images / bundle.asset, bundle):
                 raise ValueError("The image archive size or checksum does not match its manifest.")
             normalized = bundle_manifest(bundle)["platforms"]
@@ -43,7 +47,7 @@ def image_manifest(images: Path, version: str) -> tuple[bytes, dict[str, str]]:
                 raise ValueError("The normalized image platform manifest is invalid.")
             platforms.update(normalized)
             checksums[bundle.asset] = bundle.sha256
-    manifest = {"format": 1, "version": version, "platforms": platforms}
+    manifest = {"format": 2, "version": version, "platforms": platforms}
     return json.dumps(manifest, indent=2).encode() + b"\n", checksums
 
 
