@@ -27,6 +27,7 @@ def test_form_preserves_explicit_configuration(environment: str) -> None:
         bind_address="0.0.0.0",
         http_port=9080,
         https_port=9443,
+        image_mode="prebuilt",
     )
     form = ConfigurationForm.from_settings(initial)
     assert form.settings() == initial
@@ -95,7 +96,7 @@ def test_plain_terminal_fallback_uses_same_settings_contract(tmp_path: Path) -> 
     output = tmp_path / "settings.json"
     with wizard_process(output, term="dumb") as (terminal, process):
         read_until(terminal, b"PAPILIO")
-        os.write(terminal, b"\n" * 8)
+        os.write(terminal, b"\n" * 9)
         assert process.wait(timeout=5) == 0
     assert InstallSettings(**json.loads(output.read_text())).scheme == "https"
 

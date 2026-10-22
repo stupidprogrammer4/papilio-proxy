@@ -37,6 +37,7 @@ class ConfigurationForm:
     bind: InputField
     http_port: InputField
     https_port: InputField
+    image_mode: InputField
 
     @classmethod
     def from_settings(cls, settings: InstallSettings) -> "ConfigurationForm":
@@ -79,6 +80,12 @@ class ConfigurationForm:
                 str(settings.https_port),
                 "Used only for HTTPS. Public certificate challenges need reachable ports.",
             ),
+            image_mode=InputField(
+                "Application images",
+                settings.image_mode,
+                "Auto uses a release bundle when present. Prebuilt never builds on this server.",
+                ("auto", "prebuilt", "build"),
+            ),
         )
 
     @property
@@ -91,6 +98,7 @@ class ConfigurationForm:
             self.bind,
             self.http_port,
             self.https_port,
+            self.image_mode,
         )
 
     def settings(self) -> InstallSettings:
@@ -107,6 +115,7 @@ class ConfigurationForm:
             bind_address=self.bind.value,
             http_port=http_port,
             https_port=https_port,
+            image_mode=self.image_mode.value,
         )
         settings.validate()
         return settings
@@ -336,6 +345,7 @@ def initial_settings(args: argparse.Namespace) -> InstallSettings:
         bind_address=args.bind if args.bind is not None else initial.bind_address,
         http_port=args.port if args.port is not None else initial.http_port,
         https_port=args.https_port if args.https_port is not None else initial.https_port,
+        image_mode=args.image_mode if args.image_mode is not None else initial.image_mode,
     )
 
 
@@ -350,6 +360,7 @@ def main() -> None:
     parser.add_argument("--bind")
     parser.add_argument("--port", type=int)
     parser.add_argument("--https-port", type=int)
+    parser.add_argument("--image-mode", choices=("auto", "prebuilt", "build"))
     args = parser.parse_args()
     initial = initial_settings(args)
     try:

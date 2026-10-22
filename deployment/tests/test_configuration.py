@@ -111,6 +111,7 @@ def test_old_metadata_retains_transport_and_secrets(tmp_path: Path, environment:
     path = installation.root / "installation.json"
     metadata = json.loads(path.read_text())
     metadata["settings"].pop("scheme", None)
+    metadata["settings"].pop("image_mode", None)
     path.write_text(json.dumps(metadata))
     legacy_values = {
         key: value
@@ -237,3 +238,16 @@ def test_invalid_settings_file_never_creates_state(tmp_path: Path, content: str)
     with pytest.raises(ValueError):
         install(arguments)
     assert not (tmp_path / "state").exists()
+
+
+@pytest.mark.parametrize("mode", ["auto", "prebuilt", "build"])
+def test_image_mode_is_an_explicit_persisted_choice(tmp_path: Path, mode: str) -> None:
+    settings = InstallSettings(image_mode=mode)
+    installation = Installation.create(tmp_path, Path.cwd(), settings)
+    assert Installation.load(installation.root).settings.image_mode == mode
+
+
+def test_invalid_image_mode_creates_no_installation(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="image"):
+        Installation.create(tmp_path, Path.cwd(), InstallSettings(image_mode="silent-fallback"))
+    assert not list(tmp_path.iterdir())

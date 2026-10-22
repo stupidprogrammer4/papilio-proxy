@@ -35,7 +35,7 @@ actual ORM update. No internal repository/worker is mocked.
 pnpm --dir panel/frontend install --frozen-lockfile
 pnpm --dir panel/frontend exec playwright install chromium
 pnpm --dir panel/frontend build
-PAPILIO_RUN_INSTALLER_TESTS=1 .venv/bin/pytest -c deployment/pyproject.toml deployment/tests/test_installed_runtime.py -q
+PAPILIO_RUN_INSTALLER_TESTS=1 .venv/bin/pytest -c deployment/pyproject.toml deployment/tests/test_installed_runtime.py deployment/tests/test_image_runtime.py -q
 ```
 
 The opt-in integration creates a uniquely named disposable Compose installation,
@@ -43,7 +43,21 @@ uses real Chromium and API/DB/queues, checks the application DB role is not
 superuser, creates a backup, mutates test data, restores, stops/starts and reads
 committed outcomes independently. Teardown removes only its own containers/state.
 
-On main, the installed gate runs test/HTTP, production/HTTP and sandbox/HTTPS.
+On main, the installed gate runs test/HTTP, production/HTTP, sandbox/HTTPS and
+sandbox/HTTP with prebuilt images. The prebuilt case builds an owned native bundle,
+exports/reloads its actual images and poisons the source Dockerfiles so any server
+build fails. Release jobs exercise their actual candidate image archives through
+the same browser/recovery gate on native amd64 and arm64 runners. These existing-
+Docker jobs do not certify clean installation on every candidate OS.
+
+Image units validate manifest/version/platform/role identities. A controlled
+external HTTP server exercises cache replay, corrupt/truncated/oversized responses
+and preservation of the previous cache. Native Docker integration verifies gzip
+load and all image IDs. Packaging units use a small fixture Git repository and
+fake archive bytes; those units prove manifest/checksum/source inclusion, not
+that a Docker image can run. Update-entrypoint units use an external executable
+protocol double; the installed gate separately exercises the managed CLI update.
+
 Production HTTP uses a `.test` domain mapped inside Chromium, explicitly asserts
 an insecure browser context without native `randomUUID`, and exercises actual
 setup/login, worker completion, node/bot onboarding, backup/restore and synthetic

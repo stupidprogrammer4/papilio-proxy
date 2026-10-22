@@ -29,58 +29,50 @@
 
 ## نصب
 
-روی یک Ubuntu/Debian تمیز از ماتریس اولیه:
-
-```sh
-sudo bash -c 'set -euo pipefail; apt-get update; apt-get install -y curl ca-certificates; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.1/install.sh | bash -s -- --environment sandbox'
-```
-
-نصاب وابستگی‌ها و سرویس‌ها را آماده می‌کند و آدرس راه‌اندازی و توکن یک‌بارمصرف با
-اعتبار پنج دقیقه را نمایش می‌دهد. حالت sandbox پیش‌فرض فقط روی localhost است؛
-برای دسترسی از کامپیوتر خودتان تونل بزنید:
-
-```sh
-ssh -L 8080:127.0.0.1:8080 user@server
-```
-
-نصاب منتشرشدهٔ alpha.1 در production از HTTPS استفاده می‌کند؛ دامنه را به سرور
-متصل و پورت‌های صدور گواهی را در دسترس کنید:
-
-```sh
-sudo bash -c 'set -euo pipefail; apt-get update; apt-get install -y curl ca-certificates; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.1/install.sh | bash -s -- --environment production --host panel.example.com'
-```
-
-**در main، نصب TUI دارد و HTTPS اختیاری است.** از پوشهٔ سورس، ویزارد نصب را اجرا کنید:
+نامزد انتشار بعدی **0.1.0-alpha.2** است. ویزارد ترمینالی محیط، دامنه/IP و HTTP یا
+HTTPS را می‌گیرد. F3 تنظیمات شناسه، پورت، نشانی شنود و روش آماده‌سازی ایمیج‌ها را
+باز می‌کند؛ F2 مرور تنظیمات، Tab و کلیدهای جهت برای حرکت و Esc برای لغو هستند.
+مقادیر نصب قبلی در فرم حفظ می‌شوند. ترمینال ساده فرم متنی دارد؛ بستهٔ اضافه‌ای
+برای رابط نصب نمی‌شود. از پوشهٔ سورس فعلی:
 
 ```sh
 sudo bash ./install.sh --source "$PWD"
 ```
 
-محیط، دامنه/IP و HTTP یا HTTPS را انتخاب کنید. با F3 تنظیمات شناسهٔ نصب، نشانی
-شنود و پورت‌ها باز می‌شوند؛ F2 صفحهٔ مرور تنظیمات را نشان می‌دهد. حرکت با Tab و
-کلیدهای جهت و لغو با Esc است. هنگام ادامهٔ نصب قبلی، مقادیر ذخیره‌شده در فرم
-قرار می‌گیرند. ترمینال ساده از فرم متنی استفاده می‌کند؛ وابستگی اضافه‌ای برای UI
-نصب نمی‌شود. برای نصب بدون تعامل با HTTP:
+نصب بدون تعامل روی یک سرور با HTTP:
 
 ```sh
 sudo bash ./install.sh --source "$PWD" --non-interactive --environment production --host panel.example.com --scheme http
 ```
 
-برای TLS خودکار Caddy، گزینهٔ `--scheme https` را انتخاب کنید. در HTTP می‌توان
-به‌جای دامنه، IPv4 سرور را به `--host` داد؛ فقط پورت HTTP انتخابی لازم است.
-با `--interactive` می‌توان ویزارد را صریحاً باز کرد، حتی وقتی ورودی نصاب از pipe
-می‌آید. آدرس راه‌اندازی، کوکی ورود و مبدأ CSRF مطابق انتخاب تنظیم می‌شوند.
-TUI و گزینهٔ تازهٔ `--scheme` در بستهٔ ثابت alpha.1 وجود ندارند. در صورت حذف scheme، پیش‌فرض
-قبلی حفظ می‌شود: HTTPS برای production و HTTP برای محیط‌های دیگر.
+HTTP با دامنه یا IPv4 کار می‌کند و فقط پورت HTTP انتخابی باز می‌شود. HTTPS اختیاری
+است؛ برای آن `--scheme https`، DNS درست و دسترسی لازم برای صدور گواهی را فراهم
+کنید. در صورت حذف گزینه، پیش‌فرض production برابر HTTPS و بقیه HTTP است.
+`--interactive` با ورودی pipe هم فرم را باز می‌کند.
 
-محیط‌های `dev`، `test`، `sandbox` و `production` داده، کلید، شبکهٔ Docker، صف و کش
-جدا دارند. نصب‌های اضافه با `--instance NAME` و پورت مجزا از `--port PORT` ساخته
-می‌شوند. برای HTTPS گزینهٔ `--https-port PORT` هم وجود دارد.
-[ماتریس آزمون نصب](docs/installation-matrix.md) مشخص می‌کند کدام ترکیب واقعاً اجرا
-شده؛ همهٔ نسخه‌ها، معماری‌ها و سیستم‌عامل‌ها هنوز تأیید نشده‌اند.
-اگر فرمان `papilio` متعلق به نصب دیگری باشد، نصاب فرمان مستقل
-`papilio-INSTANCE-ENVIRONMENT` می‌سازد و نام آن را نمایش می‌دهد. فایل فرمان نامرتبط
-یا تغییریافتهٔ کاربر بازنویسی نمی‌شود.
+روش ایمیج‌ها با `--image-mode auto|prebuilt|build` قابل انتخاب است. سورس بدون
+manifest انتشار، روی سرور build می‌شود. بستهٔ انتشار دارای manifest، ایمیج‌های
+تأییدشدهٔ بک‌اند، فرانت‌اند، PostgreSQL، Redis و RabbitMQ را بارگذاری می‌کند؛ در
+این مسیر build برنامه روی سرور و ورود به رجیستری لازم نیست. فایل خراب یا ناموجود
+خطا می‌دهد؛ برای ساخت از سورس، `build` را صریحاً انتخاب کنید. انتخاب شما با restart
+و update حفظ می‌شود. انتشار بسته‌های رسمی و آزمون سرور تمیز alpha.2 هنوز باقی است.
+
+بستهٔ منتشرشدهٔ ثابت **alpha.1** این فرم، HTTP انتخابی و ایمیج آماده را ندارد.
+دستور قدیمی sandbox آن همچنان قابل استفاده است:
+
+```sh
+sudo bash -c 'set -euo pipefail; apt-get update; apt-get install -y curl ca-certificates; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.1/install.sh | bash -s -- --environment sandbox'
+```
+
+نصاب آدرس راه‌اندازی، توکن یک‌بارمصرف پنج‌دقیقه‌ای و فرمان `papilio` را فراهم
+می‌کند. sandbox پیش‌فرض روی localhost است؛ برای دسترسی از راه دور از
+`ssh -L 8080:127.0.0.1:8080 user@server` استفاده کنید.
+
+محیط‌های `dev`، `test`، `sandbox` و `production` داده، کلید، شبکه، صف و کش جدا دارند.
+نصب اضافه با `--instance` و پورت‌های مجزای `--port` و `--https-port` ساخته می‌شود.
+[ماتریس آزمون نصب](docs/installation-matrix.md) دامنهٔ پشتیبانی واقعی را مشخص می‌کند.
+اگر فرمان `papilio` متعلق به نصب دیگری باشد، فرمان `papilio-INSTANCE-ENVIRONMENT`
+ساخته می‌شود؛ فرمان نامرتبط یا تغییریافتهٔ کاربر بازنویسی نمی‌شود.
 
 ## فرمان‌های معمول
 
@@ -99,7 +91,9 @@ sudo papilio update
 توقف، داده‌ها را نگه می‌دارد. بازیابی ابتدا فایل را بررسی و از وضعیت فعلی بکاپ
 می‌گیرد؛ نسخهٔ برنامه، محیط و شناسهٔ نصب باید سازگار باشند. برای انتخاب نسخهٔ
 به‌روزرسانی از `update --version VERSION` یا `update --source DIR` استفاده کنید.
-این اولین انتشار Django است و ادعای آزمون ارتقا از یک نسخهٔ قبلیِ پشتیبانی‌شده ندارد.
+فرمان alpha.2 از نصاب خود نسخهٔ مقصد استفاده می‌کند. bootstrap فعلی هم با
+`--update` بدون ورود دوبارهٔ دامنه، نصب موجود را ارتقا می‌دهد. آزمون ارتقای واقعی
+alpha.1 به alpha.2 هنوز یک مرحلهٔ مستقل و باقی‌مانده است.
 
 ## مسیر توسعه
 

@@ -5,11 +5,27 @@ import subprocess
 from typing import IO
 
 from .configuration import Installation
+from .images import (
+    ImageBundle,
+    docker_platform,
+    download_image_bundle,
+    inspect_image_bundle,
+    load_image_bundle,
+    read_image_bundle,
+)
 
 
 class Compose:
     def __init__(self, installation: Installation) -> None:
         self.installation = installation
+        self.bundle: ImageBundle | None = None
+        if (
+            installation.settings.image_mode != "build"
+            and (installation.source / "deployment/images.json").exists()
+        ):
+            self.bundle = read_image_bundle(installation.source, docker_platform())
+        if installation.settings.image_mode == "prebuilt" and self.bundle is None:
+            raise ValueError("This source has no prebuilt image manifest; choose build explicitly.")
 
     def run(
         self,
@@ -32,6 +48,14 @@ class Compose:
             str(installation.source / "deployment/compose.yml"),
         ]
         environment = os.environ | installation.values
+        if self.bundle is not None:
+            environment.update(
+                {
+                    f"PAPILIO_{image.role.value.upper()}_IMAGE": image.reference
+                    for image in self.bundle.images
+                }
+            )
+            environment["PAPILIO_PULL_POLICY"] = "never"
         environment["PAPILIO_PUBLIC_ORIGIN"] = installation.settings.origin
         environment["PAPILIO_TRANSPORT_SCHEME"] = installation.values.get(
             "PAPILIO_TRANSPORT_SCHEME", installation.settings.transport_scheme
@@ -55,8 +79,22 @@ class Compose:
         )
 
     def start(self) -> None:
-        self.run("up", "-d", "--remove-orphans")
+        arguments = ["up", "-d", "--remove-orphans"]
+        if self.bundle is not None:
+            self.prepare_images()
+            arguments.extend(["--no-build", "--pull", "never"])
+        self.run(*arguments)
         self.doctor()
+
+    def prepare_images(self) -> None:
+        if self.bundle is None:
+            self.run("build")
+            return
+        if not inspect_image_bundle(self.bundle):
+            print(f"Loading verified release images: {self.bundle.asset}", flush=True)
+            cache = self.installation.root.parent.parent / "cache/images"
+            archive = download_image_bundle(self.bundle, cache)
+            load_image_bundle(archive, self.bundle)
 
     def stop(self) -> None:
         self.run("stop", "--timeout", self.installation.values["PAPILIO_SHUTDOWN_SECONDS"])

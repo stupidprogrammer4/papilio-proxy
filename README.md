@@ -31,59 +31,52 @@ conversations are still being implemented. These changes are newer than alpha.1.
 
 ## Install
 
-From a clean candidate Ubuntu/Debian host:
-
-```sh
-sudo bash -c 'set -euo pipefail; apt-get update; apt-get install -y curl ca-certificates; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.1/install.sh | bash -s -- --environment sandbox'
-```
-
-The installer installs prerequisites and all services, prints the setup URL and a
-single-use token valid for five minutes, and installs the `papilio` command. The
-sandbox listens on localhost by default. Connect securely with an SSH tunnel:
-
-```sh
-ssh -L 8080:127.0.0.1:8080 user@server
-```
-
-The published alpha.1 production installer uses HTTPS. Point a domain at the server
-and make HTTP/HTTPS ports reachable for certificate issuance:
-
-```sh
-sudo bash -c 'set -euo pipefail; apt-get update; apt-get install -y curl ca-certificates; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.1/install.sh | bash -s -- --environment production --host panel.example.com'
-```
-
-**On main, installation has a terminal wizard and optional HTTPS.** From a
-checkout, start the wizard with:
+The next release candidate is **0.1.0-alpha.2**. Its terminal wizard selects the
+environment, domain/IP and HTTP or HTTPS. F3 opens instance, ports, bind address
+and image deployment mode; F2 reviews, Tab/arrows navigate and Esc cancels.
+Saved instance settings seed resume; basic terminals use plain prompts. No extra
+UI package is installed. From the current checkout:
 
 ```sh
 sudo bash ./install.sh --source "$PWD"
 ```
 
-Choose the environment, domain/IP and HTTP or HTTPS; F3 opens instance, bind and
-port settings, and F2 reviews the selection. Tab/arrows navigate and Esc cancels.
-Saved installation settings seed the form on resume. Basic terminals use a plain
-prompt fallback. The wizard uses Python's standard library and installs no UI package.
-For an unattended HTTP installation:
+For an unattended single-server HTTP installation:
 
 ```sh
 sudo bash ./install.sh --source "$PWD" --non-interactive --environment production --host panel.example.com --scheme http
 ```
 
-Use `--scheme https` for automatic Caddy TLS. HTTP also accepts an IPv4 address
-as `--host` and needs only its selected HTTP port. `--interactive` explicitly opens
-the wizard, including when the bootstrap's stdin is a pipe. The printed setup URL, login
-cookies and CSRF origin follow that selection. The new `--scheme` flag is not
-part of the immutable alpha.1 package, which also predates this wizard. When the scheme is omitted, existing defaults remain
-HTTPS for production and HTTP for other environments.
+HTTP accepts a domain or IPv4 address and publishes only the selected HTTP port.
+HTTPS is optional: use `--scheme https` with appropriate DNS and certificate
+challenge reachability. Without an explicit choice, production starts with HTTPS
+and other environments with HTTP. `--interactive` also works with piped stdin.
 
-`dev`, `test`, `sandbox` and `production` have separate data, credentials, Docker
-networks, broker queues and cache namespaces. Use `--instance NAME` and a distinct
-`--port PORT` for additional installations. HTTPS also accepts
-`--https-port PORT`. See the [tested support matrix](docs/installation-matrix.md);
-an OS being a candidate does not mean every mode and architecture is certified.
-If another installation already owns `papilio`, the installer creates
-`papilio-INSTANCE-ENVIRONMENT` and prints the selected command. It never replaces
-an unrelated or operator-modified command.
+Image modes are `auto`, `prebuilt` and `build`. A checkout without a release
+manifest builds from source. A packaged release with a manifest uses verified
+native images for backend, frontend, PostgreSQL, Redis and RabbitMQ. Prebuilt mode
+runs no application build on the server and requires no registry login. Corrupt
+or missing prebuilt assets fail visibly; choose `build` explicitly to build from
+source. The selected mode survives restart/update. Official native bundles and
+clean-host verification for alpha.2 are pending publication.
+
+The published immutable **alpha.1** predates the wizard, HTTP selection and ready
+images. Its sandbox installer remains available:
+
+```sh
+sudo bash -c 'set -euo pipefail; apt-get update; apt-get install -y curl ca-certificates; curl -fsSL https://raw.githubusercontent.com/stupidprogrammer4/papilio-proxy/v0.1.0-alpha.1/install.sh | bash -s -- --environment sandbox'
+```
+
+The installer prints a setup URL and a single-use token valid for five minutes,
+and installs the `papilio` command. Sandbox binds localhost by default; use
+`ssh -L 8080:127.0.0.1:8080 user@server` to access it remotely.
+
+`dev`, `test`, `sandbox` and `production` keep separate data, credentials, Docker
+networks, queues and cache namespaces. Additional installations use `--instance`
+and distinct `--port` / `--https-port` values. See the
+[tested support matrix](docs/installation-matrix.md). If another installation owns
+`papilio`, the installer creates `papilio-INSTANCE-ENVIRONMENT`; unrelated or
+operator-modified commands are never replaced.
 
 ## Operate
 
@@ -102,8 +95,9 @@ sudo papilio update
 Stop retains data. Restore validates the archive, creates a recovery backup and
 requires the same application version and environment/instance identity. Update
 selects a published release; `update --version VERSION` and `update --source DIR`
-allow explicit selection. This first release has no previous supported Django
-release from which to claim upgrade compatibility.
+allow explicit selection. The alpha.2 command uses the selected release's own installer. The current
+bootstrap also accepts `--update` to upgrade an existing identity without domain
+reentry. Actual alpha.1-to-alpha.2 compatibility remains a separate pending gate.
 
 ## Stack and contracts
 

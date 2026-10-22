@@ -17,10 +17,10 @@ from uuid import uuid4
 
 import pytest
 from deployment.papilio_installer.archives import backup, restore
-from deployment.papilio_installer.cli import update
 from deployment.papilio_installer.configuration import Installation
 from deployment.papilio_installer.docker import Compose
-from deployment.tests.installer_terminal import read_until, wizard_process
+from deployment.tests.image_release import PreparedRelease, prebuilt_release
+from deployment.tests.installer_terminal import read_until, safe_terminal_output, wizard_process
 
 pytestmark = [
     pytest.mark.installed,
@@ -30,6 +30,15 @@ pytestmark = [
     ),
 ]
 PROJECT = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture
+def installation_source(tmp_path: Path, image_mode: str) -> Iterator[PreparedRelease]:
+    if image_mode == "prebuilt":
+        with prebuilt_release(PROJECT, tmp_path) as prepared:
+            yield prepared
+    else:
+        yield PreparedRelease(PROJECT)
 
 
 @contextmanager
@@ -88,12 +97,27 @@ def telegram_api(compose: Compose, instance: str) -> Iterator[tuple[str, str]]:
 
 
 @pytest.mark.parametrize(
-    ("environment", "scheme"), [("test", "http"), ("production", "http"), ("sandbox", "https")]
+    ("environment", "scheme", "image_mode"),
+    [
+        ("test", "http", "auto"),
+        ("production", "http", "auto"),
+        ("sandbox", "https", "auto"),
+        ("sandbox", "http", "prebuilt"),
+    ],
 )
 def test_install_browser_backup_restore_and_restart_preserve_data(
-    tmp_path: Path, environment: str, scheme: str
+    tmp_path: Path,
+    environment: str,
+    scheme: str,
+    image_mode: str,
+    installation_source: PreparedRelease,
 ) -> None:
     home = tmp_path / "installation"
+    source = installation_source.source
+    if installation_source.bundle is not None and installation_source.assets is not None:
+        cache = home / "cache/images"
+        cache.mkdir(parents=True)
+        shutil.copy2(installation_source.assets / installation_source.bundle.asset, cache)
     instance = f"browser-{uuid4().hex[:10]}"
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
@@ -109,13 +133,13 @@ def test_install_browser_backup_restore_and_restart_preserve_data(
         "--instance",
         instance,
     ]
-    command = [sys.executable, str(PROJECT / "deployment/papilio.py"), *identity_arguments]
+    command = [sys.executable, str(source / "deployment/papilio.py"), *identity_arguments]
     installation = None
     launcher = tmp_path / "commands/papilio"
     try:
         setup_arguments = [
             "--source",
-            str(PROJECT),
+            str(source),
             "--port",
             str(port),
             "--scheme",
@@ -129,6 +153,8 @@ def test_install_browser_backup_restore_and_restart_preserve_data(
             "--allow-unverified-host",
             "--command-path",
             str(launcher),
+            "--image-mode",
+            image_mode,
         ]
         if environment == "production":
             bootstrap = [
@@ -285,7 +311,7 @@ def test_install_browser_backup_restore_and_restart_preserve_data(
         next_source = tmp_path / "next-release"
         for folder in ("deployment", "panel/backend", "panel/frontend"):
             shutil.copytree(
-                PROJECT / folder,
+                source / folder,
                 next_source / folder,
                 ignore=shutil.ignore_patterns(
                     "node_modules",
@@ -296,11 +322,20 @@ def test_install_browser_backup_restore_and_restart_preserve_data(
                     "graphify-out",
                 ),
             )
-        shutil.copy2(PROJECT / ".dockerignore", next_source / ".dockerignore")
-        (next_source / "VERSION").write_text("0.1.0-alpha.2\n")
+        shutil.copy2(source / ".dockerignore", next_source / ".dockerignore")
+        next_version = f"0.0.0-upgrade.{uuid4().hex}"
+        (next_source / "VERSION").write_text(next_version + "\n")
         version_file = next_source / "panel/backend/src/papilio_panel/__init__.py"
-        version_file.write_text(version_file.read_text().replace("0.1.0-alpha.1", "0.1.0-alpha.2"))
-        update(restored, next_source)
+        previous_version = (source / "VERSION").read_text().strip()
+        version_file.write_text(version_file.read_text().replace(previous_version, next_version))
+        if image_mode == "prebuilt":
+            for name in ("backend.Dockerfile", "frontend.Dockerfile"):
+                shutil.copy2(PROJECT / "deployment" / name, next_source / "deployment" / name)
+        upgrade_arguments = [str(launcher), "update", "--source", str(next_source)]
+        if image_mode == "prebuilt":
+            upgrade_arguments.extend(["--image-mode", "build"])
+        upgrade_result = subprocess.run(upgrade_arguments, capture_output=True, timeout=900)
+        assert upgrade_result.returncode == 0, safe_terminal_output(upgrade_result.stderr)
         upgraded = Installation.load(restored.root)
         assert upgraded.source == next_source
         assert str(next_source / "deployment/papilio.py") in launcher.read_text()
@@ -316,7 +351,7 @@ def test_install_browser_backup_restore_and_restart_preserve_data(
             "-c",
             "from papilio_panel import __version__; "
             "from django.contrib.auth.models import User; "
-            "assert __version__ == '0.1.0-alpha.2'; "
+            f"assert __version__ == {next_version!r}; "
             "assert User.objects.filter(username='browser-owner').exists(); "
             "from papilio_panel.modules.nodes.models import Node; "
             "assert Node.objects.get(name='browser-node').runtime.request_timeout_seconds == 7; "

@@ -12,7 +12,7 @@ target-version = "py310"
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.pyright]
-include = ["papilio_installer", "tests", "papilio.py", "package_release.py"]
+include = ["papilio_installer", "tests", "papilio.py", "package_release.py", "build_images.py"]
 pythonVersion = "3.10"
 typeCheckingMode = "standard"
 extraPaths = [".."]

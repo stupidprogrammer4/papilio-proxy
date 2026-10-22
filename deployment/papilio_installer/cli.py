@@ -4,6 +4,7 @@ import argparse
 import json
 import subprocess
 import sys
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -34,6 +35,7 @@ def selected_settings(arguments: argparse.Namespace) -> InstallSettings:
         http_port=arguments.port,
         https_port=arguments.https_port,
         scheme=arguments.scheme,
+        image_mode=arguments.image_mode or "auto",
     )
     settings.validate()
     return settings
@@ -46,12 +48,16 @@ def install(arguments: argparse.Namespace) -> None:
     settings = selected_settings(arguments)
     root = arguments.home.resolve() / settings.environment / settings.instance
     if root.exists():
-        installation = Installation.load(root)
-        if not installation.settings.matches(settings) or installation.source != source:
+        existing = Installation.load(root)
+        if arguments.image_mode is None and arguments.settings_file is None:
+            settings = replace(settings, image_mode=existing.settings.image_mode)
+        comparable = replace(existing.settings, image_mode=settings.image_mode)
+        if not comparable.matches(settings) or existing.source != source:
             raise ValueError(
                 "This installation already exists with different settings. "
                 "Use its lifecycle commands."
             )
+        installation = replace(existing, settings=comparable)
     else:
         check_ports(settings)
         check_host(allow_unverified=arguments.allow_unverified_host)
@@ -63,7 +69,8 @@ def install(arguments: argparse.Namespace) -> None:
     print("[1/5] Checking service configuration", flush=True)
     compose.run("config", "--quiet")
     print("[2/5] Preparing application images", flush=True)
-    compose.run("build")
+    compose.prepare_images()
+    installation.persist_settings()
     print("[3/5] Starting PostgreSQL, Redis and RabbitMQ", flush=True)
     compose.run("up", "-d", "--wait", "postgres", "redis", "rabbitmq")
     print("[4/5] Applying database migrations", flush=True)
@@ -84,7 +91,7 @@ def timestamped_backup(installation: Installation, prefix: str) -> Path:
     return folder / f"{prefix}-{timestamp}.tar.gz"
 
 
-def update(installation: Installation, source: Path) -> None:
+def update(installation: Installation, source: Path, *, image_mode: str | None = None) -> None:
     launcher = ManagedLauncher(installation)
     launcher.prepare()
     source = source.resolve()
@@ -96,17 +103,21 @@ def update(installation: Installation, source: Path) -> None:
     next_version = (source / "VERSION").read_text().strip()
     if previous_version == next_version:
         raise ValueError("The selected release is already installed.")
+    settings = installation.settings
+    if image_mode is not None:
+        settings = replace(settings, image_mode=image_mode)
+        settings.validate()
     backup_path = timestamped_backup(installation, "before-update")
     backup(installation, backup_path)
     next_installation = Installation(
         root=installation.root,
         source=source,
-        settings=installation.settings,
+        settings=settings,
         values=installation.values,
     )
     compose = Compose(next_installation)
     compose.run("config", "--quiet")
-    compose.run("build")
+    compose.prepare_images()
     Compose(installation).stop()
     compose.run("up", "-d", "--wait", "postgres", "redis", "rabbitmq")
     compose.run(
@@ -115,6 +126,7 @@ def update(installation: Installation, source: Path) -> None:
     metadata_path = installation.root / "installation.json"
     metadata = json.loads(metadata_path.read_text())
     metadata["source"] = str(source)
+    metadata["settings"] = asdict(settings)
     replace_private(metadata_path, json.dumps(metadata, indent=2) + "\n")
     compose.start()
     launcher.write(source)
@@ -132,6 +144,7 @@ def parser() -> argparse.ArgumentParser:
     setup.add_argument("--settings-file", type=Path)
     setup.add_argument("--host")
     setup.add_argument("--scheme", choices=("http", "https"))
+    setup.add_argument("--image-mode", choices=("auto", "prebuilt", "build"))
     setup.add_argument("--bind")
     setup.add_argument("--port", type=int)
     setup.add_argument("--https-port", type=int)
@@ -152,7 +165,34 @@ def parser() -> argparse.ArgumentParser:
     upgrade = commands.add_parser("update")
     upgrade.add_argument("--source", type=Path)
     upgrade.add_argument("--version")
+    upgrade.add_argument("--image-mode", choices=("auto", "prebuilt", "build"))
     return root
+
+
+def update_entrypoint(installation: Installation, source: Path, image_mode: str | None) -> None:
+    source = source.resolve()
+    entrypoint = source / "deployment/papilio.py"
+    if not entrypoint.is_file() or not (source / "VERSION").is_file():
+        raise ValueError("The selected release has no matching installer entrypoint.")
+    if source == Path(__file__).resolve().parents[2]:
+        update(installation, source, image_mode=image_mode)
+        return
+    arguments = [
+        sys.executable,
+        str(entrypoint),
+        "--home",
+        str(installation.root.parent.parent),
+        "--environment",
+        installation.settings.environment,
+        "--instance",
+        installation.settings.instance,
+        "update",
+        "--source",
+        str(source),
+    ]
+    if image_mode is not None:
+        arguments.extend(["--image-mode", image_mode])
+    subprocess.run(arguments, check=True)
 
 
 def execute(arguments: argparse.Namespace) -> None:
@@ -191,7 +231,7 @@ def execute(arguments: argparse.Namespace) -> None:
         print(f"Restore finished. Pre-restore recovery backup: {safety}")
     elif arguments.command == "update":
         source = arguments.source or download_release(arguments.home, arguments.version)
-        update(installation, source)
+        update_entrypoint(installation, source, arguments.image_mode)
 
 
 def main() -> None:

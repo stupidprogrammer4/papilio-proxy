@@ -4,7 +4,7 @@
 
 Running `sudo bash ./install.sh --source "$PWD"` from a checkout opens a native
 terminal wizard. Set the environment, domain/IP and transport; F3 toggles advanced
-instance/bind/port settings without resetting them, F2 reviews, Enter continues
+instance/bind/port/image settings without resetting them, F2 reviews, Enter continues
 and Esc cancels. A basic terminal gets plain prompts. The bootstrap uses production
 as its initial environment; dev/test/sandbox remain available. Flags seed choices,
 and a known instance's saved settings seed a resumed install. A review does not
@@ -27,7 +27,12 @@ than the published alpha.1 installer.
 
 The five printed execution stages report configuration, image preparation,
 infrastructure startup, migrations and application/worker checks. The current
-source path builds images; prebuilt release delivery is still in progress.
+source path without a manifest builds images. Packaged releases use native ready
+images through `--image-mode auto|prebuilt|build`. Prebuilt downloads are cached,
+SHA/size checked before Docker load and verified against every declared image ID
+and platform. No build or registry login runs in that mode. A bad asset stops
+installation; changing only the image mode does not reset identity or secrets.
+Official alpha.2 publication and fresh-host verification are still pending.
 
 ## Create the owner
 
@@ -104,8 +109,11 @@ sudo papilio update --source /opt/papilio/releases/papilio-NEW_VERSION
 ```
 
 The example next version is not a promise that it exists. Update downloads an
-available release and checks its published checksum, builds it, creates a recovery
-backup and runs native migrations. Release-specific compatibility must be tested
+available release and checks its published checksum. Its own installer creates a
+recovery backup, prepares the selected images and runs native migrations. The
+image mode is preserved unless `update --image-mode MODE` explicitly changes it.
+For a legacy installer, the new bootstrap accepts `--update` with the existing
+`--environment`, `--instance` and `--home`; host and port inputs are not needed. Release-specific compatibility must be tested
 before publication. No migration from the intentionally removed implementation
 is provided. `stop` retains data and `status` does not deploy a new version.
 

@@ -33,6 +33,7 @@ class InstallSettings:
     http_port: int = 8080
     https_port: int = 8443
     scheme: str | None = None
+    image_mode: str = "auto"
 
     @classmethod
     def from_options(
@@ -45,6 +46,7 @@ class InstallSettings:
         bind_address: str | None = None,
         http_port: int | None = None,
         https_port: int | None = None,
+        image_mode: str = "auto",
     ) -> "InstallSettings":
         production = environment == "production"
         return cls(
@@ -52,6 +54,7 @@ class InstallSettings:
             instance=instance,
             host=host,
             scheme=scheme,
+            image_mode=image_mode,
             bind_address=bind_address
             if bind_address is not None
             else ("0.0.0.0" if production else "127.0.0.1"),
@@ -82,6 +85,8 @@ class InstallSettings:
         )
 
     def validate(self) -> None:
+        if self.image_mode not in {"auto", "prebuilt", "build"}:
+            raise ValueError("Choose auto, prebuilt or build as the image mode.")
         if self.scheme is not None and self.scheme not in {"http", "https"}:
             raise ValueError("Choose http or https as the transport scheme.")
         if self.environment not in ENVIRONMENTS:
@@ -166,6 +171,12 @@ class Installation:
     source: Path
     settings: InstallSettings
     values: dict[str, str]
+
+    def persist_settings(self) -> None:
+        metadata_path = self.root / "installation.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata["settings"] = asdict(self.settings)
+        replace_private(metadata_path, json.dumps(metadata, indent=2) + "\n")
 
     @classmethod
     def create(cls, home: Path, source: Path, settings: InstallSettings) -> "Installation":

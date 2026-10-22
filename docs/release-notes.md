@@ -1,26 +1,34 @@
-# 0.1.0-alpha.1 — experimental foundation
+# 0.1.0-alpha.2 — experimental connected foundation
 
-This release establishes the new MIT Django/Celery foundation while preserving
-the Vue and Android clients. It is not the completed service-sales MVP.
+Release candidate; publication and fresh-host verification are pending.
+This remains an experimental foundation, not the completed VPN sales MVP.
 
-Verified delivered scope: single-use owner onboarding, native session
-and CSRF login, system overview, scoped durable diagnostics, separate real worker
-queues, DB schedules, isolated Compose installation and lifecycle/backup CLI.
+- Native terminal installation wizard, simple/advanced settings, review, resize,
+  cancellation, plain-terminal fallback and unattended flags.
+- Single-server domain/IP setup with independent HTTP or HTTPS selection.
+- Native amd64/arm64 ready-image packaging for backend, frontend, PostgreSQL,
+  Redis and RabbitMQ. Verified cache, image identities and explicit source-build
+  option; prebuilt mode performs no application build on the target server.
+- Owner-scoped node registration, per-node mTLS bootstrap issuance and actual
+  agent connectivity checks through separate CPU/I/O workers. The Go agent's
+  Xray adapter is tested with real client traffic; automatic core installation,
+  process supervision and Django service provisioning remain unfinished.
+- Per-operator encrypted Telegram credentials, editable runtime/schedules,
+  administrator pairing and durable supported-message intake. Browser and worker
+  checks substitute the external Telegram API. Live identity inspection alone
+  does not prove real bot commerce or delivery.
+- Backup/restore, managed CLI updates and persistence of owner/node/bot/schedule
+  configuration are exercised on owned Compose installations. Actual prior-
+  release upgrade and clean-host artifact checks remain separate pending gates.
+- Migration/import from the reference panels/bots is now tracked; no importer is
+  included in this release.
 
-CI and publication: [release run](https://github.com/stupidprogrammer4/papilio-proxy/actions/runs/39568952248).
-The public artifact was installed on a clean disposable Ubuntu 24.04 amd64
-sandbox VM; real browser onboarding, login, schedule editing and actual worker
-completion passed. CI additionally exercises backup/restore, stop/start and a
-synthetic next-version update retaining data and the installed command. That
-synthetic update does not establish prior-release migration compatibility.
+Products, wallet, payment approval, subscriptions, bot purchase/delivery, standalone
+bot intake and Android payment matching are not connected yet. See `TODO.md` and
+`docs/feature-catalog.json` for the complete staged scope.
 
-Network provisioning, subscriptions, sales/payment flows, Telegram bots and Android
-payment matching are not connected in this foundation release. The complete staged
-backlog is tracked in `TODO.md` and `docs/feature-catalog.json`.
+Public ACME issuance and universal OS/version support are not claimed. Default
+backups are private and compressed, without optional password encryption yet.
+One native database Beat runs per installed instance on one Docker host.
 
-Installation support is limited to the exact scope recorded in the matrix. Default
-backups are compressed and private but not yet optionally password-encrypted.
-Multi-host Beat leadership and upgrade compatibility with a previous supported
-Django release are not claimed.
-
-Original code is MIT; external dependencies and cores retain their own licenses.
+Original code is MIT; external dependencies and cores retain their licenses.

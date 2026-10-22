@@ -18,12 +18,16 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 
 - Installer on main: explicit HTTP/HTTPS selection in every environment; a public
   HTTP browser fixture exercises production setup/login, actual worker operations,
-  nodes/bot onboarding and recovery. Faster prebuilt release deployment and the
-  remaining clean-host matrix are still pending.
+  nodes/bot onboarding and recovery. Native ready-image build/load and browser/recovery are locally exercised; official
+  alpha.2 images and fresh-host verification remain pending.
 - Native installation TUI on main: simple/advanced settings, saved-instance seeds,
   review, cancellation, resize and plain-terminal fallback. Real terminal tests
   exercise the form; the actual bootstrap also reaches a working production HTTP
   installation through that form with non-TTY stdin. This is not in alpha.1.
+- Ready-image candidate alpha.2: selectable persistent auto/prebuilt/build modes,
+  native platform/image identities, SHA/size-verified cache and no server build
+  in prebuilt mode. The release pipeline requires both native architectures and
+  candidate-image browser/recovery tests. Publication/clean-host checks are pending.
 
 - On main after the foundation release: runnable Go/mTLS agent and native Xray
   adapter tested through actual HTTPS/core/client traffic, including denied

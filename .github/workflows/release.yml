@@ -2,22 +2,71 @@ name: Publish experimental release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   verify:
     uses: ./.github/workflows/ci.yml
+  images:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            architecture: amd64
+          - runner: ubuntu-24.04-arm
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      PAPILIO_RUN_INSTALLER_TESTS: "1"
+      PAPILIO_RUN_PREVIOUS_RELEASE_TEST: "1"
+      PAPILIO_TEST_RELEASE_IMAGES: ${{ github.workspace }}/image-assets
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: "9.15.9"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - run: python -m venv .venv
+      - run: .venv/bin/pip install --require-hashes -r panel/backend/requirements.dev.lock
+      - run: pnpm --dir panel/frontend install --frozen-lockfile
+      - run: pnpm --dir panel/frontend exec playwright install --with-deps chromium
+      - name: Build native images and bind actual content identities
+        run: python3 deployment/build_images.py --output image-assets
+      - name: Exercise actual candidate images through browser and recovery
+        run: .venv/bin/pytest -c deployment/pyproject.toml deployment/tests/test_installed_runtime.py -k prebuilt -q
+      - name: Upgrade public alpha.1 and recover its backup on fresh old-version state
+        run: .venv/bin/pytest -c deployment/pyproject.toml deployment/tests/test_previous_release.py -q
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-images-${{ matrix.architecture }}
+          path: image-assets/
+          retention-days: 1
+          if-no-files-found: error
   publish:
-    needs: verify
+    needs: [verify, images]
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: release-images-*
+          path: image-assets
+          merge-multiple: true
       - name: Build source artifact from this verified commit
         env:
           RELEASE_TAG: ${{ github.ref_name }}
-        run: python3 deployment/package_release.py --output dist --tag "$RELEASE_TAG"
+        run: python3 deployment/package_release.py --images image-assets --output dist --tag "$RELEASE_TAG"
       - name: Publish artifact and checksums
         env:
           GH_TOKEN: ${{ github.token }}
