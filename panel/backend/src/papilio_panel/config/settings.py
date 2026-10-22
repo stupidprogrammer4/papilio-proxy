@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "papilio_panel.modules.jobs",
     "papilio_panel.modules.nodes",
     "papilio_panel.modules.bots",
+    "papilio_panel.modules.cores",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -153,3 +154,4 @@ PAPILIO_CPU_PROBE_ITERATIONS = positive_integer("PAPILIO_CPU_PROBE_ITERATIONS", 
 PAPILIO_IO_CONCURRENCY = positive_integer("PAPILIO_IO_CONCURRENCY", 2)
 PAPILIO_CPU_CONCURRENCY = positive_integer("PAPILIO_CPU_CONCURRENCY", 1)
 PAPILIO_OPERATION_MAX_ATTEMPTS = positive_integer("PAPILIO_OPERATION_MAX_ATTEMPTS", 5)
+PAPILIO_MAX_PAGE_SIZE = positive_integer("PAPILIO_MAX_PAGE_SIZE", 200)

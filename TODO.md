@@ -51,6 +51,12 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
   are exercised. This is an internal background provisioning interface; it does
   not yet provide persisted service accounts, subscriptions or panel/bot purchases.
 
+- Registered core API on main: common identity and separate Xray defaults/inbound
+  records, owned node/core/child access, idempotency, native uniqueness, complete
+  search/pagination and nonempty-schema migration are exercised. Registration
+  attaches existing VLESS/TCP/no-TLS endpoints; installation, edits and additional
+  core drivers remain pending.
+
 - Bot onboarding on main: owner-scoped encrypted tokens, editable runtime and native
   per-bot schedules, one-use admin pairing and durable supported message intake.
   Worker and installed-browser paths use a controlled external Telegram double;

@@ -174,3 +174,34 @@ with backups: it is needed to decrypt node keys after restore.
 This delivers bot setup and durable supported update intake. Shop menus, receipt
 review, wallet, purchased service delivery and independent offline intake are not
 implemented by this step. These are not provided by the alpha.1 release artifact.
+
+## Registered Xray cores on main
+
+This development API registers an existing Xray process attached to an enrolled
+node. Use the node ID already returned by registration. The node's mTLS agent
+and native core must already be running; registration does not install them.
+
+With the normal owner session and CSRF header, call:
+
+| Method | Resource | Input / result |
+| --- | --- | --- |
+| POST | `/api/v1/cores/xray` | `request_key` UUID, `node_id`, `name`, optional `default_user_level` (default 0); returns the core ID. |
+| GET | `/api/v1/cores` | Search with `q`, `page`, `page_size`; results cover the authorized collection. |
+| GET | `/api/v1/cores/{core_id}` | Read the registered core and its Xray defaults. |
+| POST | `/api/v1/cores/{core_id}/xray/inbounds` | `request_key`, existing native `tag`, `public_host`, `port`; returns the inbound ID. |
+| GET | `/api/v1/cores/{core_id}/xray/inbounds` | Paginated tag search. |
+| GET | `/api/v1/cores/{core_id}/xray/inbounds/{inbound_id}` | Read an inbound belonging to that core. |
+
+Registration accepts the initial VLESS/TCP endpoint prototype with no transport
+TLS. The tag must already exist in the native configuration. Port and host are
+client-facing endpoint settings. Multiple tags can be registered for an attached
+core; protocol v1 addresses one Xray process per node.
+
+Repeat the same request key and settings after a transport failure. A new
+registration returns 201; an unchanged replay returns 200. A conflicting key or
+already registered native identity returns 409. Foreign nodes, cores or children
+are hidden with 404. Native maximum user level is 4294967295.
+
+`PAPILIO_MAX_PAGE_SIZE` is a validated startup setting (default 200) for these
+new APIs. Changing it requires restarting the API process. Its panel editor and
+core/inbound editing remain pending; registration is not full core management.

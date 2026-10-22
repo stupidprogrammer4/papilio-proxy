@@ -31,6 +31,10 @@ See the [agent's scope](node/agent/README.md) and [feature status](TODO.md).
 Bot worker/browser tests substitute the external Telegram API; live identity
 inspection is separate from real bot commerce.
 
+Development on main also includes an owner-scoped API for registering existing
+Xray cores/inbounds. See the [development API guide](docs/user-guide.en.md#registered-xray-cores-on-main).
+This is separate from the published alpha.3 artifacts.
+
 ## Install
 
 On a clean candidate Ubuntu/Debian server:
