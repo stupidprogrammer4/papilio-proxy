@@ -9,10 +9,12 @@ import nodesFa from "./nodes.fa.json";
 
 import botsEn from "./bots.en.json";
 import botsFa from "./bots.fa.json";
+import serviceSetupEn from "./service-setup.en.json";
+import serviceSetupFa from "./service-setup.fa.json";
 
 export const i18n = createI18n({
   legacy: false,
   locale: "en",
   fallbackLocale: "en",
-  messages: { en: { ...en, foundation: foundationEn, nodes: nodesEn, bots: botsEn }, fa: { ...fa, foundation: foundationFa, nodes: nodesFa, bots: botsFa } },
+  messages: { en: { ...en, foundation: foundationEn, nodes: nodesEn, bots: botsEn, serviceSetup: serviceSetupEn }, fa: { ...fa, foundation: foundationFa, nodes: nodesFa, bots: botsFa, serviceSetup: serviceSetupFa } },
 });

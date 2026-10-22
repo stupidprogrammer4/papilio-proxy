@@ -210,7 +210,30 @@ core/inbound editing remain pending; registration is not full core management.
 
 This development slice provisions an unlimited VLESS/TCP service through the
 registered existing inbound. Use the core and inbound IDs returned above. The
-service form and bot purchase workflow are still being connected.
+owner's **Services** page connects to these APIs. Bot purchases remain pending.
+
+### From the panel
+
+1. Open **Services**, choose a registered core or expand **Register existing
+   Xray**, select its node and enter a name. Advanced settings expose the native
+   default user level. The node agent and Xray must already be running.
+2. Select a registered inbound or expand **Register existing inbound**. Enter
+   the exact existing VLESS/TCP/no-TLS tag and the client-facing host and port.
+   Registration records the endpoint; it does not create a native inbound.
+3. Enter a service name and choose **Create service**. Optional advanced settings
+   override the user level or supply a VLESS UUID; blank values use the saved
+   core default and a generated credential.
+4. Choose **Refresh** to read the provisioning result. When it succeeds, choose
+   **Get subscription link**. Select the read-only URL to copy it on HTTP or
+   HTTPS; anyone holding this private URL can obtain the connection details.
+
+Each list supports search, page size and next/previous pages. A selected record
+remains selected across list searches/pages. New records stay selected without
+asking for their IDs again. Existing services can be opened after page reload.
+The service page and navigation require the current owner's service permission;
+ordinary staff do not receive this access. Both English and Persian are available.
+
+### API consumers
 
 1. POST `/api/v1/services` with `request_key` UUID, `name`, `core_id`, `inbound_id`.
    Advanced inputs are an optional `identifier` UUID and `user_level`. Missing
@@ -235,6 +258,6 @@ operator changes. Work already published or in flight can still finish.
 Current `status` describes the latest initial provisioning result, not continuous
 core health. Dynamic native users are not yet rebuilt automatically after core
 restart, although their service/credential records persist in PostgreSQL. Quota,
-expiry, mutable lifecycle, additional subscription formats, service UI, billing
+expiry, mutable lifecycle, additional subscription formats, billing
 and bot delivery remain required before declaring the sales MVP complete. The
-published alpha.3 artifacts do not include this development API.
+published alpha.3 artifacts do not include this development API or service page.

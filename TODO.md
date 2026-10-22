@@ -7,7 +7,7 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 | Stage | Status | Completed version | Remaining acceptance |
 | --- | --- | --- | --- |
 | Foundation | Experimental release | 0.1.0-alpha.1 | Additional OS/environment combinations and later panel settings editors remain pending. |
-| First practical release | In progress | — | Native service/subscription API and client traffic are exercised; service UI/lifecycle, automatic node/core install, bot commerce, products, wallet, receipts, purchase and delivery remain. |
+| First practical release | In progress | — | Native service/subscription API, panel form and client traffic are exercised; mutable lifecycle, automatic node/core install, bot commerce, products, wallet, receipts, purchase and delivery remain. |
 | PasarGuard phase one | Planned | — | Reconcile and execute the complete v5.4.1 feature baseline. |
 | Full sales and bot | Planned | — | Approved Mirza/PGClock capabilities, resellers, Mini App and offline intake. |
 | Network and additional cores | Planned | — | Four complete cores and verified reference extras, certificates, Single Port, WARP, speed/IP controls. |
@@ -62,9 +62,14 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
   subscription delivery are exercised through an actual client. Native tests
   cover queue/API replay, expired-lease recovery, paused delivery, real broker
   outage/recovery, default snapshots and revoked actors before provisioning.
-  This is an unlimited VLESS/TCP/no-TLS prototype; service UI, expiry/quotas,
+  This is an unlimited VLESS/TCP/no-TLS prototype; expiry/quotas,
   mutable lifecycle, automatic core restart reconciliation and commerce remain.
 
+- Native Services page on main: owner-only core/inbound registration, service
+  creation, searchable paginated selections and signed subscription retrieval
+  use the Django API. Browser-to-worker/agent/Xray and actual subscription-client
+  traffic are exercised. English/Persian, retained selections and staff denial
+  are included. This development page is not in alpha.3 artifacts.
 - Bot onboarding on main: owner-scoped encrypted tokens, editable runtime and native
   per-bot schedules, one-use admin pairing and durable supported message intake.
   Worker and installed-browser paths use a controlled external Telegram double;
