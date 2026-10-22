@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "papilio_panel.modules.nodes",
     "papilio_panel.modules.bots",
     "papilio_panel.modules.cores",
+    "papilio_panel.modules.services",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

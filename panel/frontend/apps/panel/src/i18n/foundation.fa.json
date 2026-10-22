@@ -33,6 +33,7 @@
   "enabled": "فعال",
   "save": "ذخیره",
   "scheduleNames": {
+    "service-outbox": "ارسال درخواست ساخت سرویس",
     "io-heartbeat": "گزارش worker ارتباطی",
     "cpu-heartbeat": "گزارش worker پردازشی",
     "outbox": "تحویل پیام‌های ثبت‌شده",

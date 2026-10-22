@@ -7,7 +7,7 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 | Stage | Status | Completed version | Remaining acceptance |
 | --- | --- | --- | --- |
 | Foundation | Experimental release | 0.1.0-alpha.1 | Additional OS/environment combinations and later panel settings editors remain pending. |
-| First practical release | In progress | — | Node onboarding/connectivity is exercised; automatic node/core installation and Django provisioning, subscriptions, bot commerce, products, wallet, receipts, purchase and delivery remain. |
+| First practical release | In progress | — | Native service/subscription API and client traffic are exercised; service UI/lifecycle, automatic node/core install, bot commerce, products, wallet, receipts, purchase and delivery remain. |
 | PasarGuard phase one | Planned | — | Reconcile and execute the complete v5.4.1 feature baseline. |
 | Full sales and bot | Planned | — | Approved Mirza/PGClock capabilities, resellers, Mini App and offline intake. |
 | Network and additional cores | Planned | — | Four complete cores and verified reference extras, certificates, Single Port, WARP, speed/IP controls. |
@@ -48,14 +48,22 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 - Django-to-agent user control on main: typed owner-scoped VLESS apply/remove
   uses the issued mTLS identity and native Xray API. Actual client traffic,
   duplicate requests, literal URL characters, foreign owners and revoked access
-  are exercised. This is an internal background provisioning interface; it does
-  not yet provide persisted service accounts, subscriptions or panel/bot purchases.
+  are exercised. The persistent service prototype consumes this internal
+  background interface. Panel/bot purchases remain pending.
 
 - Registered core API on main: common identity and separate Xray defaults/inbound
   records, owned node/core/child access, idempotency, native uniqueness, complete
   search/pagination and nonempty-schema migration are exercised. Registration
   attaches existing VLESS/TCP/no-TLS endpoints; installation, edits and additional
   core drivers remain pending.
+
+- Persistent service API on main: atomic account/outbox creation, encrypted Xray
+  credentials, owner/parent checks, native IO provisioning and signed VLESS
+  subscription delivery are exercised through an actual client. Native tests
+  cover queue/API replay, expired-lease recovery, paused delivery, real broker
+  outage/recovery, default snapshots and revoked actors before provisioning.
+  This is an unlimited VLESS/TCP/no-TLS prototype; service UI, expiry/quotas,
+  mutable lifecycle, automatic core restart reconciliation and commerce remain.
 
 - Bot onboarding on main: owner-scoped encrypted tokens, editable runtime and native
   per-bot schedules, one-use admin pairing and durable supported message intake.

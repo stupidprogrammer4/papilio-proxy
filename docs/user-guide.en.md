@@ -205,3 +205,36 @@ are hidden with 404. Native maximum user level is 4294967295.
 `PAPILIO_MAX_PAGE_SIZE` is a validated startup setting (default 200) for these
 new APIs. Changing it requires restarting the API process. Its panel editor and
 core/inbound editing remain pending; registration is not full core management.
+
+## Persistent service prototype on main
+
+This development slice provisions an unlimited VLESS/TCP service through the
+registered existing inbound. Use the core and inbound IDs returned above. The
+service form and bot purchase workflow are still being connected.
+
+1. POST `/api/v1/services` with `request_key` UUID, `name`, `core_id`, `inbound_id`.
+   Advanced inputs are an optional `identifier` UUID and `user_level`. Missing
+   credentials are generated; the selected/default level is saved on the service.
+2. The 202 response contains the service `id` and queued provisioning `status`.
+   GET `/api/v1/services/{id}` to read attempts, the last error and worker result.
+   Creation and its outbox commit together before external node communication.
+3. Once `status` is `succeeded`, GET `/api/v1/services/{id}/subscription` for the
+   signed client URL. Pending provisioning returns 409. The public URL returns
+   a Base64 VLESS subscription and grants access to that service configuration.
+4. Search the owner's services with GET `/api/v1/services` and `q`, `page`,
+   `page_size`. Foreign services and mismatched core/inbound IDs return 404.
+
+Repeat the original request key and unchanged inputs after a connection failure.
+Replays retain the credential and original level; a conflicting request returns
+409. A broker outage retains the database request for native outbox delivery.
+
+The status page's **Service provisioning delivery** schedule enables/disables
+new delivery and edits its interval without restart. Initialization preserves
+operator changes. Work already published or in flight can still finish.
+
+Current `status` describes the latest initial provisioning result, not continuous
+core health. Dynamic native users are not yet rebuilt automatically after core
+restart, although their service/credential records persist in PostgreSQL. Quota,
+expiry, mutable lifecycle, additional subscription formats, service UI, billing
+and bot delivery remain required before declaring the sales MVP complete. The
+published alpha.3 artifacts do not include this development API.

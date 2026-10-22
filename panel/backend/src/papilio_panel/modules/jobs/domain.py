@@ -104,6 +104,7 @@ class SystemStatus:
 
 
 class ScheduleKind(StrEnum):
+    SERVICE_OUTBOX = "service-outbox"
     NODE_OUTBOX = "node-outbox"
     IO_HEARTBEAT = "io-heartbeat"
     CPU_HEARTBEAT = "cpu-heartbeat"

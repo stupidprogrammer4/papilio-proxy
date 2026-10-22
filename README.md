@@ -24,15 +24,17 @@ bot setup/admin pairing, a terminal installer and verified ready images.
 Backup/restore and upgrade from the published Django alpha.1 are exercised with
 retained owner credentials and schedule choices.
 
-Automatic core installation, Django service provisioning, subscriptions, products,
-wallet, payment approval, bot purchase/delivery and Android payment matching remain
-unfinished. Preserved client screens do not establish backend feature support.
+The published alpha.3 artifact lacks automatic core installation, Django service
+provisioning, subscriptions, products, wallet, payment approval, bot purchase/delivery
+and Android payment matching. Preserved client screens do not establish backend feature support.
 See the [agent's scope](node/agent/README.md) and [feature status](TODO.md).
 Bot worker/browser tests substitute the external Telegram API; live identity
 inspection is separate from real bot commerce.
 
 Development on main also includes an owner-scoped API for registering existing
-Xray cores/inbounds. See the [development API guide](docs/user-guide.en.md#registered-xray-cores-on-main).
+Xray cores/inbounds, persistent IO service provisioning and signed VLESS
+subscriptions. The [development API guide](docs/user-guide.en.md#persistent-service-prototype-on-main)
+describes the unlimited TCP prototype and remaining lifecycle/UI/billing work.
 This is separate from the published alpha.3 artifacts.
 
 ## Install

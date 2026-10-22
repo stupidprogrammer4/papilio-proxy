@@ -51,6 +51,25 @@ try {
   ]);
   assert.equal(savedSchedule.status(), 200);
   assert.equal((await savedSchedule.json()).interval_seconds, 2);
+  const serviceSchedule = page.getByTestId("schedule-service-outbox");
+  await expect(serviceSchedule).toContainText("Service provisioning delivery");
+  await serviceSchedule.locator('input[type="number"]').fill("3");
+  await serviceSchedule.locator('input[type="checkbox"]').uncheck();
+  const [pausedServiceDelivery] = await Promise.all([
+    page.waitForResponse(response => response.url().endsWith("/api/v1/system/schedules/service-outbox") && response.request().method() === "PUT"),
+    serviceSchedule.getByRole("button", { name: "Save", exact: true }).click(),
+  ]);
+  assert.equal(pausedServiceDelivery.status(), 200);
+  assert.equal((await pausedServiceDelivery.json()).enabled, false);
+  await page.reload();
+  await expect(serviceSchedule.locator('input[type="number"]')).toHaveValue("3");
+  await expect(serviceSchedule.locator('input[type="checkbox"]')).not.toBeChecked();
+  await serviceSchedule.locator('input[type="checkbox"]').check();
+  const [resumedServiceDelivery] = await Promise.all([
+    page.waitForResponse(response => response.url().endsWith("/api/v1/system/schedules/service-outbox") && response.request().method() === "PUT"),
+    serviceSchedule.getByRole("button", { name: "Save", exact: true }).click(),
+  ]);
+  assert.equal(resumedServiceDelivery.status(), 200);
   const [submission] = await Promise.all([
     page.waitForResponse(response => response.url().endsWith("/api/v1/system/probes") && response.request().method() === "POST"),
     page.getByTestId("probe-io").click(),
