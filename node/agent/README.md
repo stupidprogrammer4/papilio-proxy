@@ -3,10 +3,11 @@
 [فارسی](README.fa.md)
 
 The Go module now builds a runnable agent exposing native Xray control over
-mutual TLS. It attaches to an already running local Xray API. Enrollment, core
-process supervision, panel integration and one-command node installation are
-still being built. This is newer than the experimental foundation release and
-is not the completed MVP.
+mutual TLS. It attaches to an existing local Xray API by default. On main, optional native
+process ownership can validate/start Xray and stop it with the agent. Django
+registration/mTLS bootstrap and connectivity checks are in alpha.2; automatic
+node installation, persisted user reconciliation and service provisioning are
+still being built. These components are not the completed MVP.
 
 ## Verified adapter boundary
 
@@ -48,8 +49,38 @@ The control client certificate needs ClientAuth usage and exactly this URI SAN:
 `spiffe://papilio/DEPLOYMENT_UUID/nodes/NODE_UUID/control`.
 Both UUIDs must match the selected configuration. TLS uses native trusted CA and
 certificate checks; clients must also verify the server hostname/trust and its
-node identity. Automatic issuance and rotation are pending. Private keys belong
+node identity. Django issues bootstrap credentials; automated installation and renewal remain pending. Private keys belong
 in private instance files, never in a checked-in configuration or public output.
+
+## Optional managed Xray process on main
+
+Omitting `managed_xray` or setting it to `null` retains attachment to an existing
+core. To let this agent own the native process, add:
+
+```json
+"managed_xray": {
+  "binary_file": "/usr/local/bin/xray",
+  "configuration_file": "/etc/papilio-agent/xray.json"
+}
+```
+
+Both paths are required; relative paths resolve against the selected agent JSON.
+The operator's Xray JSON must expose the selected loopback `xray_api_address`.
+Native `xray run -test` validates that file before execution/listener setup; its
+validation uses `shutdown_timeout_seconds`. The file is not rewritten. Stopping
+the agent interrupts the owned core, then kills/reaps it if needed. Grace and
+forced-reap each use the configured shutdown bound. An unexpected core exit stops
+the control listener and returns failure. No private native errors are echoed.
+
+This option is newer than alpha.2. It does not install binaries, restart the
+service automatically or persist dynamic gRPC users. Users absent from the chosen
+native config do not survive a core restart; recovery from Django's persisted
+configuration remains pending. Only the selected child is managed; existing
+external cores in attach mode are retained when the agent stops.
+
+Actual tests exercise both executable modes through mTLS, gRPC and client traffic,
+including core death, agent shutdown, paused-core forced cleanup, concurrent
+close and cancelled startup. Linux fault checks act only on their own child.
 
 ## Control protocol version 1
 

@@ -60,3 +60,31 @@ func TestInvalidConfigurationFailsWithoutEchoingInputs(t *testing.T) {
 		})
 	}
 }
+
+func TestManagedCorePathsAreExplicitAndConfigRelative(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "agent.json")
+	content := `{` + identities + `,"managed_xray":{"binary_file":"bin/xray","configuration_file":"core/xray.json"}}`
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.ManagedXray == nil || settings.ManagedXray.BinaryFile != filepath.Join(root, "bin/xray") || settings.ManagedXray.ConfigurationFile != filepath.Join(root, "core/xray.json") {
+		t.Fatal("Explicit native process paths were ignored or resolved incorrectly.")
+	}
+}
+
+func TestIncompleteManagedCoreSettingsAreRejected(t *testing.T) {
+	for _, managed := range []string{`{}`, `{"binary_file":"xray"}`, `{"configuration_file":"xray.json"}`, `"invalid"`} {
+		path := filepath.Join(t.TempDir(), "agent.json")
+		if err := os.WriteFile(path, []byte(`{`+identities+`,"managed_xray":`+managed+`}`), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Load(path); !errors.Is(err, ErrInvalidConfiguration) {
+			t.Fatal("Incomplete managed process settings were accepted.")
+		}
+	}
+}

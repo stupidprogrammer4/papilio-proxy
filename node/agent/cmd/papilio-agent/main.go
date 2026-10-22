@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -15,9 +16,10 @@ import (
 	"github.com/stupidprogrammer4/papilio-proxy/node/agent/internal/control"
 	"github.com/stupidprogrammer4/papilio-proxy/node/agent/internal/credentials"
 	"github.com/stupidprogrammer4/papilio-proxy/node/agent/internal/xray"
+	"github.com/stupidprogrammer4/papilio-proxy/node/agent/internal/xrayprocess"
 )
 
-func run(path string) error {
+func run(path string) (runError error) {
 	settings, err := config.Load(path)
 	if err != nil {
 		return err
@@ -25,6 +27,18 @@ func run(path string) error {
 	certificate, roots, err := credentials.Load(settings.TLSCertificateFile, settings.TLSKeyFile, settings.ClientCAFile)
 	if err != nil {
 		return err
+	}
+	signals, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	ctx, cancel := context.WithCancelCause(signals)
+	defer cancel(nil)
+	if settings.ManagedXray != nil {
+		managed, err := xrayprocess.Start(ctx, settings.ManagedXray.BinaryFile, settings.ManagedXray.ConfigurationFile, time.Duration(settings.ShutdownTimeoutSeconds)*time.Second)
+		if err != nil {
+			return err
+		}
+		defer func() { runError = errors.Join(runError, managed.Close()) }()
+		go managed.Observe(ctx, cancel)
 	}
 	core, err := xray.Dial(xray.ConnectionOptions{Address: settings.XrayAPIAddress, MaxReplyBytes: settings.MaxGRPCReplyBytes})
 	if err != nil {
@@ -46,11 +60,12 @@ func run(path string) error {
 		return err
 	}
 	defer listener.Close()
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	fmt.Fprintln(os.Stdout, "Papilio node agent listening", settings.ListenAddress)
-	err = control.Serve(ctx, server, listener, time.Duration(settings.ShutdownTimeoutSeconds)*time.Second)
-	return err
+	runError = control.Serve(ctx, server, listener, time.Duration(settings.ShutdownTimeoutSeconds)*time.Second)
+	if errors.Is(context.Cause(ctx), xrayprocess.ErrCoreExited) {
+		runError = errors.Join(runError, xrayprocess.ErrCoreExited)
+	}
+	return runError
 }
 
 func main() {

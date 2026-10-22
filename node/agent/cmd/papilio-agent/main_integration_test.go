@@ -33,14 +33,34 @@ func privateFile(t *testing.T, path string, content []byte) {
 }
 
 func TestAgentExecutableUsesSelectedCredentialsAndActualXray(t *testing.T) {
+	t.Run("attached", func(t *testing.T) { exerciseAgentExecutable(t, false, nil) })
+	t.Run("managed", func(t *testing.T) { exerciseAgentExecutable(t, true, nil) })
+}
+
+func exerciseAgentExecutable(t *testing.T, managed bool, failCore func(*exec.Cmd)) {
+	t.Helper()
 	root := t.TempDir()
 	binary := filepath.Join(root, "papilio-agent")
 	build := exec.Command("go", "build", "-race", "-o", binary, ".")
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("Build executable: %v %s", err, output)
 	}
-	native := testcore.Server(t)
 	settings := config.Defaults()
+	var native testcore.ServerProcess
+	if managed {
+		prepared := testcore.PrepareServer(t)
+		native.APIAddress = fmt.Sprintf("127.0.0.1:%d", prepared.APIPort)
+		native.DataPort = prepared.DataPort
+		data, err := json.Marshal(prepared.Configuration)
+		if err != nil {
+			t.Fatal(err)
+		}
+		nativePath := filepath.Join(root, "xray.json")
+		privateFile(t, nativePath, data)
+		settings.ManagedXray = &config.ManagedXray{BinaryFile: os.Getenv("PAPILIO_XRAY_BINARY"), ConfigurationFile: nativePath}
+	} else {
+		native = testcore.Server(t)
+	}
 	settings.DeploymentID, settings.NodeID = uuid.New(), uuid.New()
 	settings.XrayAPIAddress = native.APIAddress
 	settings.ListenAddress = fmt.Sprintf("127.0.0.1:%d", testcore.Port(t))
@@ -144,16 +164,33 @@ func TestAgentExecutableUsesSelectedCredentialsAndActualXray(t *testing.T) {
 	if !testcore.FetchOrigin(testcore.ProxyClient(t, native.DataPort, user.UUID), origin.URL) {
 		t.Fatal("Executable-provisioned account could not transfer actual traffic.")
 	}
-	if err := command.Process.Signal(os.Interrupt); err != nil {
+	if failCore != nil {
+		failCore(command)
+	} else if err := command.Process.Signal(os.Interrupt); err != nil {
 		t.Fatal(err)
 	}
 	select {
 	case <-done:
-		if exitError != nil {
+		if failCore == nil && exitError != nil {
 			t.Fatalf("Shutdown failed: %v", exitError)
+		}
+		if failCore != nil && exitError == nil {
+			t.Fatal("Unexpected core death was reported as successful agent shutdown.")
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("Executable did not shut down within its tested bound.")
+	}
+	connection, err = net.DialTimeout("tcp", settings.ListenAddress, 100*time.Millisecond)
+	if err == nil {
+		_ = connection.Close()
+		t.Fatal("Stopped agent kept its control listener open.")
+	}
+	if managed {
+		connection, err := net.DialTimeout("tcp", settings.XrayAPIAddress, 100*time.Millisecond)
+		if err == nil {
+			_ = connection.Close()
+			t.Fatal("Agent shutdown left its owned core listener alive.")
+		}
 	}
 	remaining, err := os.ReadFile(path)
 	if err != nil {

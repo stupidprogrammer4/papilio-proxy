@@ -11,5 +11,6 @@
   "idle_timeout_seconds": 60,
   "shutdown_timeout_seconds": 20,
   "max_body_bytes": 1048576,
-  "max_grpc_reply_bytes": 16777216
+  "max_grpc_reply_bytes": 16777216,
+  "managed_xray": null
 }

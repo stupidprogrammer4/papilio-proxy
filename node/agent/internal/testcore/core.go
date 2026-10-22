@@ -82,18 +82,31 @@ func Start(t *testing.T, configuration any, readyPort int) *os.Process {
 	return nil
 }
 
-func Server(t *testing.T) ServerProcess {
+type ServerSettings struct {
+	APIPort       int
+	DataPort      int
+	Configuration map[string]any
+}
+
+func PrepareServer(t *testing.T) ServerSettings {
 	t.Helper()
 	apiPort, dataPort := Port(t), Port(t)
-	process := Start(t, map[string]any{
+	configuration := map[string]any{
 		"log":       map[string]any{"loglevel": "none"},
 		"api":       map[string]any{"tag": "management", "listen": fmt.Sprintf("127.0.0.1:%d", apiPort), "services": []string{"HandlerService", "StatsService"}},
 		"stats":     map[string]any{},
 		"policy":    map[string]any{"levels": map[string]any{"0": map[string]any{"statsUserUplink": true, "statsUserDownlink": true}}},
 		"inbounds":  []any{map[string]any{"tag": "vless-test", "listen": "127.0.0.1", "port": dataPort, "protocol": "vless", "settings": map[string]any{"clients": []any{}, "decryption": "none"}}},
 		"outbounds": []any{map[string]any{"protocol": "freedom", "tag": "direct"}},
-	}, apiPort)
-	return ServerProcess{APIAddress: fmt.Sprintf("127.0.0.1:%d", apiPort), DataPort: dataPort, Process: process}
+	}
+	return ServerSettings{APIPort: apiPort, DataPort: dataPort, Configuration: configuration}
+}
+
+func Server(t *testing.T) ServerProcess {
+	t.Helper()
+	settings := PrepareServer(t)
+	process := Start(t, settings.Configuration, settings.APIPort)
+	return ServerProcess{APIAddress: fmt.Sprintf("127.0.0.1:%d", settings.APIPort), DataPort: settings.DataPort, Process: process}
 }
 
 func ProxyClient(t *testing.T, serverPort int, id string) *http.Client {

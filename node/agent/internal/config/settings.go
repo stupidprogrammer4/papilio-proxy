@@ -15,20 +15,26 @@ import (
 
 var ErrInvalidConfiguration = errors.New("invalid or unreadable node configuration")
 
+type ManagedXray struct {
+	BinaryFile        string `json:"binary_file"`
+	ConfigurationFile string `json:"configuration_file"`
+}
+
 type Settings struct {
-	DeploymentID             uuid.UUID `json:"deployment_id"`
-	NodeID                   uuid.UUID `json:"node_id"`
-	ListenAddress            string    `json:"listen_address"`
-	XrayAPIAddress           string    `json:"xray_api_address"`
-	TLSCertificateFile       string    `json:"tls_certificate_file"`
-	TLSKeyFile               string    `json:"tls_key_file"`
-	ClientCAFile             string    `json:"client_ca_file"`
-	RequestTimeoutSeconds    int64     `json:"request_timeout_seconds"`
-	ReadHeaderTimeoutSeconds int64     `json:"read_header_timeout_seconds"`
-	IdleTimeoutSeconds       int64     `json:"idle_timeout_seconds"`
-	ShutdownTimeoutSeconds   int64     `json:"shutdown_timeout_seconds"`
-	MaxBodyBytes             int64     `json:"max_body_bytes"`
-	MaxGRPCReplyBytes        int       `json:"max_grpc_reply_bytes"`
+	DeploymentID             uuid.UUID    `json:"deployment_id"`
+	NodeID                   uuid.UUID    `json:"node_id"`
+	ListenAddress            string       `json:"listen_address"`
+	XrayAPIAddress           string       `json:"xray_api_address"`
+	TLSCertificateFile       string       `json:"tls_certificate_file"`
+	TLSKeyFile               string       `json:"tls_key_file"`
+	ClientCAFile             string       `json:"client_ca_file"`
+	RequestTimeoutSeconds    int64        `json:"request_timeout_seconds"`
+	ReadHeaderTimeoutSeconds int64        `json:"read_header_timeout_seconds"`
+	IdleTimeoutSeconds       int64        `json:"idle_timeout_seconds"`
+	ShutdownTimeoutSeconds   int64        `json:"shutdown_timeout_seconds"`
+	MaxBodyBytes             int64        `json:"max_body_bytes"`
+	MaxGRPCReplyBytes        int          `json:"max_grpc_reply_bytes"`
+	ManagedXray              *ManagedXray `json:"managed_xray,omitempty"`
 }
 
 func Defaults() Settings {
@@ -66,6 +72,9 @@ func (settings Settings) valid() bool {
 	if settings.TLSCertificateFile == "" || settings.TLSKeyFile == "" || settings.ClientCAFile == "" {
 		return false
 	}
+	if settings.ManagedXray != nil && (settings.ManagedXray.BinaryFile == "" || settings.ManagedXray.ConfigurationFile == "") {
+		return false
+	}
 	_, port, err := net.SplitHostPort(settings.ListenAddress)
 	if err != nil {
 		return false
@@ -98,5 +107,9 @@ func Load(path string) (Settings, error) {
 	settings.TLSCertificateFile = selectedFile(folder, settings.TLSCertificateFile)
 	settings.TLSKeyFile = selectedFile(folder, settings.TLSKeyFile)
 	settings.ClientCAFile = selectedFile(folder, settings.ClientCAFile)
+	if settings.ManagedXray != nil {
+		settings.ManagedXray.BinaryFile = selectedFile(folder, settings.ManagedXray.BinaryFile)
+		settings.ManagedXray.ConfigurationFile = selectedFile(folder, settings.ManagedXray.ConfigurationFile)
+	}
 	return settings, nil
 }
