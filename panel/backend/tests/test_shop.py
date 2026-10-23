@@ -18,6 +18,9 @@ def shop_bot(client: APIClient) -> dict:
 
 def test_shop_settings_are_owned_complete_and_persist_operator_choices() -> None:
     client = owner_client()
+    assert {"bot-shop:read", "bot-shop:write"} <= set(
+        client.get("/api/v1/admin/auth/me").json()["scopes"]
+    )
     bot = shop_bot(client)
     root = f"/api/v1/bots/{bot['id']}/shop"
     assert client.get(root).status_code == 404
@@ -46,6 +49,7 @@ def test_shop_settings_are_owned_complete_and_persist_operator_choices() -> None
     assert other.get(root).status_code == 404
     assert other.post(root, definition, format="json").status_code == 404
     staff = owner_client("shop-staff", superuser=False)
+    assert "bot-shop:read" not in staff.get("/api/v1/admin/auth/me").json()["scopes"]
     assert staff.get("/api/v1/bot-shop-defaults").status_code == 401
     assert staff.get(root).status_code == 401
     assert client.get(f"/api/v1/bots/{uuid4()}/shop").status_code == 404

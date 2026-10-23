@@ -32,6 +32,8 @@ def session_data(request: HttpRequest, principal: AdminPrincipal) -> AdminSessio
             "nodes:write",
             "bots:read",
             "bots:write",
+            "bot-shop:read",
+            "bot-shop:write",
             "cores:read",
             "cores:write",
             "services:read",

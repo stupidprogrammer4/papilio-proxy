@@ -5,12 +5,14 @@ import { expect } from "playwright/test";
 import { exerciseCustomerWallet } from "./customer-wallet.steps.mjs";
 import { fundNativeInvoice } from "./manual-payment.steps.mjs";
 import { createNativeProduct, buyNativeService } from "./product-purchase.steps.mjs";
+import { assertStaffShopDenied, exerciseBotShopSettings } from "./bot-shop-settings.steps.mjs";
 
 const base = process.env.PAPILIO_BROWSER_URL;
 assert(base && process.env.PAPILIO_BROWSER_RESULT && process.env.PAPILIO_BROWSER_DATA_PORT);
 const browser = await chromium.launch({ headless: true });
 try {
-  const page = await browser.newPage();
+  const context = await browser.newContext();
+  const page = await context.newPage();
   await page.goto(`${base}/login`);
   await page.locator('input[autocomplete="username"]').fill("native-user-owner");
   await page.locator('input[autocomplete="current-password"]').fill("isolated-node-owner-password-944!");
@@ -99,7 +101,9 @@ try {
   await staff.goto(`${base}/invoices`);
   await staff.waitForURL(`${base}/`);
   assert.equal((await staff.request.get(`${base}/api/v1/invoices`)).status(), 401);
-  writeFileSync(process.env.PAPILIO_BROWSER_RESULT, JSON.stringify({ service_id: service.id, customer_id: customerId, invoice_id: invoiceId, uri, purchase }), { mode: 0o600 });
+  const shops = await exerciseBotShopSettings(page, base);
+  await assertStaffShopDenied(staff, base);
+  writeFileSync(process.env.PAPILIO_BROWSER_RESULT, JSON.stringify({ service_id: service.id, customer_id: customerId, invoice_id: invoiceId, uri, purchase, shops }), { mode: 0o600 });
 } finally {
   await browser.close();
 }

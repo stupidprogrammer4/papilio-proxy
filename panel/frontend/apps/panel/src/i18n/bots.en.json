@@ -28,7 +28,7 @@
   "edit": "Edit bot settings",
   "saveHelp": "Saving uses the loaded revision. Status refresh preserves your draft. Reload settings explicitly to discard the draft and load concurrent changes. An active poll can finish before new settings take effect.",
   "reload": "Reload settings and discard draft",
-  "scope": "This step connects the bot and securely receives updates. Shop menus, wallet, payment review, service delivery and independent offline operation are still being implemented.",
+  "scope": "Shop settings below connect this bot to shared products, wallets, manual payment review and service delivery. Live Telegram acceptance and independent offline operation remain pending.",
   "failed": "The operation failed.",
   "fields": {
     "api_base_url": "Telegram API origin",

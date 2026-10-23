@@ -18,6 +18,7 @@ from xray_client import subscription_client
 from papilio_panel.modules.nodes.domain import XrayApply
 from papilio_panel.modules.payments.models import Invoice, PaymentDecision, Receipt
 from papilio_panel.modules.services.models import ServiceAccount
+from papilio_panel.modules.shop.models import ShopConfiguration
 from papilio_panel.modules.wallets.models import JournalEntry, Wallet
 
 pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.runtime]
@@ -89,6 +90,14 @@ def test_panel_provisions_a_service_used_by_an_actual_native_client(
             assert result.returncode == 0, result.stderr
             output = json.loads(result_path.read_text())
             connection.close()
+            first_shop = ShopConfiguration.objects.get(bot_id=output["shops"]["first"])
+            second_shop = ShopConfiguration.objects.get(bot_id=output["shops"]["second"])
+            assert first_shop.revision == 2 and first_shop.enabled is False
+            assert first_shop.delivery_enabled is False and first_shop.retry_seconds == 17
+            assert first_shop.texts["en"]["welcome"] == "Private shop $name"
+            assert first_shop.texts["fa"]["welcome"] == "فروشگاه $name"
+            assert second_shop.public_origin == "https://shop-two.example.invalid"
+            assert second_shop.enabled is False and second_shop.texts != first_shop.texts
             service = ServiceAccount.objects.get(pk=output["service_id"])
             assert service.status == "succeeded" and service.worker_pid != os.getpid()
             wallet = Wallet.objects.get(customer_id=output["customer_id"])

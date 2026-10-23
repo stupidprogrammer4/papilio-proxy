@@ -1,0 +1,41 @@
+{
+  "title": "Bot shop",
+  "help": "Configure this bot's private shop. Saving does not change issued invoices or accepted orders. No restart is needed; work already in progress can finish under its captured settings.",
+  "notCreated": "Shop settings have not been created for this bot. Defaults below are saved only when you submit the form.",
+  "create": "Create shop settings",
+  "saved": "Shop settings saved. Refreshing connection status preserves this draft; reload explicitly to load concurrent changes.",
+  "originHelp": "Public panel origin, including http:// or https:// and an optional port. Use no path, query, credentials or fragment. Review and subscription links use this address.",
+  "pauseHelp": "Processing controls new shop work. Delivery separately controls outgoing replies. Pausing retains queued work and does not reverse a recorded payment or purchase.",
+  "advanced": "Timing and delivery policy",
+  "hold": "Hold for review",
+  "retry": "Retry (a duplicate message is possible)",
+  "retryHelp": "If Telegram may have received a reply, retrying can duplicate the message. It does not repeat a wallet credit or purchase. Lease duration should cover the bot's HTTP request timeout.",
+  "texts": "Messages and button labels",
+  "textLocale": "Template language",
+  "templateHelp": "Edit English and Persian separately. Use plain text and the placeholders below; write $$ for a literal dollar sign. Final rendered messages must fit Telegram's limit. Internal owner audit notes are not customer templates.",
+  "scheduleHelp": "Polling timing is configured above. The shared shop delivery schedule can be paused or changed in Overview. Disabling it affects all shops in this installation.",
+  "schedules": "Open schedules",
+  "fields": {
+    "public_origin": "Public panel address",
+    "enabled": "Process shop messages",
+    "delivery_enabled": "Deliver queued replies",
+    "locale": "Customer message language",
+    "page_size": "Products and purchases per page",
+    "retry_seconds": "Retry delay (seconds)",
+    "lease_seconds": "Work and send lease (seconds)",
+    "max_attempts": "Maximum delivery attempts",
+    "confirmation_ttl_seconds": "Purchase confirmation lifetime (seconds)",
+    "ambiguous_delivery": "Uncertain delivery outcome"
+  },
+  "messages": {
+    "welcome": "Welcome", "help": "Help and top-up instructions", "catalogue": "Catalogue heading",
+    "wallet": "Wallet balance", "offer": "Purchase offer", "invoice": "Invoice and rejected invoice status",
+    "receipt": "Receipt recorded", "paid": "Payment approved", "queued": "Purchase recorded",
+    "order": "Service status", "subscription": "Private subscription link", "error": "Operation error",
+    "admin_receipt": "Administrator receipt review notice", "products_button": "Products button",
+    "wallet_button": "Wallet button", "help_button": "Help button", "orders_button": "Purchases button",
+    "next_button": "Next page button", "previous_button": "Previous page button", "buy_button": "Confirm purchase button",
+    "status_button": "Service status button", "menu_button": "Main menu button", "orders": "Purchase history heading",
+    "empty": "Empty page"
+  }
+}

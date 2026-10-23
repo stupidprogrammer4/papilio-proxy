@@ -2,10 +2,13 @@
 import { v4 as newRequestKey } from "uuid";
 import { onMounted, onBeforeUnmount, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { useAuth } from "@papilio/auth";
 import { request, query, type BotDefaults, type BotDraft, type BotPairingGrant, type ManagedBot, type ManagedBotPage } from "@papilio/api";
 import BotConnectionEditor from "../components/bot/BotConnectionEditor.vue";
+import BotShopSettings from "../components/bot/BotShopSettings.vue";
 
 const { t } = useI18n();
+const auth = useAuth();
 const rows = ref<ManagedBot[]>([]);
 const selected = ref<ManagedBot | null>(null);
 const creation = ref<BotDraft | null>(null);
@@ -129,7 +132,8 @@ onMounted(async () => {
       <button class="btn" data-testid="bot-pair-create" :disabled="busy || !selected.verified || !selected.schedule.enabled" @click="pair">{{ t('bots.pair') }}</button>
       <div v-if="pairing" class="hint-box"><p>{{ t('bots.pairHelp') }}</p><a :href="pairing.url" data-testid="bot-pair-link" target="_blank" rel="noopener noreferrer">{{ t('bots.openTelegram') }}</a><p>{{ t('bots.expires') }}: {{ new Date(pairing.expires_at).toLocaleString() }}</p></div>
       <form v-if="editing" class="form-grid" @submit.prevent="save"><h3>{{ t('bots.edit') }}</h3><p>{{ t('bots.saveHelp') }}</p><BotConnectionEditor v-model="editing" :disabled="busy" :token-required="false" test-prefix="bot-edit" /><button class="btn" data-testid="bot-edit-submit" :disabled="busy">{{ t('foundation.save') }}</button><button class="btn secondary" type="button" :disabled="busy" @click="select(selected)">{{ t('bots.reload') }}</button></form>
-      <p class="hint-box">{{ t('bots.scope') }}</p>
+      <p v-if="auth.can('bot-shop')" class="hint-box">{{ t('bots.scope') }}</p>
     </section>
+    <BotShopSettings v-if="selected && auth.can('bot-shop', 'write')" :key="selected.id" :bot-id="selected.id" />
   </div>
 </template>

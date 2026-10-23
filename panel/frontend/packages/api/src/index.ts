@@ -1,4 +1,5 @@
 export * from "./bots";
+export * from "./botShop";
 export * from "./managedServices";
 export * from "./customerAccounts";
 export * from "./productsOrders";
