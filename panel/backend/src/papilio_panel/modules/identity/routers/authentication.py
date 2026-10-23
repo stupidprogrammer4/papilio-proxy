@@ -36,6 +36,8 @@ def session_data(request: HttpRequest, principal: AdminPrincipal) -> AdminSessio
             "cores:write",
             "services:read",
             "services:write",
+            "sales:read",
+            "sales:write",
         )
         if principal.is_superuser
         else ("system:read", "bots:read", "bots:write"),
