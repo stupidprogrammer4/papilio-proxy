@@ -390,7 +390,7 @@
       "title": "Exact wallet ledger",
       "owner": "wallets",
       "stage": "first",
-      "status": "planned",
+      "status": "in_progress",
       "completed_in": null,
       "expected_behavior": "Concurrent top-ups or purchases preserve integer minor-unit balances and one effect per operation.",
       "configuration": {
@@ -399,15 +399,20 @@
           "currency",
           "credit policy"
         ],
-        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+        "defaults": "IRR/rial; credit limit zero, edited per wallet from the owner panel without restart. Currency is immutable in this initial slice."
       },
       "acceptance": "Concurrent top-ups or purchases preserve integer minor-unit balances and one effect per operation.",
-      "evidence": [],
+      "evidence": [
+        "panel/backend/tests/test_customer_wallets.py: native API, exact BIGINT, duplicate reservation, concurrent debit, scopes, rollback and credit revision",
+        "panel/backend/tests/test_customer_wallet_migration.py: retained prior service credential and pending outbox",
+        "panel/backend/tests/test_service_browser.py and panel/frontend/tests/customer-wallet.steps.mjs: actual owner/staff browser and persisted exact integer adjustment"
+      ],
       "sources": [
         "OWNER",
         "MIRZA"
       ],
-      "guide": null
+      "guide": "docs/user-guide.en.md#customer-accounts-and-wallets-on-main",
+      "verified_scope": "Development accounting foundation: operator-owned customer accounts, IRR wallet opening/read, explicit manual credit/debit adjustments with reasons and before/after journal, mutable credit limit, native idempotency/concurrency and EN/FA panel. Payments, receipt approval, purchase debits and refunds remain pending; no completed release is claimed."
     },
     {
       "id": "FLOW-MANUAL",

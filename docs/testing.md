@@ -155,3 +155,27 @@ fixtures instead of changing an operator's daemon. CI configures its owned engin
 explicitly; no normal host setting is changed. Previous-release checks cover the
 published alpha.1 and alpha.2, selecting explicit source builds for alpha.2's known
 prebuilt import issue and preserving all old installation identity/settings.
+
+## Native service and customer-wallet browser
+
+After installing frontend dependencies, Chromium and building the frontend, set
+`PAPILIO_RUN_SERVICE_BROWSER=1` and run the existing backend test
+`panel/backend/tests/test_service_browser.py`. It uses the same explicitly owned
+integration connections and actual agent/Xray binaries as the native node tests.
+Backend CI enables this gate; without the flag it is reported skipped.
+
+The browser signs in through Gunicorn and the built Vue app through a local Vite
+preview proxy. It registers an existing core/inbound, provisions a service through
+real Beat/RabbitMQ/worker/mTLS agent/Xray, and returns the exact subscription used
+by a real native Xray client to fetch a controlled local HTTP origin. It also
+creates a customer/wallet, posts and reverses `9007199254740993` rials without JS
+rounding, edits credit, reloads persisted state and denies ordinary staff access.
+This is not a WAN benchmark or proof of new published-image functionality.
+
+Customer/wallet API tests use real PostgreSQL and Django's native HTTP test client,
+including session/CSRF.
+Concurrent different-key debits verify no double spend; same-key requests verify
+one entry/effect. A focused native storage test rejects an update calculated from
+an obsolete credit revision. Nonempty migration tests retain a prior service's
+encrypted credential and pending outbox. Receipt approval, purchase settlement
+and refunds are not exercised until those consumers are implemented.

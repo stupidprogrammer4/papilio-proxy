@@ -1,5 +1,6 @@
 export * from "./bots";
 export * from "./managedServices";
+export * from "./customerAccounts";
 export * from "./nodes";
 export * from "./ipPolicies";
 export * from "./system";
@@ -266,7 +267,9 @@ export interface SmsDeviceEnrollment { device: SmsDevice; api_key: string }
 export async function request<T>(path: string, method = "GET", body?: unknown, options: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = {};
   if (body !== undefined && !(body instanceof FormData)) headers["Content-Type"] = "application/json";
-  const writeToken = path.startsWith("/v1/reseller/") ? resellerCsrf : path.startsWith("/v1/customer") ? customerCsrf : csrf;
+  let writeToken = csrf;
+  if (path.startsWith("/v1/reseller/")) writeToken = resellerCsrf;
+  if (path === "/v1/customer" || path.startsWith("/v1/customer/")) writeToken = customerCsrf;
   if (writeToken) headers["X-CSRF-Token"] = writeToken;
   let response: Response;
   try {

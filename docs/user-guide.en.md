@@ -261,3 +261,51 @@ restart, although their service/credential records persist in PostgreSQL. Quota,
 expiry, mutable lifecycle, additional subscription formats, billing
 and bot delivery remain required before declaring the sales MVP complete. The
 published alpha.3 artifacts do not include this development API or service page.
+
+## Customer accounts and wallets on main
+
+Open **Customers and wallets** to create or search an operator-owned customer
+account. A new account stays selected. Open its IRR wallet explicitly; a customer
+without a wallet is shown as such. Money is in **rials (IRR)**.
+
+The **Credit limit in rials** starts at zero: the customer cannot spend beyond
+the balance. A positive limit explicitly permits that amount of debt. Save edits
+from the panel without restart. A decrease below the current debt is rejected;
+concurrent settings edits require refreshing the current revision. Opening an
+existing wallet does not replace its credit choice with a default.
+
+**Manual balance adjustment** credits/debits the selected wallet with a required
+reason. It records the acting operator, amount, time and balances before/after.
+Repeat an interrupted request with the same UUID and unchanged details for one
+effect; changing the details for that UUID returns 409. Insufficient credit and
+overflow leave both the balance and journal unchanged. Journal search and page
+controls cover the complete authorized collection; another customer's entry URL
+is not interchangeable with this customer's URL.
+
+These controls currently require an active owner. Ordinary staff do not have
+wallet access. This is an accounting foundation, separate from receipt approval,
+bank matching, refunds and purchase/service delivery, which remain pending.
+It is not included in the published alpha.3 package.
+
+### Customer and wallet API
+
+| Method | Path | Operation |
+| --- | --- | --- |
+| POST | `/api/v1/customer-accounts` | Create with `request_key` UUID and `name`; 201 new, 200 replay. |
+| GET | `/api/v1/customer-accounts` | Search with `q`, `page`, `page_size`. |
+| GET | `/api/v1/customer-accounts/{customer_id}` | Read the owned account. |
+| POST | `/api/v1/customer-accounts/{customer_id}/wallet` | Open with `currency: "IRR"` and optional `credit_limit_minor` (default zero). |
+| GET | `/api/v1/customer-accounts/{customer_id}/wallet` | Read the wallet; missing wallets return 404. |
+| PUT | `/api/v1/customer-accounts/{customer_id}/wallet` | Set `credit_limit_minor` with `expected_revision`. |
+| POST | `/api/v1/customer-accounts/{customer_id}/wallet/entries` | Post `request_key`, `kind` (`credit`/`debit`), `amount_minor`, `reason`. |
+| GET | `/api/v1/customer-accounts/{customer_id}/wallet/entries` | Search journal reasons with `q`, `page`, `page_size`. |
+| GET | `/api/v1/customer-accounts/{customer_id}/wallet/entries/{entry_id}` | Read an entry belonging to that wallet/customer. |
+
+Amounts, credit limits and configuration revisions use decimal integer **strings**
+in JSON to preserve BIGINT exactly in JavaScript. For example,
+`"amount_minor": "9007199254740993"` is exact. The supported currency/unit is
+`IRR`/`rial`. Each positive posting amount is at most `9223372036854775807`.
+Fractional, scientific notation, boolean and float inputs are rejected. Balances
+cannot exceed signed BIGINT or fall below the selected credit limit. This does
+not impose a customer/account count limit. Normal customer fields cannot set a
+balance, owner or journal actor; financial changes use the explicit posting path.

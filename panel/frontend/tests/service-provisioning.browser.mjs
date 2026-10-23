@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { chromium } from "playwright";
 import { expect } from "playwright/test";
+import { exerciseCustomerWallet } from "./customer-wallet.steps.mjs";
 
 const base = process.env.PAPILIO_BROWSER_URL;
 assert(base && process.env.PAPILIO_BROWSER_RESULT && process.env.PAPILIO_BROWSER_DATA_PORT);
@@ -80,7 +81,12 @@ try {
   await staff.goto(`${base}/services`);
   await staff.waitForURL(`${base}/`);
   await expect(staff.getByTestId("service-title")).toHaveCount(0);
-  writeFileSync(process.env.PAPILIO_BROWSER_RESULT, JSON.stringify({ service_id: service.id, uri }), { mode: 0o600 });
+  const customerId = await exerciseCustomerWallet(page, base);
+  await expect(staff.locator('nav a[href="/sales"]')).toHaveCount(0);
+  await staff.goto(`${base}/sales`);
+  await staff.waitForURL(`${base}/`);
+  await expect(staff.getByTestId("sales-title")).toHaveCount(0);
+  writeFileSync(process.env.PAPILIO_BROWSER_RESULT, JSON.stringify({ service_id: service.id, customer_id: customerId, uri }), { mode: 0o600 });
 } finally {
   await browser.close();
 }

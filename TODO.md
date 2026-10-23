@@ -7,7 +7,7 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 | Stage | Status | Completed version | Remaining acceptance |
 | --- | --- | --- | --- |
 | Foundation | Experimental release | 0.1.0-alpha.1 | Additional OS/environment combinations and later panel settings editors remain pending. |
-| First practical release | In progress | — | Native service/subscription API, panel form and client traffic are exercised; mutable lifecycle, automatic node/core install, bot commerce, products, wallet, receipts, purchase and delivery remain. |
+| First practical release | In progress | — | Native service/client and customer-wallet panel paths are exercised; mutable service lifecycle, automatic node/core install, products, receipt approval, purchase and bot delivery remain. |
 | PasarGuard phase one | Planned | — | Reconcile and execute the complete v5.4.1 feature baseline. |
 | Full sales and bot | Planned | — | Approved Mirza/PGClock capabilities, resellers, Mini App and offline intake. |
 | Network and additional cores | Planned | — | Four complete cores and verified reference extras, certificates, Single Port, WARP, speed/IP controls. |
@@ -70,6 +70,13 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
   use the Django API. Browser-to-worker/agent/Xray and actual subscription-client
   traffic are exercised. English/Persian, retained selections and staff denial
   are included. This development page is not in alpha.3 artifacts.
+- Customer/wallet accounting on main: owner-scoped customer accounts, explicit
+  IRR/rial wallets, editable per-wallet credit, exact BIGINT journal and manual
+  credit/debit adjustments have EN/FA panel controls. Native PostgreSQL tests cover
+  concurrent debits, replay, overflow, rollback and parent scopes; real browser
+  checks preserve values beyond JavaScript's safe integer range. Receipt approval,
+  purchase consumers, refunds and reseller eligibility remain pending. These
+  development controls are not in alpha.3 artifacts.
 - Bot onboarding on main: owner-scoped encrypted tokens, editable runtime and native
   per-bot schedules, one-use admin pairing and durable supported message intake.
   Worker and installed-browser paths use a controlled external Telegram double;

@@ -147,3 +147,16 @@ Existing webhooks are never deleted automatically. Polling credentials, per-bot
 settings and their schedule survive restart/migrations; restoring encrypted tokens
 requires the original installation key. Other bot modes, shop presentation,
 commerce and independent offline intake remain separate pending deliveries.
+
+## Wallet credit settings on main
+
+The owner selects a customer's `credit_limit_minor` when opening its IRR wallet
+and edits it from **Customers and wallets** with a configuration revision. Default
+zero prevents debt; a positive value permits debt up to that amount of rials.
+The scope is that single customer wallet. Changes are immediate, require no
+restart, preserve journal history and cannot lower credit below outstanding debt.
+Concurrent edits or postings built from replaced settings are rejected for a
+fresh read/retry. Wallet balance updates and credit settings use conditional
+predicates on the same physical row. Startup/migrations do not seed over existing
+wallet choices. Currency is currently immutable IRR/rial; additional currencies
+and configurable reseller eligibility remain pending.
