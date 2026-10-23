@@ -14,6 +14,8 @@ urlpatterns = [
     path("api/v1/", include("papilio_panel.modules.services.routers.urls")),
     path("api/v1/", include("papilio_panel.modules.customers.routers.urls")),
     path("api/v1/", include("papilio_panel.modules.wallets.routers.urls")),
+    path("api/v1/", include("papilio_panel.modules.catalog.routers.urls")),
+    path("api/v1/", include("papilio_panel.modules.orders.routers.urls")),
     path("health/live", liveness),
     path("health/ready", readiness_view),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
