@@ -31,8 +31,10 @@ def test_native_purchase_outbox_recovers_and_delivers_the_paid_contract(
     container = os.environ.get("PAPILIO_TEST_BROKER_CONTAINER")
     if not container:
         pytest.skip("Explicitly test-owned RabbitMQ is required for this fault boundary.")
-    # Keep a native pooled producer connection alive across the deliberate outage.
-    app.control.purge()
+    # Prime a pooled connection after reopening any prior test's disconnected transport.
+    with app.connection_or_acquire() as broker:
+        broker.close()
+        app.control.purge(connection=broker)
     node, data_port, binary = native_control
     owner = existing_owner_client()
     core = owner.post(

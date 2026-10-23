@@ -96,3 +96,22 @@ class PaymentDecision(models.Model):
                 fields=["actor", "request_key"], name="payments_decision_request"
             )
         ]
+
+
+class PaymentDecisionEvent(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    decision_id: uuid.UUID
+    decision = models.OneToOneField(PaymentDecision, on_delete=models.PROTECT)
+    created_at = models.DateTimeField(auto_now_add=True)
+    dispatched_at = models.DateTimeField(null=True)
+    processed_at = models.DateTimeField(null=True)
+    outcome = models.CharField(max_length=16, null=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["created_at", "id"],
+                condition=models.Q(processed_at__isnull=True),
+                name="payments_pending_event",
+            )
+        ]

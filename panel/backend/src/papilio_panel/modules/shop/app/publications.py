@@ -1,5 +1,7 @@
 """Publish independent durable conversation and reply identities using native tasks."""
 
+from papilio_panel.modules.payments.interfaces import PaymentEventCapability
+
 from ..interfaces import ShopDeliverySchedule, ShopMessageStorage, ShopPublisher, ShopWorkStorage
 
 
@@ -10,11 +12,13 @@ class ShopPublications:
         messages: ShopMessageStorage,
         publisher: ShopPublisher,
         schedule: ShopDeliverySchedule,
+        events: PaymentEventCapability,
     ) -> None:
         self.work = work
         self.messages = messages
         self.publisher = publisher
         self.schedule = schedule
+        self.events = events
 
     def dispatch(self) -> None:
         if not self.schedule.enabled():
@@ -28,3 +32,7 @@ class ShopPublications:
         if outgoing:
             self.publisher.messages(outgoing)
             self.messages.dispatched(outgoing)
+        settlements = self.events.pending()
+        if settlements:
+            self.publisher.settlements(settlements)
+            self.events.dispatched(settlements)

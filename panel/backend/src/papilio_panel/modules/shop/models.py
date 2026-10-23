@@ -89,7 +89,10 @@ class OutgoingMessage(models.Model):
     administrator = models.BooleanField(default=False)
     invoice_id: uuid.UUID | None
     invoice = models.ForeignKey("payments.Invoice", null=True, on_delete=models.PROTECT)
-    source_event_id = models.UUIDField(null=True, unique=True)
+    source_event_id: uuid.UUID | None
+    source_event = models.OneToOneField(
+        "payments.PaymentDecisionEvent", null=True, on_delete=models.PROTECT
+    )
     payload_ciphertext = models.BinaryField(editable=False)
     status = models.CharField(max_length=12, default=MessageState.QUEUED)
     attempts = models.PositiveIntegerField(default=0)
@@ -101,3 +104,10 @@ class OutgoingMessage(models.Model):
     chat_id = models.BigIntegerField(null=True)
     error_code = models.CharField(max_length=64, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class InvoiceConversation(models.Model):
+    invoice_id: uuid.UUID
+    invoice = models.OneToOneField("payments.Invoice", primary_key=True, on_delete=models.PROTECT)
+    event_id: int
+    event = models.ForeignKey("bots.TelegramInbox", on_delete=models.PROTECT)

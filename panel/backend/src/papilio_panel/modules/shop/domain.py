@@ -8,6 +8,7 @@ from uuid import UUID
 
 from papilio_panel.modules.bots.domain import BotEventRead, TelegramReply
 from papilio_panel.modules.customers.domain import CustomerRead
+from papilio_panel.modules.payments.domain import ReceiptContent
 
 
 class ShopTaskName(StrEnum):
@@ -38,9 +39,9 @@ DEFAULT_TEXTS = {
         "welcome": "Welcome, $name. Choose an action.",
         ("help"): (
             "Choose a product, review its price and confirm a purchase using your wallet. "
-            "Use My purchases to check provisioning and retrieve your private subscription. "
-            "Ask the operator to fund your wallet through the panel. Telegram top-up and "
-            "receipt intake are not available in this prototype."
+            "To add credit, send /topup followed by the amount in rials. Reply to your "
+            "invoice with a receipt photo or send /receipt INVOICE_ID TRANSFER_REFERENCE. "
+            "Funds are credited only after the operator verifies the payment."
         ),
         "catalogue": "Products · page $page",
         "wallet": "Wallet: $balance IRR (rials).",
@@ -51,7 +52,7 @@ DEFAULT_TEXTS = {
         ),
         ("invoice"): (
             "Payment invoice: $invoice_id\nExact amount: $amount IRR (rials)\nAccount "
-            "holder: $name\nReceiving account: $destination\n$instructions\nReply to this "
+            "holder: $name\nReceiving account: $destination\nStatus: $status\nReply to this "
             "message with your receipt photo, or send /receipt $invoice_id "
             "TRANSFER_REFERENCE."
         ),
@@ -85,10 +86,10 @@ DEFAULT_TEXTS = {
     "fa": {
         "welcome": "$name، خوش آمدید. یک گزینه را انتخاب کنید.",
         ("help"): (
-            "محصول را انتخاب، قیمت را بررسی و خرید از کیف پول را تأیید کنید. از خریدهای "
-            "من وضعیت ساخت سرویس و اشتراک خصوصی را بگیرید. برای شارژ کیف پول از اپراتور "
-            "بخواهید در پنل اقدام کند. دریافت شارژ و رسید در تلگرام هنوز در این نمونه "
-            "فعال نیست."
+            "محصول را انتخاب، قیمت را بررسی و خرید از کیف پول را تأیید کنید. برای شارژ، "
+            "دستور /topup و سپس مبلغ ریالی را بفرستید. عکس رسید را در پاسخ به فاکتور "
+            "بفرستید یا /receipt شناسه‌فاکتور شماره‌پیگیری را ارسال کنید. شارژ تنها "
+            "پس از بررسی پرداخت توسط اپراتور انجام می‌شود."
         ),
         "catalogue": "محصولات · صفحه $page",
         "wallet": "موجودی کیف پول: $balance ریال (IRR).",
@@ -99,7 +100,7 @@ DEFAULT_TEXTS = {
         ),
         ("invoice"): (
             "فاکتور پرداخت: $invoice_id\nمبلغ دقیق: $amount ریال\nصاحب حساب: $name\nحساب "
-            "مقصد: $destination\n$instructions\nعکس رسید را در پاسخ به همین پیام بفرستید "
+            "مقصد: $destination\nوضعیت: $status\nعکس رسید را در پاسخ به همین پیام بفرستید "
             "یا دستور /receipt $invoice_id شماره‌پیگیری را ارسال کنید."
         ),
         "receipt": "مدرک پرداخت ثبت شد و منتظر بررسی است. فاکتور: $invoice_id",
@@ -287,6 +288,38 @@ class InvoiceReplyLookup:
     owner_id: int
     telegram_user_id: int
     message_id: int
+
+
+@dataclass(frozen=True)
+class InvoiceOrigin:
+    invoice_id: UUID
+    event_id: int
+    bot_id: UUID
+    owner_id: int
+    customer_id: UUID
+
+
+@dataclass(frozen=True)
+class ReceiptTarget:
+    invoice_id: UUID
+    reference: str
+    note: str
+    max_bytes: int
+
+
+@dataclass(frozen=True)
+class PreparedReceipt:
+    event_id: int
+    invoice_id: UUID
+    reference: str
+    note: str
+    file: ReceiptContent | None = field(default=None, repr=False)
+
+
+@dataclass(frozen=True)
+class ReceiptReplies:
+    acknowledgement: TelegramReply
+    review_notice: TelegramReply
 
 
 @dataclass(frozen=True)

@@ -8,10 +8,21 @@ from kombu.exceptions import OperationalError as BrokerError
 from rest_framework.exceptions import ValidationError
 
 from papilio_panel.config.queues import QueueKind, queue_name
-from papilio_panel.shared.errors import ApplicationError
+from papilio_panel.shared.errors import ApplicationError, Conflict
 
 from .domain import ShopTaskName
-from .providers import execution, publications, sending
+from .providers import execution, publications, sending, settlements
+
+
+@shared_task(
+    name=ShopTaskName.SETTLEMENT.value,
+    queue=queue_name(QueueKind.IO),
+    autoretry_for=(OperationalError, Conflict),
+    retry_backoff=True,
+    max_retries=5,
+)
+def settlement(*, event_id: str, actor_id: int) -> None:
+    settlements.notify(UUID(event_id), actor_id)
 
 
 @shared_task(
@@ -36,7 +47,8 @@ def process(*, work_id: str) -> None:
     claim = execution.begin(UUID(work_id))
     if claim is not None:
         try:
-            execution.process(claim)
+            prepared = execution.prepare(claim)
+            execution.process(claim, prepared)
         except ApplicationError as error:
             execution.fail(claim, error.code, str(error))
         except ValidationError:

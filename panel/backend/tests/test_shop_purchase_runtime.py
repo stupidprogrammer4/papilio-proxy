@@ -3,7 +3,7 @@
 import base64
 import os
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 from uuid import UUID, uuid4
 
 import pytest
@@ -16,8 +16,9 @@ from xray_client import subscription_client
 
 from papilio_panel.modules.nodes.domain import XrayApply
 from papilio_panel.modules.orders.models import Order
+from papilio_panel.modules.payments.models import Invoice, PaymentDecisionEvent, Receipt
 from papilio_panel.modules.services.models import ServiceAccount
-from papilio_panel.modules.shop.models import InboxWork, ShopCustomer
+from papilio_panel.modules.shop.models import InboxWork, OutgoingMessage, ShopCustomer
 
 pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.runtime]
 
@@ -95,21 +96,88 @@ def test_bot_confirmation_worker_delivery_and_real_client(
         )
         customer = ShopCustomer.objects.get(telegram_user_id=987654)
         wallet = f"/api/v1/customer-accounts/{customer.customer_id}/wallet"
-        assert (
-            owner.post(
-                wallet + "/entries",
-                {
-                    "request_key": str(uuid4()),
-                    "kind": "credit",
-                    "amount_minor": "2500",
-                    "reason": "Controlled initial funds; payment intake tested separately",
-                },
-                format="json",
-            ).status_code
-            == 201
+        settings = owner.post(
+            "/api/v1/payment-settings",
+            {
+                "recipient": "Controlled bot account",
+                "destination": "CONTROLLED-BOT-ACCOUNT",
+                "instructions": "Send the exact amount and reply with evidence.",
+            },
+            format="json",
         )
+        assert settings.status_code == 201
+        pairing = owner.post(f"/api/v1/bots/{bot['id']}/pairing")
+        assert pairing.status_code == 200
+        parameter = parse_qs(urlsplit(pairing.json()["url"]).query)["start"][0]
+        server.push(31, "/start " + parameter, chat_id=456789)
+        until(lambda: owner.get(f"/api/v1/bots/{bot['id']}").json()["admin_chat_id"] == 456789)
+        server.push(32, "/topup 2500", chat_id=987654)
+        until(
+            lambda: any(
+                "Payment invoice:" in values["text"] and values["chat_id"] == 987654
+                for _, values in server.messages
+            ),
+            timeout=12,
+        )
+        invoice = Invoice.objects.get(customer_id=customer.customer_id)
+        invoice_message = next(
+            identifier
+            for identifier, values in server.messages
+            if str(invoice.id) in values["text"] and "Payment invoice:" in values["text"]
+        )
+        server.files["photos/bank-proof.jpg"] = b"controlled-bot-receipt"
+        server.push_photo(
+            33,
+            "bank-proof",
+            chat_id=987654,
+            reply_to_message_id=invoice_message,
+            bot_id=identity,
+            caption="Controlled transfer proof",
+        )
+        until(lambda: Receipt.objects.filter(invoice=invoice).exists(), timeout=12)
+        until(
+            lambda: any(
+                str(invoice.id) in values["text"] and values["chat_id"] == 456789
+                for _, values in server.messages
+            ),
+            timeout=12,
+        )
+        evidence = Receipt.objects.get(invoice=invoice)
+        assert bytes(evidence.content) == b"controlled-bot-receipt"
+        assert owner.get(wallet).json()["balance_minor"] == "0"
+        root = f"/api/v1/invoices/{invoice.id}"
+        current_invoice = owner.get(root).json()
+        approved = owner.post(
+            root + "/decisions",
+            {
+                "request_key": str(uuid4()),
+                "expected_revision": current_invoice["revision"],
+                "action": "approve",
+                "reason": "Confirmed in controlled statement boundary.",
+                "receipt_id": str(evidence.id),
+            },
+            format="json",
+        )
+        assert approved.status_code == 201
+        until(
+            lambda: any(
+                "Payment approved: 2500" in values["text"] and values["chat_id"] == 987654
+                for _, values in server.messages
+            ),
+            timeout=12,
+        )
+        payment_event = PaymentDecisionEvent.objects.get(decision__invoice=invoice)
+        assert payment_event.outcome == "queued" and payment_event.processed_at is not None
+        until(
+            lambda: OutgoingMessage.objects.filter(
+                source_event=payment_event, status="sent"
+            ).exists(),
+            timeout=12,
+        )
+        assert owner.get(wallet).json()["balance_minor"] == "2500"
+        assert not ShopCustomer.objects.filter(telegram_user_id=456789).exists()
         server.push_callback(
-            31, f"offer:{UUID(product.json()['id']).hex}", chat_id=987654, bot_id=identity
+            34, f"offer:{UUID(product.json()['id']).hex}", chat_id=987654, bot_id=identity
         )
         until(
             lambda: any("Confirm to buy" in values["text"] for _, values in server.messages),
@@ -122,12 +190,12 @@ def test_bot_confirmation_worker_delivery_and_real_client(
             for button in row
             if button["callback_data"].startswith("buy:")
         )
-        server.push_callback(32, callback, chat_id=987654, bot_id=identity)
-        server.push_callback(33, callback, chat_id=987654, bot_id=identity)
+        server.push_callback(35, callback, chat_id=987654, bot_id=identity)
+        server.push_callback(36, callback, chat_id=987654, bot_id=identity)
         until(
             lambda: (
                 InboxWork.objects.filter(
-                    event__bot_id=bot["id"], event__update_id__in=[32, 33], status="done"
+                    event__bot_id=bot["id"], event__update_id__in=[35, 36], status="done"
                 ).count()
                 == 2
             ),
@@ -144,7 +212,7 @@ def test_bot_confirmation_worker_delivery_and_real_client(
         )
         service = ServiceAccount.objects.get(pk=order.service_id)
         assert service.status == "succeeded" and service.worker_pid != os.getpid()
-        server.push_callback(34, f"order:{order.id.hex}", chat_id=987654, bot_id=identity)
+        server.push_callback(37, f"order:{order.id.hex}", chat_id=987654, bot_id=identity)
         until(
             lambda: any(
                 "http://panel.example.invalid/api/v1/subscriptions?token=" in values["text"]

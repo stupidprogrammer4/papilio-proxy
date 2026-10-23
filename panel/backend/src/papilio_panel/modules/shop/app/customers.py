@@ -55,3 +55,34 @@ class ShopCustomerRegistration:
         customer = self.customers.read(reserved.binding.customer_id, event.bot.owner_id)
         self.wallets.read(customer.id, event.bot.owner_id)
         return ShopCustomerContext(event, settings, customer)
+
+
+class ShopCustomerQueries:
+    def __init__(
+        self,
+        storage: CustomerBindingStorage,
+        events: BotConversationCapability,
+        settings: ShopControlCapability,
+        customers: CustomerCapability,
+    ) -> None:
+        self.storage = storage
+        self.events = events
+        self.settings = settings
+        self.customers = customers
+
+    def resolve(self, event_id: int) -> ShopCustomerContext:
+        event = self.events.event(event_id)
+        if event.message is None:
+            raise Missing("The event has no verified private Telegram sender.")
+        settings = self.settings.read(event.bot.id, event.bot.owner_id)
+        if (
+            not settings.definition.enabled
+            or not event.bot.schedule.enabled
+            or not event.bot.verified
+        ):
+            raise Conflict("The bot shop is paused or its identity is not verified.")
+        binding = self.storage.read(event.bot.owner_id, event.message.sender_id)
+        if binding.customer_id is None:
+            raise Missing("The Telegram identity has no persisted customer account.")
+        customer = self.customers.read(binding.customer_id, event.bot.owner_id)
+        return ShopCustomerContext(event, settings, customer)

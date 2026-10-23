@@ -12,7 +12,7 @@ from ..domain import (
     InvoiceState,
     InvoiceTransition,
 )
-from ..interfaces import InvoiceCapability, InvoiceStorage, ReceiptCapability
+from ..interfaces import InvoiceCapability, InvoiceStorage, PaymentEventStorage, ReceiptCapability
 from .validation import decision_input, invoice_credit
 
 
@@ -23,11 +23,13 @@ class ManualPaymentDecisions:
         invoices: InvoiceCapability,
         receipts: ReceiptCapability,
         wallets: WalletCapability,
+        events: PaymentEventStorage,
     ) -> None:
         self.storage = storage
         self.invoices = invoices
         self.receipts = receipts
         self.wallets = wallets
+        self.events = events
 
     @transaction.atomic
     def decide(self, values: DecisionInput) -> DecisionResult:
@@ -52,6 +54,7 @@ class ManualPaymentDecisions:
                 self.storage.complete_decision(
                     reserved.decision.id, values.actor_id, credit.entry.id
                 )
+            self.events.append(reserved.decision.id)
         current = self.invoices.read(invoice.id, values.actor_id)
         result = self.storage.read_decision(reserved.decision.id, invoice.id, values.actor_id)
         return DecisionResult(current, result, reserved.created)

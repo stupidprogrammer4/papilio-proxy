@@ -8,7 +8,7 @@ from papilio_panel.modules.catalog.interfaces import ProductCapability
 from papilio_panel.modules.wallets.interfaces import WalletCapability
 
 from ..domain import ShopCustomerContext, ShopTextContext
-from ..interfaces import ShopOrderQueryCapability
+from ..interfaces import ShopInvoiceQueryCapability, ShopOrderQueryCapability
 from .presentation import menu, render, reply
 
 
@@ -18,10 +18,12 @@ class ShopMenus:
         products: ProductCapability,
         wallets: WalletCapability,
         orders: ShopOrderQueryCapability,
+        invoices: ShopInvoiceQueryCapability,
     ) -> None:
         self.products = products
         self.wallets = wallets
         self.orders = orders
+        self.invoices = invoices
 
     def response(self, context: ShopCustomerContext) -> TelegramReply:
         message = context.event.message
@@ -36,6 +38,10 @@ class ShopMenus:
             _, _, argument = command.partition(":")
             page = serializers.IntegerField(min_value=1).run_validation(argument or "1")
             result = self.catalogue(context, page)
+        elif command.startswith("invoice:"):
+            _, _, argument = command.partition(":")
+            invoice_id = serializers.UUIDField().run_validation(argument)
+            result = self.invoices.response(context, invoice_id)
         elif command.startswith("order:"):
             _, _, argument = command.partition(":")
             order_id = serializers.UUIDField().run_validation(argument)

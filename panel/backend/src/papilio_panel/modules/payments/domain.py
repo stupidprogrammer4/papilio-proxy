@@ -213,6 +213,30 @@ class DecisionPage:
     page_size: int
 
 
+class PaymentEventOutcome(StrEnum):
+    QUEUED = "queued"
+    NO_CONVERSATION = "no_conversation"
+    SUPERSEDED = "superseded"
+
+
+@dataclass(frozen=True)
+class PaymentEventRead:
+    id: UUID
+    decision_id: UUID
+    invoice_id: UUID
+    owner_id: int
+    action: DecisionAction
+    created_at: datetime
+    processed_at: datetime | None
+    outcome: PaymentEventOutcome | None
+
+
+@dataclass(frozen=True)
+class PaymentEventDelivery:
+    id: UUID
+    owner_id: int
+
+
 @dataclass(frozen=True)
 class InvoiceTransition:
     actor_id: int

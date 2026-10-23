@@ -5,14 +5,19 @@ from typing import Protocol
 from uuid import UUID
 
 from papilio_panel.modules.bots.domain import TelegramReply, TelegramSendResult
+from papilio_panel.modules.payments.domain import InvoiceRead, PaymentEventDelivery
 
 from .domain import (
     BindingReservation,
+    CustomerBinding,
+    InvoiceOrigin,
     InvoiceReplyLookup,
     MessageClaim,
     MessageRead,
     MessageState,
+    PreparedReceipt,
     PurchaseConfirmation,
+    ReceiptTarget,
     ReplyWrite,
     ShopCustomerContext,
     ShopDefinition,
@@ -40,12 +45,39 @@ class ShopControlCapability(Protocol):
 
 
 class CustomerBindingStorage(Protocol):
+    def read(self, owner_id: int, telegram_user_id: int) -> CustomerBinding: ...
     def reserve(self, owner_id: int, telegram_user_id: int) -> BindingReservation: ...
     def bind(self, binding_id: UUID, owner_id: int, customer_id: UUID) -> None: ...
 
 
 class ShopCustomerCapability(Protocol):
     def register(self, event_id: int) -> ShopCustomerContext: ...
+
+
+class ShopCustomerQueryCapability(Protocol):
+    def resolve(self, event_id: int) -> ShopCustomerContext: ...
+
+
+class InvoiceOriginStorage(Protocol):
+    def create(self, values: InvoiceOrigin) -> None: ...
+    def find(self, invoice_id: UUID, actor_id: int) -> InvoiceOrigin | None: ...
+
+
+class ShopInvoiceQueryCapability(Protocol):
+    def read(self, context: ShopCustomerContext, invoice_id: UUID) -> InvoiceRead: ...
+    def receipt_target(self, context: ShopCustomerContext) -> ReceiptTarget: ...
+    def response(self, context: ShopCustomerContext, invoice_id: UUID) -> TelegramReply: ...
+
+
+class ShopFundingCapability(Protocol):
+    def issue(self, context: ShopCustomerContext, work_id: UUID, amount: int) -> None: ...
+    def submit(
+        self, context: ShopCustomerContext, work_id: UUID, receipt: PreparedReceipt
+    ) -> None: ...
+
+
+class ShopReceiptPreparationCapability(Protocol):
+    def prepare(self, event_id: int) -> PreparedReceipt | None: ...
 
 
 class ShopWorkStorage(Protocol):
@@ -84,6 +116,11 @@ class ShopMessageStorage(Protocol):
 class ShopPublisher(Protocol):
     def work(self, deliveries: tuple[WorkDelivery, ...]) -> None: ...
     def messages(self, deliveries: tuple[WorkDelivery, ...]) -> None: ...
+    def settlements(self, deliveries: tuple[PaymentEventDelivery, ...]) -> None: ...
+
+
+class ShopSettlementCapability(Protocol):
+    def notify(self, event_id: UUID, actor_id: int) -> None: ...
 
 
 class ShopDeliverySchedule(Protocol):
@@ -92,7 +129,8 @@ class ShopDeliverySchedule(Protocol):
 
 class ShopExecutionCapability(Protocol):
     def begin(self, work_id: UUID) -> WorkClaim | None: ...
-    def process(self, claim: WorkClaim) -> None: ...
+    def prepare(self, claim: WorkClaim) -> PreparedReceipt | None: ...
+    def process(self, claim: WorkClaim, receipt: PreparedReceipt | None = None) -> None: ...
     def fail(self, claim: WorkClaim, code: str, reason: str) -> None: ...
 
 

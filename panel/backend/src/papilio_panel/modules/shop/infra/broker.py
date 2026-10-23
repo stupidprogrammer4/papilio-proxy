@@ -2,10 +2,22 @@
 
 from celery.canvas import Signature, group
 
+from papilio_panel.modules.payments.domain import PaymentEventDelivery
+
 from ..domain import ShopTaskName, WorkDelivery
 
 
 class NativeShopPublisher:
+    def settlements(self, deliveries: tuple[PaymentEventDelivery, ...]) -> None:
+        signatures = (
+            Signature(
+                ShopTaskName.SETTLEMENT.value,
+                kwargs={"event_id": str(item.id), "actor_id": item.owner_id},
+            ).set(task_id=str(item.id))
+            for item in deliveries
+        )
+        group(signatures).apply_async()
+
     def work(self, deliveries: tuple[WorkDelivery, ...]) -> None:
         signatures = (
             Signature(ShopTaskName.PROCESS.value, kwargs={"work_id": str(item.id)}).set(

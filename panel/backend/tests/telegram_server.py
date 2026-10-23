@@ -2,6 +2,7 @@
 
 import json
 import threading
+from collections.abc import Callable
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -22,6 +23,7 @@ class TelegramServer:
         self.messages: list[tuple[int, dict[str, Any]]] = []
         self.files: dict[str, bytes] = {}
         self.file_calls: list[str] = []
+        self.download_observer: Callable[[], None] | None = None
 
     def push(
         self,
@@ -58,6 +60,35 @@ class TelegramServer:
                             "from": {"id": bot_id, "is_bot": True},
                             "chat": {"id": chat_id, "type": "private"},
                         },
+                    },
+                }
+            )
+
+    def push_photo(
+        self,
+        identifier: int,
+        file_id: str,
+        *,
+        chat_id: int,
+        reply_to_message_id: int,
+        bot_id: int,
+        caption: str = "",
+    ) -> None:
+        with self.lock:
+            self.pending.append(
+                {
+                    "update_id": identifier,
+                    "message": {
+                        "message_id": identifier,
+                        "chat": {"id": chat_id, "type": "private"},
+                        "from": {"id": chat_id},
+                        "reply_to_message": {
+                            "message_id": reply_to_message_id,
+                            "chat": {"id": chat_id, "type": "private"},
+                            "from": {"id": bot_id, "is_bot": True},
+                        },
+                        "photo": [{"file_id": file_id}],
+                        "caption": caption,
                     },
                 }
             )
@@ -134,6 +165,8 @@ class TelegramServer:
                 from urllib.parse import unquote
 
                 path = unquote(self.path.removeprefix("/file/bot").split("/", maxsplit=1)[1])
+                if state.download_observer is not None:
+                    state.download_observer()
                 with state.lock:
                     state.file_calls.append(path)
                     content = state.files.get(path)
