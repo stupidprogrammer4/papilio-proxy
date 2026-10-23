@@ -411,8 +411,8 @@ The per-invoice byte cap bounds application reads; choose it for the server's
 memory and any proxy request limits. The database field's technical limit is below
 1 GiB; this is not evidence that a 1 GiB HTTP upload is supported by every host.
 There is no new expiry scheduler in this manual workflow. Automatic matching,
-additional payment modes/destinations, customer/bot intake and standalone replay
-remain unfinished. These owner controls are not in published alpha.3 artifacts.
+additional payment modes/destinations and standalone replay remain unfinished.
+The connected shop prototype below now accepts customer evidence in Telegram. These owner controls are not in published alpha.3 artifacts.
 
 ### Manual payment API
 
@@ -438,8 +438,8 @@ controls. Invoice issuance requires an existing same-currency customer wallet.
 
 The current development backend connects Telegram private chats to the same
 customer, wallet, catalogue and purchase modules used by the panel. The shop
-configuration editor in the panel and Telegram payment intake/approval
-notifications are still pending. This is not a complete sales-bot release.
+configuration editor in the panel remains pending. Manual Telegram invoices,
+private evidence and durable decision notifications now use the shared payment modules. This is not a complete sales-bot release.
 
 An installation owner can read `GET /api/v1/bot-shop-defaults`, then explicitly
 create `POST /api/v1/bots/BOT_ID/shop` with a complete definition, a public HTTP
@@ -459,10 +459,32 @@ product selection represents a separate purchase.
 
 Use **Service status / subscription** to retrieve the link only after the actual
 service provisioning succeeds. Current products are the initial unlimited
-VLESS/TCP service without TLS. The operator currently funds wallets through the
-panel. Telegram `/topup`, receipt intake, settlement notifications, automatic
-ready notifications, advanced service terms and independent offline intake are
-not delivered by this prototype.
+VLESS/TCP service without TLS. Configure **Manual payments** and receiving account
+settings in the panel first. In the bot send `/topup 1000` for a 1000-rial invoice,
+then reply to its message with a receipt photo or document, or send
+`/receipt INVOICE_ID TRANSFER_REFERENCE`. The original destination, amount,
+instructions and file cap remain attached to the invoice. Download is bounded by
+the smaller of that cap and the bot's configured response-byte cap, before the
+financial DB transaction opens. Another customer's invoice or replied-to message
+cannot be used.
+
+Pair the administrator chat through the existing one-use link to receive review
+notices. Its link opens `/invoices?invoice_id=...&receipt_id=...` at the known invoice
+and receipt. The destination survives required login, and the matching private
+attachment is preselected. Normal owner/parent checks still apply. Evidence does not credit the
+wallet. Explicit owner approval credits once and emits a durable notification
+event in the same transaction. The bot later reports approval or the current
+rejected invoice state. Owner audit reasons are not sent to customers. A new
+receipt can be reviewed again while the invoice is unsettled. Old rejection
+events superseded by later state do not send a stale rejection; panel invoices
+without an attached shop conversation have no bot recipient.
+
+Broker outage retains the payment event. Replays and concurrent consumers produce
+one reply record and do not post another wallet credit. Event acknowledgement
+means the reply is queued, not proof that Telegram received it. Pausing a bot can
+leave an event waiting for native retries/outbox redelivery. Transient receipt
+download retry/recovery controls, automatic ready notifications, advanced service
+terms and independent offline intake remain pending.
 
 Private replies are encrypted in PostgreSQL; queue payloads contain identifiers.
 The managed `shop-outbox` schedule controls incoming work and outgoing delivery.

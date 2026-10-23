@@ -228,5 +228,16 @@ and do not change already accepted order terms.
 | Managed `shop-outbox` schedule | 1 second, enabled | Native database Beat enable/interval controls, seeded only when missing. No restart. |
 
 Templates and defaults are creation inputs, not automatic rewrites of existing
-operator settings. Unresolved/ambiguous message recovery controls and bot payment
-intake are pending. These settings do not claim complete panel configurability.
+operator settings. Unresolved/ambiguous message recovery controls and receipt transport retry remain
+pending. Telegram manual invoice/evidence/decision notification uses the existing
+payment settings, per-invoice frozen cap and this shop's delivery policy. These settings do not claim complete panel configurability.
+
+
+Payment decision events acknowledge a queued reply, not remote delivery. An event
+with no attached invoice conversation records `no_conversation`; an old rejection
+superseded by later state records `superseded`. Per-bot pauses retain pending
+notifications for native retry/outbox redelivery; they do not reverse settlement.
+Owner audit reasons remain inside the permission-scoped panel history. Rejection
+uses the configurable invoice template and its actual state; the factory invoice
+message sends payment instructions separately to fit Telegram's UTF-16 limit.
+Existing custom templates and previously issued terms are never rewritten.

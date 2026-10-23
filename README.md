@@ -42,7 +42,8 @@ inspection is separate from real bot commerce.
 
 The connected shop API prototype on main now exercises private catalogue, wallet,
 replay-safe purchase confirmations and subscription delivery through an actual
-Xray client. Telegram payment intake/notifications and shop panel controls remain
+Xray client. Manual bot invoices/photo receipts and durable owner-decision
+notifications are connected; shop panel controls and live Telegram checks remain
 pending. [Prototype scope and usage](docs/user-guide.en.md#connected-shop-api-prototype-main-absent-from-alpha3).
 
 Development on main also includes an owner-scoped API for registering existing

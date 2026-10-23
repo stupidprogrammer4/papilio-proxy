@@ -220,9 +220,11 @@ restart, and the corrected cleanup passes without swallowing that error.
 worker through private menu and wallet replies. `test_shop_purchase_runtime.py`
 drives a confirmed paid product, repeats its callback, waits for actual service
 provisioning, retrieves the private subscription through the bot response and
-connects a real Xray client through the issued native agent/core. Funds in this
-purchase test are deliberately added through the existing owner wallet API;
-Telegram payment intake and settlement notifications are not established by it.
+connects a real Xray client through the issued native agent/core. Wallet funds
+come from the same bot's invoice, photo evidence, explicit owner approval and
+durable customer notification. Its paired administrator receives the private
+review link. A bank statement is represented by the controlled owner's explicit
+manual decision; no automatic bank verification is claimed.
 Telegram itself is the controlled external HTTP double; persistence, worker,
 scheduler, agent, Xray and client are not mocked. These tests do not establish
 live Telegram use, fresh-server installation, restart reconciliation or a new
@@ -233,3 +235,22 @@ confirmation/order rejection, expired/changed offers, concurrent confirmation
 financial effects, pause between claim and execution/send, rate-limit retry,
 uncertain sends, and late senders after lease expiry. Unknown send outcomes are
 not treated as proof of failure or exactly-once Telegram delivery.
+
+
+`test_shop_payment_recovery.py` stops only an explicitly named test-owned RabbitMQ
+app, commits/replays owner approval while it is down, verifies one durable event
+and one credit, then resumes and observes one sent reply through native Beat and
+worker. `test_shop_payment_migration.py` upgrades a historical UUID reply reference
+to a real event FK, preserves exact ciphertext/wallet state and verifies an orphan
+FK write rolls back. Existing payment migration cases retain prior funds/history.
+
+`test_shop_payments.py` covers invoice/reference/photo intake, established foreign
+customer denial, original file caps, owner audit-note privacy, concurrent event
+consumers and instructions at the full Unicode character bound. A controlled
+external file-download observer queries the actual application's PostgreSQL
+backend over an independent connection and observes it idle, rather than idle in
+transaction, during HTTP. The native browser payment case follows the exact
+invoice and receipt IDs through required login in a review link, preselects the
+matching private attachment and uses the existing approval flow. A foreign login
+return destination is rejected; native resource permissions remain authoritative.
+Transient receipt transport retry/recovery and live Telegram remain open gates.

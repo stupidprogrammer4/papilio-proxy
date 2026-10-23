@@ -7,7 +7,7 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 | Stage | Status | Completed version | Remaining acceptance |
 | --- | --- | --- | --- |
 | Foundation | Experimental release | 0.1.0-alpha.1 | Additional OS/environment combinations and later panel settings editors remain pending. |
-| First practical release | In progress | — | Native panel and scheduled bot purchase/subscription/client paths are exercised; Telegram payment intake/notifications, shop panel controls, mutable service lifecycle, automatic node/core install and new release artifacts remain. |
+| First practical release | In progress | — | Native panel and scheduled bot purchase/subscription/client paths are exercised; Shop panel controls, receipt transport retry/recovery, mutable service lifecycle, automatic node/core install and new release artifacts remain. |
 | PasarGuard phase one | Planned | — | Reconcile and execute the complete v5.4.1 feature baseline. |
 | Full sales and bot | Planned | — | Approved Mirza/PGClock capabilities, resellers, Mini App and offline intake. |
 | Network and additional cores | Planned | — | Four complete cores and verified reference extras, certificates, Single Port, WARP, speed/IP controls. |
@@ -89,16 +89,18 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
   Issued amount/destination/file limits are retained after settings edits.
   Same/different-key concurrent approvals credit once; overflow rolls back the
   entire decision. Native browser receipt->approval->wallet->purchase->Xray/client
-  is exercised. Automatic bank matching, bot payment intake and standalone replay
-  remain pending; these changes are absent from alpha.3 installable artifacts.
+  is exercised. Bot invoice/reference/photo intake and durable decision notifications
+  now use the same modules. Automatic bank matching and standalone replay remain pending; these changes are absent from alpha.3 installable artifacts.
 - Bot onboarding on main: owner-scoped encrypted tokens, editable runtime and native
   per-bot schedules, one-use admin pairing and durable supported message intake.
   Worker and installed-browser paths use a controlled external Telegram double;
   live read-only identity inspection is separate. The shop API prototype adds private
   customer/wallet identity, paginated products/orders, replay-safe purchase
   confirmations and ready-only private subscription delivery. Native Beat/worker
-  -> agent/Xray -> actual client is exercised. Shop panel settings, Telegram
-  payment intake/notifications, held-message recovery and independent offline
+  -> agent/Xray -> actual client is exercised, including bot invoice/photo,
+  paired-admin review notice and manual approval/customer notification. Broker
+  outage recovery and concurrent event consumption are exercised. Shop panel
+  settings, receipt transport retry, held-message recovery and independent offline
   intake remain incomplete. Alpha.3 artifacts do not include this prototype.
 - Real PostgreSQL: atomic owner setup, session/CSRF, ownership and revocation.
 - Real RabbitMQ/Celery/Beat: separate worker queues, durable outbox, replay and

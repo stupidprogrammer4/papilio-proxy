@@ -441,14 +441,18 @@
         "panel/backend/tests/test_manual_payments.py: real PostgreSQL invoice/receipt decisions, exact money, parent scopes, concurrent approval, rollback, binary multipart schema and issued-setting preservation",
         "panel/backend/tests/test_payment_migration.py: prior wallet/journal retained, successful settlement and preserved operator settings",
         "panel/backend/tests/test_service_browser.py and panel/frontend/tests/manual-payment.steps.mjs: owner receipt upload/private download/review->wallet->purchase->native Xray client",
-        "panel/backend/tests/test_order_runtime.py: manual receipt/approval and purchase while RabbitMQ is stopped, followed by real worker/client delivery"
+        "panel/backend/tests/test_order_runtime.py: manual receipt/approval and purchase while RabbitMQ is stopped, followed by real worker/client delivery",
+        "panel/backend/tests/test_payment_events.py",
+        "panel/backend/tests/test_shop_payments.py",
+        "panel/backend/tests/test_shop_payment_recovery.py",
+        "panel/backend/tests/test_shop_payment_migration.py"
       ],
       "sources": [
         "OWNER",
         "MIRZA"
       ],
       "guide": "docs/user-guide.en.md#manual-invoices-and-receipt-approval-on-main",
-      "verified_scope": "Owner manual invoice/settings/review queue and immutable private evidence/audit, exact one-time base credit and real order consumer. Automatic modes/matching, bot intake, standalone replay, multiple receiving destinations and next installable release remain pending; no completed release is claimed."
+      "verified_scope": "Owner manual invoice/settings/review queue and private evidence/audit, one-time exact base credit and real order consumer. Bot invoice/reference/photo intake, paired-admin review link and transactional decision notification outbox now connect to the same module; native broker-outage recovery and concurrent notification consumption are exercised. Automatic modes/matching, standalone replay, multiple destinations, receipt transport retry controls, shop panel settings and a new installable release remain pending."
     },
     {
       "id": "FLOW-IDENTIFIER",
@@ -540,7 +544,10 @@
         "panel/backend/tests/test_shop_purchases.py",
         "panel/backend/tests/test_shop_sending.py",
         "panel/backend/tests/test_shop_runtime.py",
-        "panel/backend/tests/test_shop_purchase_runtime.py"
+        "panel/backend/tests/test_shop_purchase_runtime.py",
+        "panel/backend/tests/test_shop_payments.py",
+        "panel/backend/tests/test_shop_payment_recovery.py",
+        "panel/backend/tests/test_shop_payment_migration.py"
       ],
       "sources": [
         "OWNER",
@@ -548,7 +555,7 @@
         "CLOCK"
       ],
       "guide": "docs/user-guide.en.md",
-      "verified_scope": "Operator-owned encrypted token/settings CRUD, native schedules, one-use private admin pairing and durable supported intake. Shop API prototype covers private customer/wallet binding, paginated catalogue/history, one purchase identity across repeated/concurrent taps, ready-only private subscription delivery and persisted send uncertainty. Real Beat/worker -> agent/Xray/client is exercised with an explicit external Telegram HTTP double. Separate live identity/webhook inspection is read-only. Telegram payment intake/notifications, shop panel configuration, held-message recovery, live conversations, independent offline intake and new installable artifacts remain incomplete."
+      "verified_scope": "Operator bot setup, native schedules, private pairing/intake and shop API prototype: scoped customers/wallets, paginated catalogue/history, replay-safe confirmations, manual invoice/reference/photo evidence, admin review link, durable decision notifications and ready-only subscription. Actual Beat/worker -> agent/Xray/client purchase includes bot top-up/evidence and controlled owner approval. Real test-broker outage preserves one event/credit/reply. Owner audit reasons stay private. External Telegram HTTP is doubled; live identity inspection is separate. Shop panel settings, receipt transport retry/recovery, held-message recovery, live conversations, standalone intake and new artifacts remain incomplete."
     },
     {
       "id": "PG-USER-LIFECYCLE",
