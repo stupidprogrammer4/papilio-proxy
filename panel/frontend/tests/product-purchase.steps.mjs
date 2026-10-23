@@ -42,9 +42,6 @@ export async function createNativeProduct(page, base, coreName) {
 
 export async function buyNativeService(page, base, product) {
   await page.getByTestId("locale-selector").selectOption("en");
-  await page.getByTestId("wallet-amount").fill("1000");
-  await page.getByTestId("wallet-reason").fill("Funds for actual purchase");
-  await page.getByTestId("wallet-post").click();
   await expect(page.getByTestId("wallet-balance")).toHaveText("1000 IRR (rial)");
   await page.getByTestId("purchase-product-picker").getByRole("button", { name: product.offer.definition.name, exact: true }).click();
   await page.getByTestId("purchase-service-name").fill("Bought from browser");

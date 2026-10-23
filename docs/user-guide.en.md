@@ -283,8 +283,8 @@ controls cover the complete authorized collection; another customer's entry URL
 is not interchangeable with this customer's URL.
 
 These controls currently require an active owner. Ordinary staff do not have
-wallet access. The purchase flow below debits this journal. Receipt approval,
-bank matching and formal refund workflows remain pending.
+wallet access. The purchase flow below debits this journal; manual invoice
+approval credits it. Bank matching and formal refund workflows remain pending.
 It is not included in the published alpha.3 package.
 
 ### Customer and wallet API
@@ -332,7 +332,8 @@ provisioning continues asynchronously. **Refresh** reads the actual service
 result; **Get subscription link** becomes available after successful provisioning.
 Broker outage retains the order, debit and queued service for outbox delivery.
 A failed native operation stays visible for operator follow-up; automatic refunds,
-full service lifecycle recovery and manual receipt settlement are still pending.
+full service lifecycle recovery and bot commerce remain pending. Manual invoice
+settlement is available below.
 Switching customers resets the displayed order/link and scopes the purchase list
 to the selected customer. Search/page controls cover products and order history.
 
@@ -362,3 +363,71 @@ and its `/subscription` resource using the returned ID. Node/core/inbound and
 customer scope are revalidated on the actual application paths; frontend choices
 do not grant access. Current controls require the active owner, and the published
 alpha.3 package does not include this development purchase flow.
+
+## Manual invoices and receipt approval on main
+
+1. Open **Manual payments** and configure the account holder, receiving card/account,
+   payment instructions and maximum receipt file size. Defaults are metadata until
+   you explicitly save. New invoices are enabled by default; the file limit is
+   4,194,304 bytes. Changes need no application restart.
+2. In **Customers and wallets**, select the existing customer and open a rial
+   wallet if needed. Enter a positive wallet credit amount and issue an invoice.
+   This records the amount, destination, instructions and file limit. Manual mode
+   adds no matching identifier or surcharge; the exact payable amount is the base.
+3. Record a transfer reference, a private receipt file, or both. Notes alone are
+   insufficient. Files are opaque evidence, not OCR or bank verification. Evidence
+   is immutable and paginated; selecting it enables an authenticated attachment
+   download. The original filename never becomes a filesystem path.
+4. Open the **Manual payments** review queue, select the invoice and inspect the
+   known customer's evidence. Verify the actual transfer in the receiving account,
+   select the evidence if applicable, enter a reason and approve or reject it.
+   Approval records one wallet credit and an immutable decision in the same
+   PostgreSQL transaction as invoice settlement. The credited amount is the base.
+5. Refresh the customer's wallet to see the committed result, then buy a service
+   product with that credit. Provisioning and subscription delivery follow the
+   product purchase flow above; payment acceptance is not a core health check.
+
+Disabling new invoices preserves existing invoices and their review path. Changing
+the receiving account or upload limit does not rewrite issued invoices. Rejection
+does not change the wallet; an unsettled rejected invoice can receive new evidence
+or a later approval. An administrator may approve from a verified account statement
+without selecting an attachment. A settled invoice cannot receive another decision
+or new evidence; exact receipt/decision replays return the original evidence or decision. A
+decision response includes the current invoice state.
+
+Repeat interrupted writes with their original UUID and complete original inputs.
+Different inputs for that UUID return 409. Independent concurrent approvals have
+one financial effect; stale revisions require reading current state. Overflow or
+failed journal posting rolls back the invoice and decision too. The explicit new
+evidence/decision buttons start a different request; inspect existing history
+before using them after an uncertain network response. Search and page controls
+retain the selected invoice/evidence. Switching customer or invoice clears the
+previous private attachment context.
+
+Receipt bytes are private PostgreSQL data included in database backups. Downloads
+use `application/octet-stream`, attachment disposition, `nosniff` and `no-store`.
+The per-invoice byte cap bounds application reads; choose it for the server's
+memory and any proxy request limits. The database field's technical limit is below
+1 GiB; this is not evidence that a 1 GiB HTTP upload is supported by every host.
+There is no new expiry scheduler in this manual workflow. Automatic matching,
+additional payment modes/destinations, customer/bot intake and standalone replay
+remain unfinished. These owner controls are not in published alpha.3 artifacts.
+
+### Manual payment API
+
+| Method | Path | Operation |
+| --- | --- | --- |
+| GET | `/api/v1/payment-defaults` | Owner-only factory metadata; does not create settings. |
+| GET / POST / PUT | `/api/v1/payment-settings` | Read, initialize or replace `recipient`, `destination`, `instructions`, `enabled`, `receipt_max_bytes`; PUT requires every field and `expected_revision`. |
+| POST | `/api/v1/invoices` | `request_key`, known `customer_id`, positive `base_amount_minor`; 201 new / 200 replay. |
+| GET | `/api/v1/invoices` | `q`, `page`, `page_size`, optional owned `customer_id` and `status`. |
+| GET | `/api/v1/invoices/{invoice_id}` | Issued terms, state and revision. |
+| POST / GET | `/api/v1/invoices/{invoice_id}/receipts` | Multipart `request_key`, optional `reference`, `note`, binary `file`; list with `q`, `page`, `page_size`. |
+| GET | `/api/v1/invoices/{invoice_id}/receipts/{receipt_id}` | Parent-scoped receipt metadata. |
+| GET | `/api/v1/invoices/{invoice_id}/receipts/{receipt_id}/file` | Authenticated private download; 404 for reference-only evidence. |
+| POST / GET | `/api/v1/invoices/{invoice_id}/decisions` | `request_key`, `expected_revision`, `action` (`approve`/`reject`), `reason`, optional `receipt_id`; list audit with `q`, `page`, `page_size`. |
+
+Amounts and revisions are decimal integer strings; input amounts range from one
+to signed BIGINT maximum. The API resolves current owner permission and parent
+membership for each read, download and write. Ordinary staff cannot access these
+controls. Invoice issuance requires an existing same-currency customer wallet.

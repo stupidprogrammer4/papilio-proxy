@@ -2,6 +2,7 @@ export * from "./bots";
 export * from "./managedServices";
 export * from "./customerAccounts";
 export * from "./productsOrders";
+export * from "./manualPayments";
 export * from "./nodes";
 export * from "./ipPolicies";
 export * from "./system";

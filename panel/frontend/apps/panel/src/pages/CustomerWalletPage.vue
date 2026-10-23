@@ -6,6 +6,7 @@ import { request, query, type CustomerAccount, type CustomerAccountPage } from "
 import ManagedRecordPicker from "../components/ManagedRecordPicker.vue";
 import CustomerWalletAccount from "../components/CustomerWalletAccount.vue";
 import CustomerServiceOrders from "../components/CustomerServiceOrders.vue";
+import CustomerManualInvoices from "../components/CustomerManualInvoices.vue";
 
 const { t } = useI18n();
 const customers = ref<CustomerAccountPage>({ items: [], count: 0, page: 1, page_size: 20 });
@@ -65,6 +66,7 @@ onMounted(async () => { await load({ q: "", page: 1, page_size: 20 }); });
       <h2 data-testid="customer-selected">{{ selected.name }}</h2>
       <CustomerWalletAccount :key="`wallet-${selected.id}`" :customer="selected" />
       <CustomerServiceOrders :key="`orders-${selected.id}`" :customer="selected" />
+      <CustomerManualInvoices :key="`invoices-${selected.id}`" :customer="selected" />
     </section>
   </div>
 </template>

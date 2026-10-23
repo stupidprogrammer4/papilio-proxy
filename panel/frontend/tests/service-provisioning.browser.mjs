@@ -3,6 +3,7 @@ import { writeFileSync } from "node:fs";
 import { chromium } from "playwright";
 import { expect } from "playwright/test";
 import { exerciseCustomerWallet } from "./customer-wallet.steps.mjs";
+import { fundNativeInvoice } from "./manual-payment.steps.mjs";
 import { createNativeProduct, buyNativeService } from "./product-purchase.steps.mjs";
 
 const base = process.env.PAPILIO_BROWSER_URL;
@@ -84,6 +85,7 @@ try {
   await expect(staff.getByTestId("service-title")).toHaveCount(0);
   const product = await createNativeProduct(page, base, core.name);
   const customerId = await exerciseCustomerWallet(page, base);
+  const invoiceId = await fundNativeInvoice(page, base, customerId);
   const purchase = await buyNativeService(page, base, product);
   await expect(staff.locator('nav a[href="/sales"]')).toHaveCount(0);
   await staff.goto(`${base}/sales`);
@@ -93,7 +95,11 @@ try {
   await staff.goto(`${base}/products`);
   await staff.waitForURL(`${base}/`);
   assert.equal((await staff.request.get(`${base}/api/v1/products`)).status(), 401);
-  writeFileSync(process.env.PAPILIO_BROWSER_RESULT, JSON.stringify({ service_id: service.id, customer_id: customerId, uri, purchase }), { mode: 0o600 });
+  await expect(staff.locator('nav a[href="/invoices"]')).toHaveCount(0);
+  await staff.goto(`${base}/invoices`);
+  await staff.waitForURL(`${base}/`);
+  assert.equal((await staff.request.get(`${base}/api/v1/invoices`)).status(), 401);
+  writeFileSync(process.env.PAPILIO_BROWSER_RESULT, JSON.stringify({ service_id: service.id, customer_id: customerId, invoice_id: invoiceId, uri, purchase }), { mode: 0o600 });
 } finally {
   await browser.close();
 }

@@ -177,8 +177,8 @@ including session/CSRF.
 Concurrent different-key debits verify no double spend; same-key requests verify
 one entry/effect. A focused native storage test rejects an update calculated from
 an obsolete credit revision. Nonempty migration tests retain a prior service's
-encrypted credential and pending outbox. Receipt approval and refunds remain
-separate pending consumers.
+encrypted credential and pending outbox. Manual receipt approval now credits
+the journal; formal refunds remain pending.
 
 The current browser also configures/edits an existing-core product, verifies
 historical offer terms, funds and purchases for the known customer, reads native
@@ -186,9 +186,29 @@ provisioning and returns the purchased subscription to another actual client.
 Switching customer context clears the old link and selects scoped order history.
 The order runtime test explicitly stops/starts only the declared test-owned
 RabbitMQ app and verifies the accepted price/level survive product/default edits
-and real outbox recovery. This does not simulate bank payment or receipt approval.
+and real outbox recovery. Manual receipt/approval and purchase now execute while
+RabbitMQ is stopped; this is a controlled operator confirmation, not bank matching.
 
 The native access-log regression starts the exact Gunicorn Docker command on an
 owned loopback listener. Invalid query/referrer sentinels appeared before the fix
 and are excluded by the native path-only format after it, while method/path/status
 remain visible. This proves that Gunicorn boundary, not every proxy or custom log.
+
+
+The manual-payment browser flow configures the owner receiving account, issues a
+known customer's invoice, uploads/downloads controlled opaque receipt bytes and
+reviews from the global invoice queue. Changing the destination and disabling
+new invoices retains issued terms. Approval credits the wallet used by the actual
+service purchase. Fresh DB reads verify receipt bytes and decision/journal links.
+API tests cover same/different-key concurrent approvals, exact BIGINT amounts,
+stale settings, oversize files, owner/parent/CSRF denial, reference-only evidence,
+rejection/review, pagination/search and full rollback on wallet overflow. OpenAPI
+advertises a binary multipart upload through a native FileField schema annotation.
+The nonempty payment migration keeps old balances/journal and operator settings.
+No external bank, Telegram commerce or production receipt is substituted into
+these tests; the controlled local origin and native core boundary are explicit.
+
+Broker-fault fixture cleanup opens a fresh native Celery write connection before
+purging only test queues. The native outage test deliberately primes a pooled
+connection first: the original cleanup reproduced CONNECTION_FORCED after broker
+restart, and the corrected cleanup passes without swallowing that error.

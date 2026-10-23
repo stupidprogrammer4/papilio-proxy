@@ -18,9 +18,12 @@ import productCatalogFa from "./product-catalog.fa.json";
 import serviceOrdersEn from "./service-orders.en.json";
 import serviceOrdersFa from "./service-orders.fa.json";
 
+import invoicesEn from "./manual-payments.en.json";
+import invoicesFa from "./manual-payments.fa.json";
+
 export const i18n = createI18n({
   legacy: false,
   locale: "en",
   fallbackLocale: "en",
-  messages: { en: { ...en, foundation: foundationEn, nodes: nodesEn, bots: botsEn, serviceSetup: serviceSetupEn, sales: salesEn, productCatalog: productCatalogEn, serviceOrders: serviceOrdersEn }, fa: { ...fa, foundation: foundationFa, nodes: nodesFa, bots: botsFa, serviceSetup: serviceSetupFa, sales: salesFa, productCatalog: productCatalogFa, serviceOrders: serviceOrdersFa } },
+  messages: { en: { ...en, foundation: foundationEn, nodes: nodesEn, bots: botsEn, serviceSetup: serviceSetupEn, sales: salesEn, productCatalog: productCatalogEn, serviceOrders: serviceOrdersEn, invoices: invoicesEn }, fa: { ...fa, foundation: foundationFa, nodes: nodesFa, bots: botsFa, serviceSetup: serviceSetupFa, sales: salesFa, productCatalog: productCatalogFa, serviceOrders: serviceOrdersFa, invoices: invoicesFa } },
 });

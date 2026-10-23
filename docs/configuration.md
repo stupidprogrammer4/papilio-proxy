@@ -181,3 +181,27 @@ path, status, byte count and integer-microsecond duration format. Query strings,
 referrers and request headers are omitted from its default access log so private
 subscription query tokens are not included there. Image replacement/restart
 applies this deployment setting; it is not an application product policy editor.
+
+
+## Manual payment controls on main
+
+The active owner's **Manual payments** page initializes and edits recipient,
+receiving account, instructions, new-invoice availability and receipt file byte
+limit. Defaults are enabled/4194304 bytes and blank destination metadata; explicit
+initialization requires a destination and recipient. `GET /payment-defaults`
+does not create a settings row; missing persisted settings return404. Complete
+revision-checked PUTs preserve omitted-choice safety by requiring every setting.
+Startup, migrations and restarts never overwrite these choices. Changes apply to
+new invoices immediately without restart; existing invoices keep their snapshot,
+including the upload limit. Disabling issuance leaves existing review available.
+
+Manual invoices require an existing IRR/rial wallet and a positive exact base
+amount. They store no random identifier and add no surcharge. Approval records
+only the base credit; rejection changes no balance. Invoices/evidence/decisions
+are retained rather than expired by an unimplemented scheduler. Receipts are
+opaque private PostgreSQL binary data with parent-scoped attachment downloads;
+receipt metadata lists do not load file bytes. Set the file cap for available
+memory and any proxy request limits; the database field's <1GiB technical ceiling
+does not certify large uploads on every deployment. Reverse-proxy/runtime upload
+limits require coordinated deployment configuration. Additional modes, multiple
+destinations, automatic matching and retention schedules remain pending.

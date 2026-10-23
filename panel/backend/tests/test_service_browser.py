@@ -16,6 +16,7 @@ from test_node_user_control import native_control as native_control
 from xray_client import subscription_client
 
 from papilio_panel.modules.nodes.domain import XrayApply
+from papilio_panel.modules.payments.models import Invoice, PaymentDecision, Receipt
 from papilio_panel.modules.services.models import ServiceAccount
 from papilio_panel.modules.wallets.models import JournalEntry, Wallet
 
@@ -93,6 +94,16 @@ def test_panel_provisions_a_service_used_by_an_actual_native_client(
             wallet = Wallet.objects.get(customer_id=output["customer_id"])
             assert wallet.balance_minor == 0 and wallet.credit_limit_minor == 75
             assert JournalEntry.objects.filter(wallet=wallet).count() == 4
+            invoice = Invoice.objects.get(pk=output["invoice_id"])
+            assert invoice.status == "settled" and invoice.base_amount_minor == 1000
+            assert invoice.destination == "TEST-ACCOUNT-ORIGINAL"
+            payment = PaymentDecision.objects.get(invoice=invoice)
+            assert payment.wallet_entry_id is not None and payment.receipt_id is not None
+            assert JournalEntry.objects.get(pk=payment.wallet_entry_id).request_key == invoice.id
+            assert (
+                bytes(Receipt.objects.get(pk=payment.receipt_id).content)
+                == b"controlled-private-receipt"
+            )
             assert (
                 JournalEntry.objects.filter(wallet=wallet, amount_minor=9007199254740993).count()
                 == 2

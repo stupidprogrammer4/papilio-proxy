@@ -7,7 +7,7 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 | Stage | Status | Completed version | Remaining acceptance |
 | --- | --- | --- | --- |
 | Foundation | Experimental release | 0.1.0-alpha.1 | Additional OS/environment combinations and later panel settings editors remain pending. |
-| First practical release | In progress | — | Native service/client, customer-wallet and product/purchase panel paths are exercised; receipt approval, bot delivery, mutable service lifecycle and automatic node/core install remain. |
+| First practical release | In progress | — | Native service/client, customer-wallet, manual receipt and product/purchase panel paths are exercised; bot purchase/delivery, mutable service lifecycle, automatic node/core install and new release artifacts remain. |
 | PasarGuard phase one | Planned | — | Reconcile and execute the complete v5.4.1 feature baseline. |
 | Full sales and bot | Planned | — | Approved Mirza/PGClock capabilities, resellers, Mini App and offline intake. |
 | Network and additional cores | Planned | — | Four complete cores and verified reference extras, certificates, Single Port, WARP, speed/IP controls. |
@@ -74,17 +74,23 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
   IRR/rial wallets, editable per-wallet credit, exact BIGINT journal and manual
   credit/debit adjustments have EN/FA panel controls. Native PostgreSQL tests cover
   concurrent debits, replay, overflow, rollback and parent scopes; real browser
-  checks preserve values beyond JavaScript's safe integer range. Receipt approval,
-  refunds and reseller eligibility remain pending. Native order debits now consume
-  the journal. These
-  development controls are not in alpha.3 artifacts.
+  checks preserve values beyond JavaScript's safe integer range. Native invoice
+  credits and order debits consume the journal; refunds and reseller eligibility
+  remain pending. These development controls are not in alpha.3 artifacts.
 - Product/purchase on main: immutable offer revisions and configurable IRR price,
   availability and existing Xray endpoint/level; owner product and customer-context
   purchase controls use native APIs. Atomic order/debit/service/outbox, same-key
   replay, concurrent funds protection and broker-outage recovery are exercised
   through native workers, agent/Xray and an actual client. Free price0 skips
-  wallet posting. Receipts, bot adapters, quota/duration/renewals and full failure/
+  wallet posting. Bot adapters, quota/duration/renewals and full failure/
   refund lifecycle remain unfinished. Published alpha.3 lacks these controls.
+- Manual payments on main: owner settings and review queue, customer-context
+  invoices, private receipt files/references and immutable decision history.
+  Issued amount/destination/file limits are retained after settings edits.
+  Same/different-key concurrent approvals credit once; overflow rolls back the
+  entire decision. Native browser receipt->approval->wallet->purchase->Xray/client
+  is exercised. Automatic bank matching, bot payment intake and standalone replay
+  remain pending; these changes are absent from alpha.3 installable artifacts.
 - Bot onboarding on main: owner-scoped encrypted tokens, editable runtime and native
   per-bot schedules, one-use admin pairing and durable supported message intake.
   Worker and installed-browser paths use a controlled external Telegram double;

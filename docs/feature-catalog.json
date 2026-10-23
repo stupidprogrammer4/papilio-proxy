@@ -416,14 +416,14 @@
         "MIRZA"
       ],
       "guide": "docs/user-guide.en.md#customer-accounts-and-wallets-on-main",
-      "verified_scope": "Development accounting foundation: operator-owned customer accounts, IRR wallet opening/read, explicit manual credit/debit adjustments with reasons and before/after journal, mutable credit limit, native idempotency/concurrency and EN/FA panel. Atomic native order purchases now consume this journal. Payments, receipt approval and refunds remain pending; no completed release is claimed."
+      "verified_scope": "Development accounting foundation: operator-owned customer accounts, IRR wallet opening/read, explicit manual credit/debit adjustments with reasons and before/after journal, mutable credit limit, native idempotency/concurrency and EN/FA panel. Atomic native order purchases now consume this journal. Manual invoice settlement now credits this journal; automatic matching and refunds remain pending; no completed release is claimed."
     },
     {
       "id": "FLOW-MANUAL",
       "title": "Receipt and manual settlement",
       "owner": "payments",
       "stage": "first",
-      "status": "planned",
+      "status": "in_progress",
       "completed_in": null,
       "expected_behavior": "An admin reviews an unsettled receipt in every payment mode; repeated approval credits only the base amount once.",
       "configuration": {
@@ -432,15 +432,21 @@
           "manual/automatic/both",
           "receiving destination"
         ],
-        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+        "defaults": "Manual invoices only in this delivery. Explicit operator initialization: new invoices enabled, receipt limit 4194304 bytes; recipient/destination required. Complete revision-checked edits apply to new invoices without restart. Issued settings remain immutable."
       },
       "acceptance": "An admin reviews an unsettled receipt in every payment mode; repeated approval credits only the base amount once.",
-      "evidence": [],
+      "evidence": [
+        "panel/backend/tests/test_manual_payments.py: real PostgreSQL invoice/receipt decisions, exact money, parent scopes, concurrent approval, rollback, binary multipart schema and issued-setting preservation",
+        "panel/backend/tests/test_payment_migration.py: prior wallet/journal retained, successful settlement and preserved operator settings",
+        "panel/backend/tests/test_service_browser.py and panel/frontend/tests/manual-payment.steps.mjs: owner receipt upload/private download/review->wallet->purchase->native Xray client",
+        "panel/backend/tests/test_order_runtime.py: manual receipt/approval and purchase while RabbitMQ is stopped, followed by real worker/client delivery"
+      ],
       "sources": [
         "OWNER",
         "MIRZA"
       ],
-      "guide": null
+      "guide": "docs/user-guide.en.md#manual-invoices-and-receipt-approval-on-main",
+      "verified_scope": "Owner manual invoice/settings/review queue and immutable private evidence/audit, exact one-time base credit and real order consumer. Automatic modes/matching, bot intake, standalone replay, multiple receiving destinations and next installable release remain pending; no completed release is claimed."
     },
     {
       "id": "FLOW-IDENTIFIER",
@@ -494,7 +500,7 @@
         "MIRZA"
       ],
       "guide": "docs/user-guide.en.md#products-and-service-purchases-on-main",
-      "verified_scope": "Owner wallet-funded purchase, captured IRR price and native service/outbox in one PostgreSQL transaction, genuine client delivery and broker recovery. Receipt/bot adapters, full service retry/refund lifecycle, automatic local installation and final release remain pending."
+      "verified_scope": "Owner wallet-funded purchase, captured IRR price and native service/outbox in one PostgreSQL transaction, genuine client delivery and broker recovery. Manual receipt settlement into the wallet is exercised. Bot adapters, full service retry/refund lifecycle, automatic local installation and final release remain pending."
     },
     {
       "id": "FLOW-BOT",
