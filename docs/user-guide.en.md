@@ -437,9 +437,18 @@ controls. Invoice issuance requires an existing same-currency customer wallet.
 ## Connected shop API prototype (main, absent from alpha.3)
 
 The current development backend connects Telegram private chats to the same
-customer, wallet, catalogue and purchase modules used by the panel. The shop
-configuration editor in the panel remains pending. Manual Telegram invoices,
+customer, wallet, catalogue and purchase modules used by the panel. Per-bot shop
+settings are available in the panel. Manual Telegram invoices,
 private evidence and durable decision notifications now use the shared payment modules. This is not a complete sales-bot release.
+
+Open **Telegram bots**, connect or select your bot, then use **Bot shop**. Enter
+the public panel address with HTTP or HTTPS, choose the customer language and
+enable processing. Delivery can be paused independently. Expand **Timing and
+delivery policy** for page size, retry/lease/attempt limits and confirmation
+lifetime; expand **Messages and button labels** to edit both languages. Saving
+creates settings only when missing. A conflicting save retains your draft; use
+explicit reload to discard it and load the current revision. The Overview
+schedule controls shared delivery; the connection form controls this bot's polling.
 
 An installation owner can read `GET /api/v1/bot-shop-defaults`, then explicitly
 create `POST /api/v1/bots/BOT_ID/shop` with a complete definition, a public HTTP

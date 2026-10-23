@@ -254,3 +254,11 @@ invoice and receipt IDs through required login in a review link, preselects the
 matching private attachment and uses the existing approval flow. A foreign login
 return destination is rejected; native resource permissions remain authoritative.
 Transient receipt transport retry/recovery and live Telegram remain open gates.
+
+The native service browser also opens each bot's shop editor. It creates two
+independently configured paused bots, saves every policy field and EN/FA messages,
+rejects an unknown placeholder without changing stored settings, and verifies
+reload plus a real two-tab revision conflict retain the correct draft/state.
+An ordinary staff session can connect its own bot but cannot see or read shop
+settings. Fresh PostgreSQL reads check stored choices after the browser exits.
+These configuration checks make no Telegram requests.

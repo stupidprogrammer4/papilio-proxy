@@ -207,13 +207,19 @@ limits require coordinated deployment configuration. Additional modes, multiple
 destinations, automatic matching and retention schedules remain pending.
 
 
-## Shop API prototype on main
+## Connected shop settings on main
 
-Owner-only `/api/v1/bots/{id}/shop` configures one verified bot's sales adapter.
-The panel editor remains pending; these are API controls, absent from alpha.3.
+In **Telegram bots**, select a bot to open its owner-only **Bot shop** form.
+The same policy is available through `/api/v1/bots/{id}/shop`; these changes are
+absent from alpha.3. The bot must be verified with polling enabled to process work.
 GET is read-only, POST initializes missing settings, and full PUT with a revision
 preserves choices or reports a conflict. Configuration changes require no restart
 and do not change already accepted order terms.
+The form exposes every field below, including all English and Persian messages
+and button labels. Connection-status refresh preserves a shop draft. Explicit
+reload discards it and fetches current settings; failed validation or a concurrent
+revision conflict preserves the draft. Ordinary staff may connect their own bots
+but lack the owner-only `bot-shop:read/write` session grants and financial controls.
 
 | Setting | Initial default | Scope / application |
 | --- | --- | --- |
@@ -230,7 +236,8 @@ and do not change already accepted order terms.
 Templates and defaults are creation inputs, not automatic rewrites of existing
 operator settings. Unresolved/ambiguous message recovery controls and receipt transport retry remain
 pending. Telegram manual invoice/evidence/decision notification uses the existing
-payment settings, per-invoice frozen cap and this shop's delivery policy. These settings do not claim complete panel configurability.
+payment settings, per-invoice frozen cap and this shop's delivery policy. The shop
+form does not establish panel controls for unfinished product modules.
 
 
 Payment decision events acknowledge a queued reply, not remote delivery. An event

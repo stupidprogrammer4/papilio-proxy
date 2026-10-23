@@ -389,7 +389,7 @@
         "MIRZA"
       ],
       "guide": "docs/user-guide.en.md#products-and-service-purchases-on-main",
-      "verified_scope": "Native owner catalogue and immutable offer revisions for initial unlimited Xray services; core/inbound, IRR price, availability and effective level controls. The private Telegram catalogue/purchase adapter exercises repeated and concurrent confirmations and actual agent/Xray/client delivery. Quota/duration/renewals, complete shop panel controls and a new installable release remain pending; no completed release is claimed."
+      "verified_scope": "Native owner catalogue and immutable offer revisions for initial unlimited Xray services; core/inbound, IRR price, availability and effective level controls. The private Telegram catalogue/purchase adapter exercises repeated and concurrent confirmations and actual agent/Xray/client delivery. Per-bot panel shop policy covers origin, pauses, timing and EN/FA messages. Quota/duration/renewals, held-message recovery and a new installable release remain pending; no completed release is claimed."
     },
     {
       "id": "FLOW-WALLET",
@@ -452,7 +452,7 @@
         "MIRZA"
       ],
       "guide": "docs/user-guide.en.md#manual-invoices-and-receipt-approval-on-main",
-      "verified_scope": "Owner manual invoice/settings/review queue and private evidence/audit, one-time exact base credit and real order consumer. Bot invoice/reference/photo intake, paired-admin review link and transactional decision notification outbox now connect to the same module; native broker-outage recovery and concurrent notification consumption are exercised. Automatic modes/matching, standalone replay, multiple destinations, receipt transport retry controls, shop panel settings and a new installable release remain pending."
+      "verified_scope": "Owner manual invoice/settings/review queue and private evidence/audit, one-time exact base credit and real order consumer. Bot invoice/reference/photo intake, paired-admin review link and transactional decision notification outbox now connect to the same module; native broker-outage recovery and concurrent notification consumption are exercised. Per-bot panel shop policy covers origin, pauses, timing and EN/FA messages. Automatic modes/matching, standalone replay, multiple destinations, receipt transport retry controls and a new installable release remain pending."
     },
     {
       "id": "FLOW-IDENTIFIER",
@@ -555,7 +555,7 @@
         "CLOCK"
       ],
       "guide": "docs/user-guide.en.md",
-      "verified_scope": "Operator bot setup, native schedules, private pairing/intake and shop API prototype: scoped customers/wallets, paginated catalogue/history, replay-safe confirmations, manual invoice/reference/photo evidence, admin review link, durable decision notifications and ready-only subscription. Actual Beat/worker -> agent/Xray/client purchase includes bot top-up/evidence and controlled owner approval. Real test-broker outage preserves one event/credit/reply. Owner audit reasons stay private. External Telegram HTTP is doubled; live identity inspection is separate. Shop panel settings, receipt transport retry/recovery, held-message recovery, live conversations, standalone intake and new artifacts remain incomplete."
+      "verified_scope": "Operator bot setup, native schedules, private pairing/intake and connected shop prototype: scoped customers/wallets, paginated catalogue/history, replay-safe confirmations, manual invoice/reference/photo evidence, admin review link, durable decision notifications and ready-only subscription. Per-bot panel policy exposes origin, pauses, timing and complete EN/FA templates with revision conflicts and separate staff access. Actual Beat/worker -> agent/Xray/client purchase includes bot top-up/evidence and controlled owner approval. Real test-broker outage preserves one event/credit/reply. Owner audit reasons stay private. External Telegram HTTP is doubled; live identity inspection is separate. Receipt transport retry/recovery, held-message recovery, live conversations, standalone intake and new artifacts remain incomplete."
     },
     {
       "id": "PG-USER-LIFECYCLE",
