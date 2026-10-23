@@ -90,6 +90,8 @@ def runtime(tmp_path: Path) -> Iterator[None]:
             except subprocess.TimeoutExpired:
                 os.killpg(process.pid, signal.SIGKILL)
                 process.wait(timeout=5)
-        app.control.purge()
+        # Outage tests deliberately invalidate any previously pooled connection.
+        with app.connection_for_write() as broker:
+            app.control.purge(connection=broker)
         for log in logs:
             log.close()

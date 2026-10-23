@@ -13,6 +13,7 @@ from test_node_user_control import native_control as native_control
 from test_service_runtime import existing_owner_client
 from xray_client import subscription_client
 
+from papilio_panel.config.celery import app
 from papilio_panel.modules.cores.models import XrayCore
 from papilio_panel.modules.nodes.domain import XrayApply
 from papilio_panel.modules.orders.models import Order
@@ -29,6 +30,8 @@ def test_native_purchase_outbox_recovers_and_delivers_the_paid_contract(
     container = os.environ.get("PAPILIO_TEST_BROKER_CONTAINER")
     if not container:
         pytest.skip("Explicitly test-owned RabbitMQ is required for this fault boundary.")
+    # Keep a native pooled producer connection alive across the deliberate outage.
+    app.control.purge()
     node, data_port, binary = native_control
     owner = existing_owner_client()
     core = owner.post(
