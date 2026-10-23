@@ -1,0 +1,15 @@
+{
+  "title": "Products",
+  "help": "Configure products for the existing unlimited VLESS/TCP service workflow. Volume/time limits, renewals and tiered pricing are separate pending capabilities.",
+  "existing": "Product catalogue",
+  "configuration": "Product settings",
+  "new": "New product",
+  "name": "Product name",
+  "price": "Price in rials (IRR)",
+  "active": "Available for new purchases",
+  "revision": "Revision",
+  "savedLevel": "Saved effective Xray user level: {level}",
+  "snapshotHelp": "Saving creates an immutable offer revision. Accepted orders keep their price and service settings. A zero price creates a free purchase without a wallet debit.",
+  "create": "Create product",
+  "save": "Save new revision"
+}

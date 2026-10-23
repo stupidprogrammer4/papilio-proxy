@@ -1,6 +1,6 @@
 {
   "title": "Customers and wallets",
-  "help": "Create customer accounts and manage their rial wallets. Products, payment receipts and purchase delivery are being connected next.",
+  "help": "Create customer accounts, manage rial wallet credit and purchase service products for the selected customer.",
   "customerName": "Customer name",
   "createCustomer": "Create customer",
   "customers": "Customer accounts",

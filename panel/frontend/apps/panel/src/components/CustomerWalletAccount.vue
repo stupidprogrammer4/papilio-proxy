@@ -89,7 +89,7 @@ onMounted(refresh);
   <section class="card card-pad form-grid">
     <h3>{{ t('sales.wallet') }}</h3>
     <p v-if="error" class="message error" role="alert">{{ error }}</p>
-    <button class="btn secondary" :disabled="busy" @click="refresh">{{ t('foundation.refresh') }}</button>
+    <button class="btn secondary" data-testid="wallet-refresh" :disabled="busy" @click="refresh">{{ t('foundation.refresh') }}</button>
     <p v-if="ready && !wallet">{{ t('sales.noWallet') }}</p>
     <template v-if="wallet">
       <p data-testid="wallet-balance" aria-live="polite" dir="ltr">{{ wallet.balance_minor }} {{ wallet.currency }} ({{ wallet.unit }})</p>

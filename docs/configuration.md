@@ -160,3 +160,24 @@ fresh read/retry. Wallet balance updates and credit settings use conditional
 predicates on the same physical row. Startup/migrations do not seed over existing
 wallet choices. Currency is currently immutable IRR/rial; additional currencies
 and configurable reseller eligibility remain pending.
+
+## Product offer settings on main
+
+Products expose owner-scoped controls for name, nonnegative IRR/rial price,
+availability, existing core/inbound and optional Xray user level. Blank level
+captures the current core default when saved. These settings require no restart.
+Each save uses an expected revision and publishes an immutable new offer;
+accepted order terms and credentials are preserved. Availability defaults true
+only for a new product. Price is explicit; zero means no wallet debit for that
+purchase. Quota/duration/renewal settings and additional core products remain
+pending until their native enforcement exists. Delivery uses the existing
+editable service-outbox schedule; disabling it pauses new provisioning delivery,
+while accepted purchases remain in PostgreSQL.
+
+## API access logging on main
+
+The backend image loads the native Gunicorn configuration module with a method,
+path, status, byte count and integer-microsecond duration format. Query strings,
+referrers and request headers are omitted from its default access log so private
+subscription query tokens are not included there. Image replacement/restart
+applies this deployment setting; it is not an application product policy editor.

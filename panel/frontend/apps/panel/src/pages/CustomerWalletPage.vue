@@ -5,6 +5,7 @@ import { useI18n } from "vue-i18n";
 import { request, query, type CustomerAccount, type CustomerAccountPage } from "@papilio/api";
 import ManagedRecordPicker from "../components/ManagedRecordPicker.vue";
 import CustomerWalletAccount from "../components/CustomerWalletAccount.vue";
+import CustomerServiceOrders from "../components/CustomerServiceOrders.vue";
 
 const { t } = useI18n();
 const customers = ref<CustomerAccountPage>({ items: [], count: 0, page: 1, page_size: 20 });
@@ -62,7 +63,8 @@ onMounted(async () => { await load({ q: "", page: 1, page_size: 20 }); });
     </section>
     <section v-if="selected" class="stack">
       <h2 data-testid="customer-selected">{{ selected.name }}</h2>
-      <CustomerWalletAccount :key="selected.id" :customer="selected" />
+      <CustomerWalletAccount :key="`wallet-${selected.id}`" :customer="selected" />
+      <CustomerServiceOrders :key="`orders-${selected.id}`" :customer="selected" />
     </section>
   </div>
 </template>

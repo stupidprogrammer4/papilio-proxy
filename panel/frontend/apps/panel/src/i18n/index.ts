@@ -13,10 +13,14 @@ import serviceSetupEn from "./service-setup.en.json";
 import serviceSetupFa from "./service-setup.fa.json";
 import salesEn from "./sales.en.json";
 import salesFa from "./sales.fa.json";
+import productCatalogEn from "./product-catalog.en.json";
+import productCatalogFa from "./product-catalog.fa.json";
+import serviceOrdersEn from "./service-orders.en.json";
+import serviceOrdersFa from "./service-orders.fa.json";
 
 export const i18n = createI18n({
   legacy: false,
   locale: "en",
   fallbackLocale: "en",
-  messages: { en: { ...en, foundation: foundationEn, nodes: nodesEn, bots: botsEn, serviceSetup: serviceSetupEn, sales: salesEn }, fa: { ...fa, foundation: foundationFa, nodes: nodesFa, bots: botsFa, serviceSetup: serviceSetupFa, sales: salesFa } },
+  messages: { en: { ...en, foundation: foundationEn, nodes: nodesEn, bots: botsEn, serviceSetup: serviceSetupEn, sales: salesEn, productCatalog: productCatalogEn, serviceOrders: serviceOrdersEn }, fa: { ...fa, foundation: foundationFa, nodes: nodesFa, bots: botsFa, serviceSetup: serviceSetupFa, sales: salesFa, productCatalog: productCatalogFa, serviceOrders: serviceOrdersFa } },
 });

@@ -363,7 +363,7 @@
       "title": "Products shared by panel and bot",
       "owner": "catalog",
       "stage": "first",
-      "status": "planned",
+      "status": "in_progress",
       "completed_in": null,
       "expected_behavior": "The same published product terms are shown and purchased through both adapters.",
       "configuration": {
@@ -375,15 +375,19 @@
           "duration",
           "availability"
         ],
-        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+        "defaults": "IRR/rial price is explicit; availability defaults true for new products. Optional Xray user level captures the current core default when saving an offer. Volume/duration and additional core products remain pending."
       },
       "acceptance": "The same published product terms are shown and purchased through both adapters.",
-      "evidence": [],
+      "evidence": [
+        "panel/backend/tests/test_catalog_orders.py: immutable offer history, replay, ownership, native CAS and price bounds",
+        "panel/backend/tests/test_service_browser.py and panel/frontend/tests/product-purchase.steps.mjs: actual product create/edit/reload and purchase UI"
+      ],
       "sources": [
         "OWNER",
         "MIRZA"
       ],
-      "guide": null
+      "guide": "docs/user-guide.en.md#products-and-service-purchases-on-main",
+      "verified_scope": "Native owner catalogue and immutable offer revisions for initial unlimited Xray services; core/inbound, IRR price, availability and effective level controls. The bot catalogue adapter and quota/duration/renewal policies remain pending; no completed release is claimed."
     },
     {
       "id": "FLOW-WALLET",
@@ -412,7 +416,7 @@
         "MIRZA"
       ],
       "guide": "docs/user-guide.en.md#customer-accounts-and-wallets-on-main",
-      "verified_scope": "Development accounting foundation: operator-owned customer accounts, IRR wallet opening/read, explicit manual credit/debit adjustments with reasons and before/after journal, mutable credit limit, native idempotency/concurrency and EN/FA panel. Payments, receipt approval, purchase debits and refunds remain pending; no completed release is claimed."
+      "verified_scope": "Development accounting foundation: operator-owned customer accounts, IRR wallet opening/read, explicit manual credit/debit adjustments with reasons and before/after journal, mutable credit limit, native idempotency/concurrency and EN/FA panel. Atomic native order purchases now consume this journal. Payments, receipt approval and refunds remain pending; no completed release is claimed."
     },
     {
       "id": "FLOW-MANUAL",
@@ -467,7 +471,7 @@
       "title": "Purchase through service delivery",
       "owner": "orders",
       "stage": "first",
-      "status": "planned",
+      "status": "in_progress",
       "completed_in": null,
       "expected_behavior": "A paid order provisions the purchased service; broker outage cannot lose the order or financial event.",
       "configuration": {
@@ -476,15 +480,21 @@
           "product availability",
           "delivery retry policy"
         ],
-        "defaults": "Documented for delivered settings; undecided defaults are specified before implementation."
+        "defaults": "New purchases require the current active offer revision. Zero-price products skip wallet posting. Native provisioning uses existing service-outbox schedules and worker delivery settings."
       },
       "acceptance": "A paid order provisions the purchased service; broker outage cannot lose the order or financial event.",
-      "evidence": [],
+      "evidence": [
+        "panel/backend/tests/test_catalog_orders.py: atomic debit/service/outbox, replay, concurrent funds and rollback",
+        "panel/backend/tests/test_order_runtime.py: actual broker outage, immutable accepted terms and native client delivery",
+        "panel/backend/tests/test_catalog_order_migration.py: retained prior funds and successful post-upgrade purchase",
+        "panel/backend/tests/test_service_browser.py: actual owner purchase and returned subscription consumed by a native client"
+      ],
       "sources": [
         "OWNER",
         "MIRZA"
       ],
-      "guide": null
+      "guide": "docs/user-guide.en.md#products-and-service-purchases-on-main",
+      "verified_scope": "Owner wallet-funded purchase, captured IRR price and native service/outbox in one PostgreSQL transaction, genuine client delivery and broker recovery. Receipt/bot adapters, full service retry/refund lifecycle, automatic local installation and final release remain pending."
     },
     {
       "id": "FLOW-BOT",

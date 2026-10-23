@@ -92,12 +92,14 @@ def test_panel_provisions_a_service_used_by_an_actual_native_client(
             assert service.status == "succeeded" and service.worker_pid != os.getpid()
             wallet = Wallet.objects.get(customer_id=output["customer_id"])
             assert wallet.balance_minor == 0 and wallet.credit_limit_minor == 75
-            assert JournalEntry.objects.filter(wallet=wallet).count() == 2
+            assert JournalEntry.objects.filter(wallet=wallet).count() == 4
             assert (
                 JournalEntry.objects.filter(wallet=wallet, amount_minor=9007199254740993).count()
                 == 2
             )
             with subscription_client(binary, tmp_path, output["uri"]) as probe:
+                assert probe.fetch() == b"papilio-actual-subscription-client"
+            with subscription_client(binary, tmp_path, output["purchase"]["uri"]) as probe:
                 assert probe.fetch() == b"papilio-actual-subscription-client"
         finally:
             if frontend is not None:

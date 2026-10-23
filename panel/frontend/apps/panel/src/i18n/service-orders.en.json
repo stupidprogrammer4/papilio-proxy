@@ -1,0 +1,9 @@
+{
+  "title": "Service purchases",
+  "help": "Buy for this customer using the selected product and the customer's wallet credit. Free products do not require a wallet. Check the price before confirming.",
+  "serviceName": "Service name",
+  "buy": "Buy and provision service",
+  "accepted": "Recorded purchase amount",
+  "progressHelp": "The purchase and wallet entry are recorded together. Native provisioning continues in the background; refresh for its actual outcome. A node failure remains visible for operator follow-up; automatic refunds are not implemented.",
+  "history": "This customer's purchases"
+}

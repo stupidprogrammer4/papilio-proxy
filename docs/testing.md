@@ -177,5 +177,18 @@ including session/CSRF.
 Concurrent different-key debits verify no double spend; same-key requests verify
 one entry/effect. A focused native storage test rejects an update calculated from
 an obsolete credit revision. Nonempty migration tests retain a prior service's
-encrypted credential and pending outbox. Receipt approval, purchase settlement
-and refunds are not exercised until those consumers are implemented.
+encrypted credential and pending outbox. Receipt approval and refunds remain
+separate pending consumers.
+
+The current browser also configures/edits an existing-core product, verifies
+historical offer terms, funds and purchases for the known customer, reads native
+provisioning and returns the purchased subscription to another actual client.
+Switching customer context clears the old link and selects scoped order history.
+The order runtime test explicitly stops/starts only the declared test-owned
+RabbitMQ app and verifies the accepted price/level survive product/default edits
+and real outbox recovery. This does not simulate bank payment or receipt approval.
+
+The native access-log regression starts the exact Gunicorn Docker command on an
+owned loopback listener. Invalid query/referrer sentinels appeared before the fix
+and are excluded by the native path-only format after it, while method/path/status
+remain visible. This proves that Gunicorn boundary, not every proxy or custom log.

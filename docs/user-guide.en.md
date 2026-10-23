@@ -283,8 +283,8 @@ controls cover the complete authorized collection; another customer's entry URL
 is not interchangeable with this customer's URL.
 
 These controls currently require an active owner. Ordinary staff do not have
-wallet access. This is an accounting foundation, separate from receipt approval,
-bank matching, refunds and purchase/service delivery, which remain pending.
+wallet access. The purchase flow below debits this journal. Receipt approval,
+bank matching and formal refund workflows remain pending.
 It is not included in the published alpha.3 package.
 
 ### Customer and wallet API
@@ -309,3 +309,56 @@ Fractional, scientific notation, boolean and float inputs are rejected. Balances
 cannot exceed signed BIGINT or fall below the selected credit limit. This does
 not impose a customer/account count limit. Normal customer fields cannot set a
 balance, owner or journal actor; financial changes use the explicit posting path.
+
+## Products and service purchases on main
+
+Open **Products** to select an existing core and inbound, enter a product name
+and IRR/rial price, and choose availability. Optional Xray user level overrides
+the core default; blank captures the current default when that offer is saved.
+Saving an edit creates a new immutable offer revision. Older accepted orders
+retain their price, core/inbound selection and saved level. Use **New product** for a separate
+product; existing node/core selections stay available. These initial products
+create unlimited VLESS/TCP/no-TLS services; volume, duration, renewal and tiered
+pricing are not enforced by this prototype.
+
+In **Customers and wallets**, select the customer, ensure that a paid product's
+wallet has enough balance/credit, choose the product and enter the service name.
+**Buy and provision service** records the order, one debit and one service/outbox
+in a single PostgreSQL transaction. Insufficient credit rolls back the new order.
+Price zero records a free purchase with no wallet or journal entry requirement.
+
+The displayed purchase amount is the accepted financial contract. Native service
+provisioning continues asynchronously. **Refresh** reads the actual service
+result; **Get subscription link** becomes available after successful provisioning.
+Broker outage retains the order, debit and queued service for outbox delivery.
+A failed native operation stays visible for operator follow-up; automatic refunds,
+full service lifecycle recovery and manual receipt settlement are still pending.
+Switching customers resets the displayed order/link and scopes the purchase list
+to the selected customer. Search/page controls cover products and order history.
+
+Product availability/revision is checked for a new purchase. Repeat an interrupted
+purchase with its original UUID and inputs: it returns the existing order even
+after later price/availability/default changes, without another debit or service.
+Changing the customer/product/revision/name for that UUID returns 409. Refresh and
+review a changed product before starting a new purchase.
+
+### Product and purchase API
+
+| Method | Path | Operation |
+| --- | --- | --- |
+| POST | `/api/v1/products` | `request_key` UUID and `definition`: `name`, `core_id`, `inbound_id`, `price_minor`, optional `currency` (IRR), `user_level`, `is_active`. |
+| GET | `/api/v1/products` | Search with `q`, `page`, `page_size`, optional `active_only`. |
+| GET | `/api/v1/products/{product_id}` | Read the current owned product/offer. |
+| PUT | `/api/v1/products/{product_id}` | Save complete `definition` with `expected_revision`. |
+| GET | `/api/v1/product-offers/{offer_id}` | Read an immutable owned offer. |
+| POST | `/api/v1/orders` | Purchase with `request_key`, `customer_id`, `product_id`, `expected_revision`, `service_name`; 201 new / 200 replay. |
+| GET | `/api/v1/orders` | Search with `q`, `page`, `page_size`, optional owned `customer_id`. |
+| GET | `/api/v1/orders/{order_id}` | Read accepted terms and service/journal IDs. |
+
+Monetary fields and revisions are decimal integer strings. Product prices range
+from zero to signed BIGINT maximum. Captured order terms include the offer ID,
+price/unit, core/inbound IDs and effective user level. Read `/api/v1/services/{service_id}`
+and its `/subscription` resource using the returned ID. Node/core/inbound and
+customer scope are revalidated on the actual application paths; frontend choices
+do not grant access. Current controls require the active owner, and the published
+alpha.3 package does not include this development purchase flow.

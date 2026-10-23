@@ -31,7 +31,8 @@ See the [agent's scope](node/agent/README.md) and [feature status](TODO.md).
 
 Development `main` additionally connects the native Services page to real Xray
 provisioning/subscriptions and provides owner-scoped customer/rial-wallet controls
-with an exact journal and editable credit. These changes are not in the alpha.3
+with an exact journal and editable credit. Product revisions and wallet-funded
+purchases now connect to native service delivery. These changes are not in the alpha.3
 package. [Service guide](docs/user-guide.en.md#persistent-service-prototype-on-main)
 and [wallet guide](docs/user-guide.en.md#customer-accounts-and-wallets-on-main).
 

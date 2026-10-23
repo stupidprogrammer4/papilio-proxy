@@ -17,6 +17,7 @@ const BotsPage = () => import("./pages/BotsPage.vue");
 const NodeOnboardingPage = () => import("./pages/NodeOnboardingPage.vue");
 const ServiceProvisioningPage = () => import("./pages/ServiceProvisioningPage.vue");
 const CustomerWalletPage = () => import("./pages/CustomerWalletPage.vue");
+const ProductCatalogPage = () => import("./pages/ProductCatalogPage.vue");
 const SystemStatusPage = () => import("./pages/SystemStatusPage.vue");
 const OwnerSetupPage = () => import("./pages/OwnerSetupPage.vue");
 const CustomersPage = () => import("./pages/CustomersPage.vue");
@@ -76,6 +77,7 @@ const router = createRouter({
     { path: "/nodes", meta: { scope: "nodes" }, component: NodeOnboardingPage },
     { path: "/services", meta: { scope: "services" }, component: ServiceProvisioningPage },
     { path: "/sales", meta: { scope: "sales" }, component: CustomerWalletPage },
+    { path: "/products", meta: { scope: "products" }, component: ProductCatalogPage },
     { path: "/customers", meta: { scope: "customers" }, component: CustomersPage },
     { path: "/customers/:customerId/wallet", meta: { scope: "payments" }, component: WalletPage },
     { path: "/automation", meta: { scopes: ["payments", "network", "subscriptions"] }, component: AutomationPage },
