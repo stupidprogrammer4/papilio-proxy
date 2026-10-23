@@ -1,0 +1,71 @@
+"""Native owner-scoped bot shop configuration and sender-bound customer contracts."""
+
+from uuid import uuid4
+
+import pytest
+from rest_framework.test import APIClient
+from test_bots import bot_input
+from test_nodes import owner_client
+
+pytestmark = pytest.mark.django_db(transaction=True)
+
+
+def shop_bot(client: APIClient) -> dict:
+    response = client.post("/api/v1/bots", bot_input(), format="json")
+    assert response.status_code == 202
+    return response.json()
+
+
+def test_shop_settings_are_owned_complete_and_persist_operator_choices() -> None:
+    client = owner_client()
+    bot = shop_bot(client)
+    root = f"/api/v1/bots/{bot['id']}/shop"
+    assert client.get(root).status_code == 404
+    defaults = client.get("/api/v1/bot-shop-defaults")
+    assert defaults.status_code == 200
+    definition = defaults.json() | {
+        "enabled": True,
+        "public_origin": "http://panel.example.invalid",
+        "locale": "en",
+    }
+    created = client.post(root, definition, format="json")
+    assert created.status_code == 201
+    assert created.json()["revision"] == "1"
+    replacement = definition | {"enabled": False, "page_size": 3, "retry_seconds": 17}
+    changed = client.put(root, {"expected_revision": "1", **replacement}, format="json")
+    assert changed.status_code == 200
+    assert client.get(root).json()["definition"] == replacement
+    assert (
+        client.put(root, {"expected_revision": "1", **definition}, format="json").status_code == 409
+    )
+    assert client.post(root, definition, format="json").status_code == 409
+    omitted = {"expected_revision": "2", **replacement}
+    del omitted["enabled"]
+    assert client.put(root, omitted, format="json").status_code == 400
+    other = owner_client("other-shop-owner")
+    assert other.get(root).status_code == 404
+    assert other.post(root, definition, format="json").status_code == 404
+    staff = owner_client("shop-staff", superuser=False)
+    assert staff.get("/api/v1/bot-shop-defaults").status_code == 401
+    assert staff.get(root).status_code == 401
+    assert client.get(f"/api/v1/bots/{uuid4()}/shop").status_code == 404
+
+
+def test_shop_schedule_reinitialization_preserves_operator_pause_and_interval() -> None:
+    from papilio_panel.modules.shop.infra.schedules import initialize_shop
+
+    client = owner_client()
+    schedule = next(
+        row for row in client.get("/api/v1/system/schedules").json() if row["key"] == "shop-outbox"
+    )
+    response = client.put(
+        "/api/v1/system/schedules/shop-outbox",
+        {"enabled": False, "interval_seconds": 17, "expected_changed_at": schedule["changed_at"]},
+        format="json",
+    )
+    assert response.status_code == 200
+    initialize_shop(sender=object())
+    current = next(
+        row for row in client.get("/api/v1/system/schedules").json() if row["key"] == "shop-outbox"
+    )
+    assert current["enabled"] is False and current["interval_seconds"] == 17

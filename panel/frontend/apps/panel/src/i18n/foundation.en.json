@@ -37,7 +37,8 @@
     "io-heartbeat": "I/O worker heartbeat",
     "cpu-heartbeat": "CPU worker heartbeat",
     "outbox": "Durable message delivery",
-    "node-outbox": "Node operation delivery"
+    "node-outbox": "Node operation delivery",
+    "shop-outbox": "Bot shop messages and replies"
   },
   "states": {
     "queued": "Queued",

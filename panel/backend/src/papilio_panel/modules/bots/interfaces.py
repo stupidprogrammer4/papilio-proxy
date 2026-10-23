@@ -9,16 +9,22 @@ from .domain import (
     BotCreate,
     BotCreation,
     BotDefaults,
+    BotEventRead,
     BotInspection,
     BotPage,
     BotPollClaim,
     BotPollResult,
     BotRead,
+    BotReplyRequest,
     BotSearch,
     PairingGrant,
     PairingSecret,
     PairingState,
     TelegramConnection,
+    TelegramFileReference,
+    TelegramFileResult,
+    TelegramReply,
+    TelegramSendResult,
     UpdateBatch,
 )
 
@@ -58,3 +64,26 @@ class BotCapability(Protocol):
 
 class BotPollingCapability(Protocol):
     def poll(self, bot_id: UUID) -> None: ...
+
+
+class BotEventStorage(Protocol):
+    def read(self, event_id: int) -> BotEventRead: ...
+    def processed(self, event_id: int, bot_id: UUID, owner_id: int) -> None: ...
+    def connection(self, bot_id: UUID, owner_id: int, revision: int) -> TelegramConnection: ...
+
+
+class TelegramConversationGateway(Protocol):
+    def answer(self, connection: TelegramConnection, callback_id: str) -> bool: ...
+    def send(
+        self, connection: TelegramConnection, chat_id: int, reply: TelegramReply
+    ) -> TelegramSendResult: ...
+    def download(
+        self, connection: TelegramConnection, file: TelegramFileReference, max_bytes: int
+    ) -> TelegramFileResult: ...
+
+
+class BotConversationCapability(Protocol):
+    def event(self, event_id: int) -> BotEventRead: ...
+    def processed(self, event_id: int, bot_id: UUID, owner_id: int) -> None: ...
+    def reply(self, values: BotReplyRequest) -> TelegramSendResult: ...
+    def file(self, event_id: int, max_bytes: int) -> TelegramFileResult: ...

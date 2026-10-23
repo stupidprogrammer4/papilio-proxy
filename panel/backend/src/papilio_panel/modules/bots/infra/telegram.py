@@ -3,15 +3,21 @@
 import http.client
 import json
 import re
+from pathlib import PurePosixPath
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 from ..domain import (
     BotInspection,
     IncomingMessage,
     IncomingUpdate,
     TelegramConnection,
+    TelegramFileContent,
+    TelegramFileReference,
+    TelegramFileResult,
     TelegramIdentity,
+    TelegramReply,
+    TelegramSendResult,
     UpdateBatch,
 )
 from .telegram_payload import retained_payload
@@ -172,3 +178,104 @@ class NativeTelegramGateway:
         except (ValueError, TypeError):
             result = UpdateBatch(error_code="invalid_telegram_response")
         return result
+
+    def send(
+        self, connection: TelegramConnection, chat_id: int, reply: TelegramReply
+    ) -> TelegramSendResult:
+        parameters: dict[str, Any] = {
+            "chat_id": chat_id,
+            "text": reply.text,
+            "link_preview_options": {"is_disabled": True},
+        }
+        if reply.buttons:
+            parameters["reply_markup"] = {
+                "inline_keyboard": [
+                    [
+                        {"text": button.text, "url": button.url}
+                        if button.url
+                        else {"text": button.text, "callback_data": button.callback_data}
+                    ]
+                    for button in reply.buttons
+                ]
+            }
+        try:
+            message = self._call(connection, "sendMessage", parameters)
+            if not isinstance(message, dict):
+                raise ValueError("Invalid outgoing message result.")
+            result = TelegramSendResult(
+                message_id=integer(message.get("message_id"), minimum=1), chat_id=chat_id
+            )
+        except TelegramTransportError as error:
+            result = TelegramSendResult(
+                error_code=error.code,
+                retry_after_seconds=error.retry_after_seconds,
+                ambiguous=error.code
+                in {"connection_failed", "invalid_telegram_response", "telegram_unavailable"},
+            )
+        except (ValueError, TypeError):
+            result = TelegramSendResult(error_code="invalid_telegram_response", ambiguous=True)
+        return result
+
+    def answer(self, connection: TelegramConnection, callback_id: str) -> bool:
+        try:
+            answered = (
+                self._call(connection, "answerCallbackQuery", {"callback_query_id": callback_id})
+                is True
+            )
+        except TelegramTransportError:
+            answered = False
+        return answered
+
+    def download(
+        self, connection: TelegramConnection, file: TelegramFileReference, max_bytes: int
+    ) -> TelegramFileResult:
+        try:
+            metadata = self._call(connection, "getFile", {"file_id": file.file_id})
+            if not isinstance(metadata, dict) or not isinstance(metadata.get("file_path"), str):
+                raise ValueError("Invalid Telegram file metadata.")
+            path = metadata["file_path"]
+            if (
+                not path
+                or PurePosixPath(path).is_absolute()
+                or any(part in {"", ".", ".."} for part in path.split("/"))
+                or any(char in path for char in "\\\x00?#")
+            ):
+                raise ValueError("Invalid Telegram file path.")
+            declared_size = metadata.get("file_size")
+            if declared_size is not None and integer(declared_size) > max_bytes:
+                raise TelegramTransportError("file_limit")
+            content = self._download_bytes(connection, path, max_bytes)
+            result = TelegramFileResult(
+                content=TelegramFileContent(file.filename, file.media_type, content)
+            )
+        except TelegramTransportError as error:
+            result = TelegramFileResult(
+                error_code=error.code, retry_after_seconds=error.retry_after_seconds
+            )
+        except (ValueError, TypeError):
+            result = TelegramFileResult(error_code="invalid_telegram_response")
+        return result
+
+    def _download_bytes(self, source: TelegramConnection, path: str, max_bytes: int) -> bytes:
+        endpoint = urlsplit(source.runtime.api_base_url)
+        client_class = (
+            http.client.HTTPSConnection
+            if endpoint.scheme == "https"
+            else http.client.HTTPConnection
+        )
+        client = client_class(
+            endpoint.hostname or "", endpoint.port, timeout=source.runtime.http_timeout_seconds
+        )
+        try:
+            client.request("GET", f"/file/bot{source.token}/{quote(path, safe='/')}")
+            response = client.getresponse()
+            if response.status != 200:
+                raise TelegramTransportError("file_unavailable")
+            content = response.read(max_bytes + 1)
+            if len(content) > max_bytes:
+                raise TelegramTransportError("file_limit")
+            return content
+        except (OSError, http.client.HTTPException):
+            raise TelegramTransportError("connection_failed") from None
+        finally:
+            client.close()

@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "papilio_panel.modules.catalog",
     "papilio_panel.modules.orders",
     "papilio_panel.modules.payments",
+    "papilio_panel.modules.shop",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

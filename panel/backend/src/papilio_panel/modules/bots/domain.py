@@ -177,3 +177,77 @@ class BotCompletion(StrEnum):
     COMMITTED = "committed"
     STALE = "stale"
     IDENTITY_CONFLICT = "identity_conflict"
+
+
+@dataclass(frozen=True)
+class TelegramFileReference:
+    file_id: str
+    filename: str
+    media_type: str
+    size_bytes: int | None = None
+
+
+@dataclass(frozen=True)
+class PrivateMessage:
+    sender_id: int
+    chat_id: int
+    name: str
+    text: str
+    callback_id: str | None = None
+    callback_data: str | None = None
+    reply_to_message_id: int | None = None
+    file: TelegramFileReference | None = None
+
+
+@dataclass(frozen=True)
+class BotEventRead:
+    id: int
+    bot: BotRead
+    update_id: int
+    message: PrivateMessage | None
+    processed_at: datetime | None
+
+
+@dataclass(frozen=True)
+class TelegramButton:
+    text: str
+    callback_data: str = ""
+    url: str = field(default="", repr=False)
+
+
+@dataclass(frozen=True)
+class TelegramReply:
+    text: str = field(repr=False)
+    buttons: tuple[TelegramButton, ...] = ()
+
+
+@dataclass(frozen=True)
+class BotReplyRequest:
+    event_id: int
+    bot_id: UUID
+    owner_id: int
+    reply: TelegramReply
+    administrator: bool = False
+
+
+@dataclass(frozen=True)
+class TelegramSendResult:
+    message_id: int | None = None
+    error_code: str | None = None
+    retry_after_seconds: int | None = None
+    ambiguous: bool = False
+    chat_id: int | None = None
+
+
+@dataclass(frozen=True)
+class TelegramFileContent:
+    filename: str
+    media_type: str
+    data: bytes = field(repr=False)
+
+
+@dataclass(frozen=True)
+class TelegramFileResult:
+    content: TelegramFileContent | None = field(default=None, repr=False)
+    error_code: str | None = None
+    retry_after_seconds: int | None = None

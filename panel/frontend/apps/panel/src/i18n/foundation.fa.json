@@ -37,7 +37,8 @@
     "io-heartbeat": "گزارش worker ارتباطی",
     "cpu-heartbeat": "گزارش worker پردازشی",
     "outbox": "تحویل پیام‌های ثبت‌شده",
-    "node-outbox": "ارسال عملیات نود"
+    "node-outbox": "ارسال عملیات نود",
+    "shop-outbox": "پیام‌ها و پاسخ‌های فروش بات"
   },
   "states": {
     "queued": "در صف",

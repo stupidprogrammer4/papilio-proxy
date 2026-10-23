@@ -19,6 +19,9 @@ class TelegramServer:
         self.release = threading.Event()
         self.release.set()
         self.next_error_status: int | None = None
+        self.messages: list[tuple[int, dict[str, Any]]] = []
+        self.files: dict[str, bytes] = {}
+        self.file_calls: list[str] = []
 
     def push(
         self,
@@ -40,6 +43,24 @@ class TelegramServer:
         }
         with self.lock:
             self.pending.append(update)
+
+    def push_callback(self, identifier: int, data: str, *, chat_id: int, bot_id: int) -> None:
+        with self.lock:
+            self.pending.append(
+                {
+                    "update_id": identifier,
+                    "callback_query": {
+                        "id": f"shop-callback-{identifier}",
+                        "from": {"id": chat_id},
+                        "data": data,
+                        "message": {
+                            "message_id": 100,
+                            "from": {"id": bot_id, "is_bot": True},
+                            "chat": {"id": chat_id, "type": "private"},
+                        },
+                    },
+                }
+            )
 
     def hold(self) -> None:
         self.entered.clear()
@@ -84,6 +105,24 @@ class TelegramServer:
                 result = [
                     item for item in self.pending if item["update_id"] >= parameters["offset"]
                 ][: parameters["limit"]]
+        if method == "sendMessage":
+            with self.lock:
+                message_id = len(self.messages) + 100
+                self.messages.append((message_id, parameters.copy()))
+            result = {
+                "message_id": message_id,
+                "chat": {"id": parameters["chat_id"], "type": "private"},
+                "text": parameters["text"],
+            }
+        if method == "answerCallbackQuery":
+            result = True
+        if method == "getFile":
+            path = f"photos/{parameters['file_id']}.jpg"
+            result = {
+                "file_id": parameters["file_id"],
+                "file_path": path,
+                "file_size": len(self.files.get(path, b"")),
+            }
         return 200, {"ok": True, "result": result}
 
     @contextmanager
@@ -91,6 +130,18 @@ class TelegramServer:
         state = self
 
         class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                from urllib.parse import unquote
+
+                path = unquote(self.path.removeprefix("/file/bot").split("/", maxsplit=1)[1])
+                with state.lock:
+                    state.file_calls.append(path)
+                    content = state.files.get(path)
+                self.send_response(200 if content is not None else 404)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.end_headers()
+                self.wfile.write(content or b"")
+
             def do_POST(self) -> None:
                 length = int(self.headers.get("Content-Length", "0"))
                 parameters = json.loads(self.rfile.read(length))
