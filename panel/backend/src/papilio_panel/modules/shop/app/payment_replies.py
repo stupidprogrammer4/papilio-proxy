@@ -3,7 +3,7 @@
 from urllib.parse import urlencode
 
 from papilio_panel.modules.bots.domain import TelegramButton, TelegramReply
-from papilio_panel.modules.payments.domain import DecisionAction, InvoiceRead
+from papilio_panel.modules.payments.domain import DecisionAction, InvoiceRead, ReceiptRead
 
 from ..domain import ReceiptReplies, ShopCustomerContext, ShopTextContext
 from .presentation import menu, render, reply
@@ -29,14 +29,14 @@ def invoice_reply(context: ShopCustomerContext, invoice: InvoiceRead) -> Telegra
 
 
 def receipt_replies(
-    context: ShopCustomerContext, invoice: InvoiceRead, reference: str
+    context: ShopCustomerContext, invoice: InvoiceRead, receipt: ReceiptRead
 ) -> ReceiptReplies:
     settings = context.settings.definition
     acknowledgement = reply(settings, "receipt", ShopTextContext(invoice_id=str(invoice.id)))
     url = (
         settings.public_origin.rstrip("/")
         + "/invoices?"
-        + urlencode({"invoice_id": str(invoice.id)})
+        + urlencode({"invoice_id": str(invoice.id), "receipt_id": str(receipt.id)})
     )
     text = render(
         settings,
@@ -44,7 +44,7 @@ def receipt_replies(
         ShopTextContext(
             invoice_id=str(invoice.id),
             amount=str(invoice.amount_due_minor),
-            reference=reference,
+            reference=receipt.reference,
             url=url,
         ),
     )

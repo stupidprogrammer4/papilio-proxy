@@ -5,7 +5,7 @@ import { useI18n } from "vue-i18n";
 import { request, query, type CustomerAccount, type ManualInvoice, type ManualInvoiceReceipt, type ManualReceiptPage, type ManualPaymentDecision, type ManualDecisionPage, type ManualDecisionResult } from "@papilio/api";
 import ManagedRecordPicker from "./ManagedRecordPicker.vue";
 
-const props = defineProps<{ invoiceId: string }>();
+const props = defineProps<{ invoiceId: string; initialReceiptId?: string }>();
 const emit = defineEmits<{ changed: [invoice: ManualInvoice] }>();
 const { t } = useI18n();
 const invoice = ref<ManualInvoice | null>(null);
@@ -84,7 +84,13 @@ async function decide(action: "approve" | "reject"): Promise<void> {
     await read();
   });
 }
-onMounted(refresh);
+onMounted(() => perform(async () => {
+  const [, initialReceipt] = await Promise.all([
+    read(),
+    props.initialReceiptId ? request<ManualInvoiceReceipt>(`${root}/receipts/${props.initialReceiptId}`, "GET", undefined, { signal: lifetime.signal }) : Promise.resolve(null),
+  ]);
+  selectedReceipt.value = initialReceipt;
+}));
 </script>
 
 <template>

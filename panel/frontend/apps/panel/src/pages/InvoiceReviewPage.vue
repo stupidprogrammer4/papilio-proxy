@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute } from "vue-router";
 import { request, query, type ManualInvoicePage, type ManualInvoiceState } from "@papilio/api";
@@ -11,9 +11,12 @@ const { t } = useI18n();
 const route = useRoute();
 const invoices = ref<ManualInvoicePage>({ items: [], count: 0, page: 1, page_size: 20 });
 const selectedId = ref(""); const status = ref<ManualInvoiceState | "">("review");
-watch(() => route.query.invoice_id, (value) => {
-  selectedId.value = typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) ? value : "";
-}, { immediate: true });
+function queryId(value: unknown): string {
+  return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) ? value : "";
+}
+const linkedInvoiceId = computed(() => queryId(route.query.invoice_id));
+const initialReceiptId = computed(() => selectedId.value === linkedInvoiceId.value ? queryId(route.query.receipt_id) : "");
+watch(linkedInvoiceId, value => { selectedId.value = value; }, { immediate: true });
 const busy = ref(false); const error = ref("");
 const lifetime = new AbortController();
 let currentSearch = { q: "", page: 1, page_size: 20 };
@@ -41,6 +44,6 @@ onMounted(async () => { await load(currentSearch); });
       </select></label>
       <ManagedRecordPicker data-testid="invoice-picker" :title="t('invoices.queue')" :items="invoices.items.map(item => ({ id: item.id, label: `${item.id} · ${item.amount_due_minor} ${item.currency}` }))" :count="invoices.count" :page="invoices.page" :page-size="invoices.page_size" :selected-id="selectedId" :busy="busy" @search="load" @select="selectedId = $event" />
     </section>
-    <ManualInvoiceDetail v-if="selectedId" :key="selectedId" :invoice-id="selectedId" @changed="load(currentSearch)" />
+    <ManualInvoiceDetail v-if="selectedId" :key="`${selectedId}:${initialReceiptId}`" :invoice-id="selectedId" :initial-receipt-id="initialReceiptId" @changed="load(currentSearch)" />
   </div>
 </template>

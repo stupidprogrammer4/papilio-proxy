@@ -1,6 +1,7 @@
 import { createApp } from "vue";
 import { createPinia } from "pinia";
 import { createRouter, createWebHistory } from "vue-router";
+import { localReturnPath } from "./localReturnPath";
 const NotificationsPage = () => import("./pages/NotificationsPage.vue");
 const CustomerNotificationsPage = () => import("./pages/CustomerNotificationsPage.vue");
 const SupportPage = () => import("./pages/SupportPage.vue");
@@ -79,7 +80,7 @@ const router = createRouter({
     { path: "/services", meta: { scope: "services" }, component: ServiceProvisioningPage },
     { path: "/sales", meta: { scope: "sales" }, component: CustomerWalletPage },
     { path: "/products", meta: { scope: "products" }, component: ProductCatalogPage },
-    { path: "/invoices", meta: { scope: "invoices" }, component: InvoiceReviewPage },
+    { path: "/invoices", meta: { scope: "invoices", returnAfterLogin: true }, component: InvoiceReviewPage },
     { path: "/customers", meta: { scope: "customers" }, component: CustomersPage },
     { path: "/customers/:customerId/wallet", meta: { scope: "payments" }, component: WalletPage },
     { path: "/automation", meta: { scopes: ["payments", "network", "subscriptions"] }, component: AutomationPage },
@@ -114,8 +115,8 @@ router.beforeEach(async to => {
   if (to.meta.customer) { const customer=useCustomerAuth(pinia); if(!customer.checked) await customer.restore(); return customer.session ? true : "/account/sign-in"; }
   const auth = useAuth(pinia);
   if (!auth.checked) await auth.restore();
-  if (!auth.session && to.path !== "/login") return "/login";
-  if (auth.session && to.path === "/login") return "/";
+  if (!auth.session && to.path !== "/login") return to.meta.returnAfterLogin ? { path: "/login", query: { next: to.fullPath } } : "/login";
+  if (auth.session && to.path === "/login") return localReturnPath(router, to.query.next);
   if (auth.session && typeof to.meta.scope === "string" && !auth.can(to.meta.scope)) return "/";
   if (auth.session && Array.isArray(to.meta.scopes) && !to.meta.scopes.some(scope => typeof scope === "string" && auth.can(scope))) return "/";
   return true;

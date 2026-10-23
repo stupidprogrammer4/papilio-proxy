@@ -74,7 +74,7 @@ class ShopFunding:
         if receipt.event_id != context.event.id:
             raise Missing("This receipt belongs to a different private incoming event.")
         invoice = self.queries.read(context, receipt.invoice_id)
-        self.receipts.submit(
+        recorded_receipt = self.receipts.submit(
             ReceiptSubmit(
                 context.customer.owner_id,
                 invoice.id,
@@ -83,7 +83,7 @@ class ShopFunding:
                 receipt.note,
                 receipt.file,
             )
-        )
+        ).receipt
         if self.origins.find(invoice.id, context.customer.owner_id) is None:
             self.origins.create(
                 InvoiceOrigin(
@@ -94,7 +94,7 @@ class ShopFunding:
                     context.customer.id,
                 )
             )
-        responses = receipt_replies(context, invoice, receipt.reference)
+        responses = receipt_replies(context, invoice, recorded_receipt)
         self.messages.append(
             ReplyWrite(
                 context.event.id,

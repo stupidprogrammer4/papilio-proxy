@@ -96,6 +96,18 @@ def test_topup_invoice_and_reference_receipt_do_not_credit_before_owner_review()
             ).count()
             == 1
         )
+        from urllib.parse import parse_qs, urlsplit
+
+        from papilio_panel.modules.shop.infra.replies import decrypt_reply
+
+        notice = OutgoingMessage.objects.get(event=evidence.event, administrator=True)
+        buttons = decrypt_reply(bytes(notice.payload_ciphertext)).buttons
+        links = [button.url for button in buttons if button.url]
+        assert any(
+            parse_qs(urlsplit(url).query)
+            == {"invoice_id": [str(invoice.id)], "receipt_id": [str(receipt.id)]}
+            for url in links
+        )
         assert execution.begin(evidence.id) is None
         assert Receipt.objects.count() == 1
 

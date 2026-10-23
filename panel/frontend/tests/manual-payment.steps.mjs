@@ -42,11 +42,18 @@ export async function fundNativeInvoice(page, base, customerId) {
   await expect(page.getByTestId("payment-revision")).toHaveText("2");
   await page.getByTestId("invoice-status-filter").selectOption("review");
   await page.getByTestId("invoice-picker").getByRole("button", { name: new RegExp(invoice.id) }).click();
-  await page.goto(`${base}/invoices?invoice_id=${encodeURIComponent(invoice.id)}`);
+  const reviewUrl = `${base}/invoices?invoice_id=${encodeURIComponent(invoice.id)}&receipt_id=${encodeURIComponent(receipt.id)}`;
+  await page.context().clearCookies();
+  await page.goto(reviewUrl);
+  await expect(page).toHaveURL(/\/login(?:\?|$)/);
+  await page.locator('input[autocomplete="username"]').fill("native-user-owner");
+  await page.locator('input[autocomplete="current-password"]').fill("isolated-node-owner-password-944!");
+  await page.locator("form button[type=submit], form button.btn").click();
+  await expect(page).toHaveURL(reviewUrl, { timeout: 5000 });
   await expect(page.getByTestId("invoice-detail").getByRole("heading", { name: invoice.id, exact: true })).toBeVisible();
   await expect(page.getByTestId("invoice-customer")).toHaveText("Browser customer");
   await expect(page.getByTestId("invoice-destination")).toHaveText("TEST-ACCOUNT-ORIGINAL");
-  await page.getByTestId("receipt-picker").getByRole("button", { name: /TEST-BROWSER-TRANSFER/ }).click();
+  await expect(page.getByTestId("receipt-download")).toHaveAttribute("href", `/api/v1/invoices/${invoice.id}/receipts/${receipt.id}/file`);
   const [download] = await Promise.all([
     page.waitForEvent("download"), page.getByTestId("receipt-download").click(),
   ]);
@@ -63,6 +70,12 @@ export async function fundNativeInvoice(page, base, customerId) {
   await page.getByTestId("locale-selector").selectOption("fa");
   await expect(page.getByTestId("invoices-title")).toHaveText("پرداخت‌های دستی");
   await page.getByTestId("locale-selector").selectOption("en");
+  await page.context().clearCookies();
+  await page.goto(`${base}/login?next=${encodeURIComponent("//outside.example.invalid/escape")}`);
+  await page.locator('input[autocomplete="username"]').fill("native-user-owner");
+  await page.locator('input[autocomplete="current-password"]').fill("isolated-node-owner-password-944!");
+  await page.locator("form button[type=submit], form button.btn").click();
+  await expect(page).toHaveURL(`${base}/`);
   await page.goto(`${base}/sales`);
   await page.getByTestId("customer-picker").getByRole("button", { name: "Browser customer", exact: true }).click();
   await expect(page.getByTestId("wallet-balance")).toHaveText("1000 IRR (rial)");
