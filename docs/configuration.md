@@ -205,3 +205,28 @@ memory and any proxy request limits; the database field's <1GiB technical ceilin
 does not certify large uploads on every deployment. Reverse-proxy/runtime upload
 limits require coordinated deployment configuration. Additional modes, multiple
 destinations, automatic matching and retention schedules remain pending.
+
+
+## Shop API prototype on main
+
+Owner-only `/api/v1/bots/{id}/shop` configures one verified bot's sales adapter.
+The panel editor remains pending; these are API controls, absent from alpha.3.
+GET is read-only, POST initializes missing settings, and full PUT with a revision
+preserves choices or reports a conflict. Configuration changes require no restart
+and do not change already accepted order terms.
+
+| Setting | Initial default | Scope / application |
+| --- | --- | --- |
+| `public_origin` | Required operator input | HTTP/HTTPS origin for private subscription links; later link generation uses the current origin. |
+| `enabled` / `delivery_enabled` | false / true | Bot shop processing / outgoing delivery; existing queued work persists. |
+| `locale` / `texts` | fa / declared Persian and English templates | Every supported label/message is explicit and editable; plain text uses named `$placeholder` values. Invalid or overlong rendered text fails the use case without committing its financial effects. |
+| `page_size` | 10 | Catalogue/history pages, bounded by the configured API pagination limit. |
+| `confirmation_ttl_seconds` | 900 | New purchase confirmations; existing expiry remains recorded. Purchased confirmations retain replay access after expiry. |
+| `retry_seconds` / `max_attempts` | 30 / 5 | Outgoing delivery; Telegram retry-after can extend the delay. Lowered attempt limits stop a new claim. |
+| `lease_seconds` | 120 | New work/send leases; effective minimum also covers the bot's configured transport timeout. |
+| `ambiguous_delivery` | hold | Preserve an unknown send as ambiguous, or explicitly retry with possible duplicate messages. No financial replay. |
+| Managed `shop-outbox` schedule | 1 second, enabled | Native database Beat enable/interval controls, seeded only when missing. No restart. |
+
+Templates and defaults are creation inputs, not automatic rewrites of existing
+operator settings. Unresolved/ambiguous message recovery controls and bot payment
+intake are pending. These settings do not claim complete panel configurability.

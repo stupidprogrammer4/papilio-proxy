@@ -40,6 +40,11 @@ and [wallet guide](docs/user-guide.en.md#customer-accounts-and-wallets-on-main).
 Bot worker/browser tests substitute the external Telegram API; live identity
 inspection is separate from real bot commerce.
 
+The connected shop API prototype on main now exercises private catalogue, wallet,
+replay-safe purchase confirmations and subscription delivery through an actual
+Xray client. Telegram payment intake/notifications and shop panel controls remain
+pending. [Prototype scope and usage](docs/user-guide.en.md#connected-shop-api-prototype-main-absent-from-alpha3).
+
 Development on main also includes an owner-scoped API for registering existing
 Xray cores/inbounds, persistent IO service provisioning and signed VLESS
 subscriptions. The [development API guide](docs/user-guide.en.md#persistent-service-prototype-on-main)

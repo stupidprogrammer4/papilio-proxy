@@ -210,7 +210,8 @@ core/inbound editing remain pending; registration is not full core management.
 
 This development slice provisions an unlimited VLESS/TCP service through the
 registered existing inbound. Use the core and inbound IDs returned above. The
-owner's **Services** page connects to these APIs. Bot purchases remain pending.
+owner's **Services** page connects to these APIs. The connected shop API prototype
+below also uses the shared purchase contract.
 
 ### From the panel
 
@@ -259,7 +260,7 @@ Current `status` describes the latest initial provisioning result, not continuou
 core health. Dynamic native users are not yet rebuilt automatically after core
 restart, although their service/credential records persist in PostgreSQL. Quota,
 expiry, mutable lifecycle, additional subscription formats, billing
-and bot delivery remain required before declaring the sales MVP complete. The
+and complete bot payment intake/notifications remain required before declaring the sales MVP complete. The
 published alpha.3 artifacts do not include this development API or service page.
 
 ## Customer accounts and wallets on main
@@ -332,7 +333,7 @@ provisioning continues asynchronously. **Refresh** reads the actual service
 result; **Get subscription link** becomes available after successful provisioning.
 Broker outage retains the order, debit and queued service for outbox delivery.
 A failed native operation stays visible for operator follow-up; automatic refunds,
-full service lifecycle recovery and bot commerce remain pending. Manual invoice
+full service lifecycle recovery and complete bot commerce remain pending. Manual invoice
 settlement is available below.
 Switching customers resets the displayed order/link and scopes the purchase list
 to the selected customer. Search/page controls cover products and order history.
@@ -431,3 +432,45 @@ Amounts and revisions are decimal integer strings; input amounts range from one
 to signed BIGINT maximum. The API resolves current owner permission and parent
 membership for each read, download and write. Ordinary staff cannot access these
 controls. Invoice issuance requires an existing same-currency customer wallet.
+
+
+## Connected shop API prototype (main, absent from alpha.3)
+
+The current development backend connects Telegram private chats to the same
+customer, wallet, catalogue and purchase modules used by the panel. The shop
+configuration editor in the panel and Telegram payment intake/approval
+notifications are still pending. This is not a complete sales-bot release.
+
+An installation owner can read `GET /api/v1/bot-shop-defaults`, then explicitly
+create `POST /api/v1/bots/BOT_ID/shop` with a complete definition, a public HTTP
+or HTTPS panel origin, and `enabled: true`. An origin contains only the scheme,
+host and optional port. `GET` does not initialize configuration. Use full `PUT`
+with `expected_revision` to edit it; stale writes are rejected. Staff and other
+owners cannot edit this bot's shop policy. Existing bot verification, polling and
+administrator pairing still apply.
+
+The prototype supports `/start`, `/wallet`, `/products` and `/orders`, with
+paginated product/history buttons. Selecting a product shows its current price;
+confirming uses a persisted purchase identity. Repeated or simultaneous taps on
+that confirmation debit once. An expired unpaid confirmation or changed product
+terms require a new selection. Customers cannot use each other's confirmations
+or read each other's orders, even under the same installation owner. A new
+product selection represents a separate purchase.
+
+Use **Service status / subscription** to retrieve the link only after the actual
+service provisioning succeeds. Current products are the initial unlimited
+VLESS/TCP service without TLS. The operator currently funds wallets through the
+panel. Telegram `/topup`, receipt intake, settlement notifications, automatic
+ready notifications, advanced service terms and independent offline intake are
+not delivered by this prototype.
+
+Private replies are encrypted in PostgreSQL; queue payloads contain identifiers.
+The managed `shop-outbox` schedule controls incoming work and outgoing delivery.
+Per-bot `enabled` pauses shop processing; `delivery_enabled` separately pauses
+outgoing replies. Queued work remains persisted. Retries and uncertain sends
+never replay a financial operation. With the default `hold` policy, an uncertain
+Telegram outcome is held as `ambiguous`; explicit `retry` can duplicate a remote
+message. A panel control for resolving held messages remains pending. Local
+integration uses a controlled external Telegram HTTP endpoint, actual
+PostgreSQL/RabbitMQ/Redis/Beat/workers and an actual agent/Xray/client; live
+Telegram conversations have not been exercised.

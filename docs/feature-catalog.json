@@ -380,14 +380,16 @@
       "acceptance": "The same published product terms are shown and purchased through both adapters.",
       "evidence": [
         "panel/backend/tests/test_catalog_orders.py: immutable offer history, replay, ownership, native CAS and price bounds",
-        "panel/backend/tests/test_service_browser.py and panel/frontend/tests/product-purchase.steps.mjs: actual product create/edit/reload and purchase UI"
+        "panel/backend/tests/test_service_browser.py and panel/frontend/tests/product-purchase.steps.mjs: actual product create/edit/reload and purchase UI",
+        "panel/backend/tests/test_shop_purchases.py",
+        "panel/backend/tests/test_shop_purchase_runtime.py"
       ],
       "sources": [
         "OWNER",
         "MIRZA"
       ],
       "guide": "docs/user-guide.en.md#products-and-service-purchases-on-main",
-      "verified_scope": "Native owner catalogue and immutable offer revisions for initial unlimited Xray services; core/inbound, IRR price, availability and effective level controls. The bot catalogue adapter and quota/duration/renewal policies remain pending; no completed release is claimed."
+      "verified_scope": "Native owner catalogue and immutable offer revisions for initial unlimited Xray services; core/inbound, IRR price, availability and effective level controls. The private Telegram catalogue/purchase adapter exercises repeated and concurrent confirmations and actual agent/Xray/client delivery. Quota/duration/renewals, complete shop panel controls and a new installable release remain pending; no completed release is claimed."
     },
     {
       "id": "FLOW-WALLET",
@@ -530,7 +532,15 @@
         "panel/backend/tests/test_bot_polling.py",
         "panel/backend/tests/test_bot_transport.py",
         "panel/backend/tests/test_bot_migration.py",
-        "panel/frontend/tests/foundation.browser.mjs"
+        "panel/frontend/tests/foundation.browser.mjs",
+        "panel/backend/tests/test_bot_conversations.py",
+        "panel/backend/tests/test_shop.py",
+        "panel/backend/tests/test_shop_customers.py",
+        "panel/backend/tests/test_shop_processing.py",
+        "panel/backend/tests/test_shop_purchases.py",
+        "panel/backend/tests/test_shop_sending.py",
+        "panel/backend/tests/test_shop_runtime.py",
+        "panel/backend/tests/test_shop_purchase_runtime.py"
       ],
       "sources": [
         "OWNER",
@@ -538,7 +548,7 @@
         "CLOCK"
       ],
       "guide": "docs/user-guide.en.md",
-      "verified_scope": "Operator-owned encrypted token/settings CRUD, per-bot native schedule controls, one-use private administrator pairing and durable supported update intake. Real worker and installed browser use an explicit external Telegram API double; separate live identity/webhook inspection is read-only. Purchase, wallet, receipt review, service delivery and independent offline bot remain incomplete."
+      "verified_scope": "Operator-owned encrypted token/settings CRUD, native schedules, one-use private admin pairing and durable supported intake. Shop API prototype covers private customer/wallet binding, paginated catalogue/history, one purchase identity across repeated/concurrent taps, ready-only private subscription delivery and persisted send uncertainty. Real Beat/worker -> agent/Xray/client is exercised with an explicit external Telegram HTTP double. Separate live identity/webhook inspection is read-only. Telegram payment intake/notifications, shop panel configuration, held-message recovery, live conversations, independent offline intake and new installable artifacts remain incomplete."
     },
     {
       "id": "PG-USER-LIFECYCLE",

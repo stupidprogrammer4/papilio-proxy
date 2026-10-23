@@ -7,7 +7,7 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 | Stage | Status | Completed version | Remaining acceptance |
 | --- | --- | --- | --- |
 | Foundation | Experimental release | 0.1.0-alpha.1 | Additional OS/environment combinations and later panel settings editors remain pending. |
-| First practical release | In progress | — | Native service/client, customer-wallet, manual receipt and product/purchase panel paths are exercised; bot purchase/delivery, mutable service lifecycle, automatic node/core install and new release artifacts remain. |
+| First practical release | In progress | — | Native panel and scheduled bot purchase/subscription/client paths are exercised; Telegram payment intake/notifications, shop panel controls, mutable service lifecycle, automatic node/core install and new release artifacts remain. |
 | PasarGuard phase one | Planned | — | Reconcile and execute the complete v5.4.1 feature baseline. |
 | Full sales and bot | Planned | — | Approved Mirza/PGClock capabilities, resellers, Mini App and offline intake. |
 | Network and additional cores | Planned | — | Four complete cores and verified reference extras, certificates, Single Port, WARP, speed/IP controls. |
@@ -49,7 +49,7 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
   uses the issued mTLS identity and native Xray API. Actual client traffic,
   duplicate requests, literal URL characters, foreign owners and revoked access
   are exercised. The persistent service prototype consumes this internal
-  background interface. Panel/bot purchases remain pending.
+  background interface. Panel and bot purchase prototypes now use the shared purchase module; complete lifecycle/recovery remains pending.
 
 - Registered core API on main: common identity and separate Xray defaults/inbound
   records, owned node/core/child access, idempotency, native uniqueness, complete
@@ -82,7 +82,7 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
   purchase controls use native APIs. Atomic order/debit/service/outbox, same-key
   replay, concurrent funds protection and broker-outage recovery are exercised
   through native workers, agent/Xray and an actual client. Free price0 skips
-  wallet posting. Bot adapters, quota/duration/renewals and full failure/
+  wallet posting. The private Telegram purchase adapter is exercised; quota/duration/renewals and full failure/
   refund lifecycle remain unfinished. Published alpha.3 lacks these controls.
 - Manual payments on main: owner settings and review queue, customer-context
   invoices, private receipt files/references and immutable decision history.
@@ -94,8 +94,12 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 - Bot onboarding on main: owner-scoped encrypted tokens, editable runtime and native
   per-bot schedules, one-use admin pairing and durable supported message intake.
   Worker and installed-browser paths use a controlled external Telegram double;
-  live read-only identity inspection is separate. Purchase/delivery conversations
-  and independent offline intake remain incomplete.
+  live read-only identity inspection is separate. The shop API prototype adds private
+  customer/wallet identity, paginated products/orders, replay-safe purchase
+  confirmations and ready-only private subscription delivery. Native Beat/worker
+  -> agent/Xray -> actual client is exercised. Shop panel settings, Telegram
+  payment intake/notifications, held-message recovery and independent offline
+  intake remain incomplete. Alpha.3 artifacts do not include this prototype.
 - Real PostgreSQL: atomic owner setup, session/CSRF, ownership and revocation.
 - Real RabbitMQ/Celery/Beat: separate worker queues, durable outbox, replay and
   recovery after broker outage.

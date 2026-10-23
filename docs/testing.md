@@ -212,3 +212,24 @@ Broker-fault fixture cleanup opens a fresh native Celery write connection before
 purging only test queues. The native outage test deliberately primes a pooled
 connection first: the original cleanup reproduced CONNECTION_FORCED after broker
 restart, and the corrected cleanup passes without swallowing that error.
+
+
+## Scheduled shop purchase boundary on main
+
+`test_shop_runtime.py` drives native Beat, RabbitMQ and a separate I/O prefork
+worker through private menu and wallet replies. `test_shop_purchase_runtime.py`
+drives a confirmed paid product, repeats its callback, waits for actual service
+provisioning, retrieves the private subscription through the bot response and
+connects a real Xray client through the issued native agent/core. Funds in this
+purchase test are deliberately added through the existing owner wallet API;
+Telegram payment intake and settlement notifications are not established by it.
+Telegram itself is the controlled external HTTP double; persistence, worker,
+scheduler, agent, Xray and client are not mocked. These tests do not establish
+live Telegram use, fresh-server installation, restart reconciliation or a new
+release package. CI discovers these tests in the normal backend job.
+
+The shop component cases cover private identity/customer binding, cross-customer
+confirmation/order rejection, expired/changed offers, concurrent confirmation
+financial effects, pause between claim and execution/send, rate-limit retry,
+uncertain sends, and late senders after lease expiry. Unknown send outcomes are
+not treated as proof of failure or exactly-once Telegram delivery.
