@@ -42,6 +42,8 @@ export async function fundNativeInvoice(page, base, customerId) {
   await expect(page.getByTestId("payment-revision")).toHaveText("2");
   await page.getByTestId("invoice-status-filter").selectOption("review");
   await page.getByTestId("invoice-picker").getByRole("button", { name: new RegExp(invoice.id) }).click();
+  await page.goto(`${base}/invoices?invoice_id=${encodeURIComponent(invoice.id)}`);
+  await expect(page.getByTestId("invoice-detail").getByRole("heading", { name: invoice.id, exact: true })).toBeVisible();
   await expect(page.getByTestId("invoice-customer")).toHaveText("Browser customer");
   await expect(page.getByTestId("invoice-destination")).toHaveText("TEST-ACCOUNT-ORIGINAL");
   await page.getByTestId("receipt-picker").getByRole("button", { name: /TEST-BROWSER-TRANSFER/ }).click();

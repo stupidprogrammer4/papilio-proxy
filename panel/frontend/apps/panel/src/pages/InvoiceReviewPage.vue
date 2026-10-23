@@ -1,14 +1,19 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { useRoute } from "vue-router";
 import { request, query, type ManualInvoicePage, type ManualInvoiceState } from "@papilio/api";
 import ManagedRecordPicker from "../components/ManagedRecordPicker.vue";
 import ManualPaymentSettings from "../components/ManualPaymentSettings.vue";
 import ManualInvoiceDetail from "../components/ManualInvoiceDetail.vue";
 
 const { t } = useI18n();
+const route = useRoute();
 const invoices = ref<ManualInvoicePage>({ items: [], count: 0, page: 1, page_size: 20 });
 const selectedId = ref(""); const status = ref<ManualInvoiceState | "">("review");
+watch(() => route.query.invoice_id, (value) => {
+  selectedId.value = typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) ? value : "";
+}, { immediate: true });
 const busy = ref(false); const error = ref("");
 const lifetime = new AbortController();
 let currentSearch = { q: "", page: 1, page_size: 20 };
