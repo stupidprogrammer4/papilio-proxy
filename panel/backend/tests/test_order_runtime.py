@@ -17,6 +17,7 @@ from papilio_panel.config.celery import app
 from papilio_panel.modules.cores.models import XrayCore
 from papilio_panel.modules.nodes.domain import XrayApply
 from papilio_panel.modules.orders.models import Order
+from papilio_panel.modules.payments.models import Invoice, PaymentDecision
 from papilio_panel.modules.services.models import ServiceAccount, ServiceOutbox, XrayService
 from papilio_panel.modules.wallets.models import JournalEntry, Wallet
 
@@ -80,17 +81,26 @@ def test_native_purchase_outbox_recovers_and_delivers_the_paid_contract(
     assert owner.post(wallet_path, {"currency": "IRR"}, format="json").status_code == 201
     assert (
         owner.post(
-            wallet_path + "/entries",
+            "/api/v1/payment-settings",
             {
-                "request_key": str(uuid4()),
-                "kind": "credit",
-                "amount_minor": "2500",
-                "reason": "Available purchase funds",
+                "recipient": "Controlled receiving account",
+                "destination": "TEST-ACCOUNT",
             },
             format="json",
         ).status_code
         == 201
     )
+    invoice_response = owner.post(
+        "/api/v1/invoices",
+        {
+            "request_key": str(uuid4()),
+            "customer_id": customer["id"],
+            "base_amount_minor": "2500",
+        },
+        format="json",
+    )
+    assert invoice_response.status_code == 201
+    invoice_id = invoice_response.json()["id"]
     values = {
         "request_key": str(uuid4()),
         "customer_id": customer["id"],
@@ -105,11 +115,33 @@ def test_native_purchase_outbox_recovers_and_delivers_the_paid_contract(
         timeout=30,
     )
     try:
+        receipt_response = owner.post(
+            f"/api/v1/invoices/{invoice_id}/receipts",
+            {
+                "request_key": str(uuid4()),
+                "reference": "CONTROLLED-NATIVE-PAYMENT",
+            },
+            format="multipart",
+        )
+        assert receipt_response.status_code == 201
+        current_invoice = owner.get(f"/api/v1/invoices/{invoice_id}").json()
+        approval = {
+            "request_key": str(uuid4()),
+            "expected_revision": current_invoice["revision"],
+            "action": "approve",
+            "reason": "Controlled account-statement confirmation.",
+            "receipt_id": receipt_response.json()["id"],
+        }
+        payment_root = f"/api/v1/invoices/{invoice_id}/decisions"
+        assert owner.post(payment_root, approval, format="json").status_code == 201
+        assert owner.post(payment_root, approval, format="json").status_code == 200
         made = owner.post("/api/v1/orders", values, format="json")
         assert made.status_code == 201
         order = made.json()
         assert owner.post("/api/v1/orders", values, format="json").status_code == 200
         connection.close()
+        assert Invoice.objects.get(pk=invoice_id).status == "settled"
+        assert PaymentDecision.objects.filter(invoice_id=invoice_id).count() == 1
         assert Order.objects.get(pk=order["id"]).status == "purchased"
         service = ServiceAccount.objects.get(pk=order["service_id"])
         assert service.status == "queued" and service.attempts == 0
