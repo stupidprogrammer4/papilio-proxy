@@ -1,11 +1,19 @@
 """Common service state with separate Xray credentials and inbound binding."""
 
 import uuid
+from datetime import datetime, timedelta
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 from papilio_panel.shared.operations import OperationStatus
+
+from .synchronization_contracts import INITIAL_SYNCHRONIZATION_SECONDS
+
+
+def initial_synchronization_due() -> datetime:
+    return timezone.now() + timedelta(seconds=INITIAL_SYNCHRONIZATION_SECONDS)
 
 
 class ServiceAccount(models.Model):
@@ -31,12 +39,28 @@ class ServiceAccount(models.Model):
     worker_pid = models.BigIntegerField(null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True)
+    sync_enabled = models.BooleanField(default=True)
+    sync_interval_seconds = models.IntegerField(default=INITIAL_SYNCHRONIZATION_SECONDS)
+    sync_revision = models.BigIntegerField(default=1)
+    sync_generation = models.BigIntegerField(default=1)
+    sync_status = models.CharField(max_length=16, default=OperationStatus.QUEUED)
+    sync_attempts = models.BigIntegerField(default=0)
+    sync_error_code = models.CharField(max_length=64, null=True)
+    sync_worker_pid = models.BigIntegerField(null=True)
+    sync_lease_token = models.UUIDField(null=True)
+    sync_lease_until = models.DateTimeField(null=True)
+    sync_due_at = models.DateTimeField(default=initial_synchronization_due)
+    sync_last_completed_at = models.DateTimeField(null=True)
+    sync_dispatched_at = models.DateTimeField(null=True)
 
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=["owner", "request_key"], name="services_owner_request")
         ]
-        indexes = [models.Index(fields=["status", "lease_until"])]
+        indexes = [
+            models.Index(fields=["status", "lease_until"]),
+            models.Index(fields=["sync_enabled", "sync_due_at"]),
+        ]
 
 
 class XrayService(models.Model):

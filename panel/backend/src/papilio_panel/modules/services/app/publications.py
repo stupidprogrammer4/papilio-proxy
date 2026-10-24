@@ -1,6 +1,10 @@
 """Deliver committed service work independently of the database transaction."""
 
 from ..interfaces import ServiceDeliverySchedule, ServicePublisher, ServiceStorage
+from ..synchronization_interfaces import (
+    ServiceSynchronizationPublisher,
+    ServiceSynchronizationStorage,
+)
 
 
 class ServicePublications:
@@ -21,3 +25,23 @@ class ServicePublications:
         if deliveries:
             self.publisher.publish(deliveries)
             self.storage.mark_dispatched(deliveries)
+
+
+class ServiceSynchronizationPublications:
+    def __init__(
+        self,
+        storage: ServiceSynchronizationStorage,
+        publisher: ServiceSynchronizationPublisher,
+        schedule: ServiceDeliverySchedule,
+    ) -> None:
+        self.storage = storage
+        self.publisher = publisher
+        self.schedule = schedule
+
+    def dispatch(self) -> None:
+        if not self.schedule.enabled():
+            return
+        deliveries = self.storage.pending()
+        if deliveries:
+            self.publisher.publish(deliveries)
+            self.storage.dispatched(deliveries)

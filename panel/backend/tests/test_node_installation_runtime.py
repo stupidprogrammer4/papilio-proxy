@@ -7,23 +7,46 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Iterator
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TextIO
 from uuid import uuid4
 
 import pytest
 from conftest import until
 from django.http import FileResponse
+from rest_framework.test import APIClient
 from test_node_runtime import listening, port, stop
 from test_nodes import node_input, owner_client
-from xray_client import subscription_client
+from xray_client import HttpTunnelProbe, subscription_client
 
 pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.runtime]
 ROOT = Path(__file__).resolve().parents[3]
 
 
-def test_prebuilt_node_preparation_and_managed_core_deliver_a_native_subscription(
-    runtime: None, tmp_path: Path
-) -> None:
+@dataclass
+class PreparedNativeService:
+    client: APIClient
+    node_id: str
+    service_url: str
+    uri: str = field(repr=False)
+    instance: Path
+    probe: HttpTunnelProbe
+    agent: subprocess.Popen
+    command: tuple[str, ...]
+    log: TextIO = field(repr=False)
+    agent_port: int
+    api_port: int
+
+    def restart(self) -> None:
+        stop(self.agent)
+        until(lambda: not listening(self.api_port) and not listening(self.agent_port), timeout=5)
+        self.agent = subprocess.Popen(self.command, stdout=self.log, stderr=subprocess.STDOUT)
+        until(lambda: listening(self.agent_port) and listening(self.api_port), timeout=10)
+
+
+@pytest.fixture
+def prepared_native_service(runtime: None, tmp_path: Path) -> Iterator[PreparedNativeService]:
     bundle = os.environ.get("PAPILIO_NODE_BUNDLE")
     if not bundle:
         pytest.skip(
@@ -92,22 +115,20 @@ def test_prebuilt_node_preparation_and_managed_core_deliver_a_native_subscriptio
         )
         assert verified.returncode == 0, verified.stderr
     with (tmp_path / "managed-agent.log").open("w") as log:
-        agent = subprocess.Popen(
-            [
-                sys.executable,
-                str(ROOT / "deployment/papilio.py"),
-                "--home",
-                str(home),
-                "--environment",
-                "test",
-                "node",
-                "run",
-                "--node",
-                node["id"],
-            ],
-            stdout=log,
-            stderr=subprocess.STDOUT,
+        agent_command = (
+            sys.executable,
+            str(ROOT / "deployment/papilio.py"),
+            "--home",
+            str(home),
+            "--environment",
+            "test",
+            "node",
+            "run",
+            "--node",
+            node["id"],
         )
+        agent = subprocess.Popen(agent_command, stdout=log, stderr=subprocess.STDOUT)
+        live = None
         try:
             until(lambda: listening(agent_port) and listening(api_port), timeout=10)
             check = client.post(
@@ -163,6 +184,26 @@ def test_prebuilt_node_preparation_and_managed_core_deliver_a_native_subscriptio
             uri = base64.b64decode(client.get(subscription.json()["url"]).content).decode().strip()
             with subscription_client(str(instance / "bin/xray"), tmp_path, uri) as probe:
                 assert probe.fetch() == b"papilio-actual-subscription-client"
+                live = PreparedNativeService(
+                    client,
+                    node["id"],
+                    service_url,
+                    uri,
+                    instance,
+                    probe,
+                    agent,
+                    agent_command,
+                    log,
+                    agent_port,
+                    api_port,
+                )
+                yield live
         finally:
-            stop(agent)
+            stop(live.agent if live is not None else agent)
     until(lambda: not listening(api_port) and not listening(agent_port), timeout=5)
+
+
+def test_prebuilt_node_preparation_and_managed_core_deliver_a_native_subscription(
+    prepared_native_service: PreparedNativeService,
+) -> None:
+    assert prepared_native_service.probe.fetch() == b"papilio-actual-subscription-client"

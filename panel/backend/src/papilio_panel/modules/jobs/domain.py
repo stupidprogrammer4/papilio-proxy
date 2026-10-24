@@ -106,6 +106,7 @@ class SystemStatus:
 class ScheduleKind(StrEnum):
     SHOP_OUTBOX = "shop-outbox"
     SERVICE_OUTBOX = "service-outbox"
+    SERVICE_SYNCHRONIZATION = "service-synchronization"
     NODE_OUTBOX = "node-outbox"
     IO_HEARTBEAT = "io-heartbeat"
     CPU_HEARTBEAT = "cpu-heartbeat"
