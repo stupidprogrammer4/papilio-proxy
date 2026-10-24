@@ -301,7 +301,7 @@
         "OWNER"
       ],
       "guide": "docs/user-guide.en.md",
-      "verified_scope": "Executable Go mTLS/core/client traffic plus owner-scoped Django onboarding, CPU-issued encrypted node keys and actual I/O-worker HTTPS identity/core-status checks. Panel registration, advanced creation fields, search and private download. Main adds verified native agent/Xray bundle preparation, preserved operator files and lifecycle CLI. Actual foreground prepared-node mTLS/worker/core/subscription-client execution passes; generated systemd unit syntax is checked. Existing-node editing/rotation, clean-host systemd execution, automatic local registration, restart reconciliation, native node backup/upgrade and new artifacts remain pending."
+      "verified_scope": "Executable Go mTLS/core/client traffic plus owner-scoped Django onboarding, CPU-issued encrypted node keys and actual I/O-worker HTTPS identity/core-status checks. Panel registration, advanced creation fields, search and private download. Main adds verified native agent/Xray bundle preparation, preserved operator files and lifecycle CLI. Actual foreground prepared-node mTLS/worker/core/subscription-client execution passes; generated systemd unit syntax is checked. Configurable Django synchronization restores accounts after actual managed and attached-core restarts, with unchanged order funds and credentials. Existing-node editing/rotation, clean-host systemd execution, automatic local registration, native node backup/upgrade and new artifacts remain pending."
     },
     {
       "id": "FLOW-XRAY",
@@ -324,14 +324,19 @@
       "acceptance": "A newly provisioned account connects with a real client and transfers traffic; revocation prevents new connections.",
       "evidence": [
         "node/agent/internal/xray/client_integration_test.go",
-        "node/agent/internal/xray/client_linux_test.go"
+        "node/agent/internal/xray/client_linux_test.go",
+        "panel/backend/tests/test_service_synchronization.py",
+        "panel/backend/tests/test_service_synchronization_work.py",
+        "panel/backend/tests/test_service_synchronization_migration.py",
+        "panel/backend/tests/test_service_synchronization_runtime.py",
+        "panel/backend/tests/test_service_browser.py"
       ],
       "sources": [
         "OWNER",
         "PG"
       ],
-      "guide": null,
-      "verified_scope": "Go executable -> mutual TLS HTTP -> actual local Xray gRPC -> actual client -> isolated HTTP origin. No Django provisioning or public VPN TLS transport yet. Removal denies new connections; existing-session termination is unverified."
+      "guide": "docs/user-guide.en.md#native-account-synchronization-on-main",
+      "verified_scope": "Native Django provisioning, signed subscription and account synchronization run through IO workers and the mTLS Go agent into actual Xray/client traffic. Per-service policy and shared database Beat controls persist across migration/restart. Managed and attached-core restarts, stale generations/leases, scopes, queued-work broker outage, paid identity/funds preservation and browser controls are exercised. Direct adapter removal denies new connections; full service disable/delete, quotas/expiry, public VPN TLS and existing-session termination remain pending."
     },
     {
       "id": "FLOW-SUB",

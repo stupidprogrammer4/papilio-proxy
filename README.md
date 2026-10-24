@@ -37,6 +37,11 @@ review and exactly-once wallet settlement are connected through the owner panel.
 package. [Service guide](docs/user-guide.en.md#persistent-service-prototype-on-main)
 and [wallet guide](docs/user-guide.en.md#customer-accounts-and-wallets-on-main).
 
+Native account synchronization on main restores saved users after managed or
+attached Xray restarts, with service and shared schedule controls in the panel.
+Actual client recovery and unchanged purchase funds are exercised. This is newer
+than the alpha.3 artifacts; see the [synchronization guide](docs/user-guide.en.md#native-account-synchronization-on-main).
+
 Bot worker/browser tests substitute the external Telegram API; live identity
 inspection is separate from real bot commerce.
 

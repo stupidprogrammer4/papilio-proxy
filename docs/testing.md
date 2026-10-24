@@ -308,3 +308,25 @@ service and an actual subscription client transfers traffic. Native
 `systemd-analyze verify` checks the generated unit; this does not establish service
 execution or boot recovery on a clean systemd host. New release workflow ARM and
 artifact acceptance must be observed separately. No normal host unit is installed.
+
+
+Service synchronization acceptance uses real PostgreSQL settings/claims and
+independent concurrent transactions, including an edit committed between lease
+reservation and its reread. Publication marks match explicit service/generation
+pairs in one native write; a late publisher cannot stamp a newer generation.
+A nonempty historical schema retains original credentials, nonce and provisioning
+state; policy and Beat edits survive migration initialization.
+
+Native runtime cases restart the managed agent/core and an independently managed
+core while its agent stays alive. Actual subscription traffic recovers. A paid
+service keeps its original order, exact IRR journal/balance and credentials. Other
+cases cover per-service/global pauses, stale messages, a real explicitly owned
+RabbitMQ outage before a claim and inactive-owner denial. Expired-lease recovery
+is a separate PostgreSQL fault-injection boundary. These cases do not claim
+interrupted in-flight RPC or public multi-server acceptance.
+
+The real browser edits both service policy and the shared schedule, reloads and
+checks retained values, exercises two-tab conflicts/drafts, both locales and staff
+denial. Browser test servers/previews have separate owned process groups; the
+Gunicorn control socket is in a private short temporary path. These fixtures
+never own the test runner's process group or another application's control socket.

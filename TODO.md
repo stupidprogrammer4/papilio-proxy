@@ -63,7 +63,8 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
   cover queue/API replay, expired-lease recovery, paused delivery, real broker
   outage/recovery, default snapshots and revoked actors before provisioning.
   This is an unlimited VLESS/TCP/no-TLS prototype; expiry/quotas,
-  mutable lifecycle, automatic core restart reconciliation and commerce remain.
+  mutable lifecycle and complete commerce remain. Configurable native account
+  synchronization after managed/attached core restarts is exercised on main.
 
 - Native Services page on main: owner-only core/inbound registration, service
   creation, searchable paginated selections and signed subscription retrieval
@@ -110,8 +111,9 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 - Native node installation candidate on main: separate verified agent/Xray
   bundles, private bootstrap preparation, preserved operator files and native
   lifecycle commands. Actual foreground CLI -> mTLS worker -> core -> subscription
-  client passes. Clean-host systemd, automatic local panel registration, restart
-  reconciliation, native node backup/upgrade and new published artifacts remain.
+  client passes. Configurable synchronization restores users after managed and
+  attached core restarts without financial replay. Clean-host systemd, automatic
+  local panel registration, native node backup/upgrade and new published artifacts remain.
 - Real RabbitMQ/Celery/Beat: separate worker queues, durable outbox, replay and
   recovery after broker outage.
 - Native database schedules: operator edits survive migrations and concurrent

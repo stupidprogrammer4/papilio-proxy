@@ -6,13 +6,14 @@ The Go module now builds a runnable agent exposing native Xray control over
 mutual TLS. It attaches to an existing local Xray API by default. On main, optional native
 process ownership can validate/start Xray and stop it with the agent. Django
 registration/mTLS bootstrap and connectivity checks are in alpha.2; automatic
-node installation, persisted user reconciliation and service provisioning are
-still being built. These components are not the completed MVP.
+node installation and complete service lifecycle are still being built. On main,
+Django provisions services and periodically synchronizes saved native accounts
+with owner-controlled timing and pauses. These components are not the completed MVP.
 
 Main now includes a [native node installation candidate](../../docs/user-guide.en.md#native-node-installation-candidate-on-main)
 with prebuilt agent/Xray bundles and private instance preparation. Its actual
 foreground CLI/mTLS/core/subscription-client path is exercised. Clean-host
-systemd execution and restart reconciliation remain open; alpha.3 does not ship
+systemd execution remains open; alpha.3 does not ship
 these node bundles or CLI controls.
 
 ## Verified adapter boundary
@@ -80,8 +81,8 @@ the control listener and returns failure. No private native errors are echoed.
 
 This option is newer than alpha.2. It does not install binaries, restart the
 service automatically or persist dynamic gRPC users. Users absent from the chosen
-native config do not survive a core restart; recovery from Django's persisted
-configuration remains pending. Only the selected child is managed; existing
+native config are restored by Django's configurable synchronization on main.
+Only the selected child is managed; existing
 external cores in attach mode are retained when the agent stops.
 
 Actual tests exercise both executable modes through mTLS, gRPC and client traffic,
@@ -127,8 +128,9 @@ observations from separate calls, not one atomic snapshot. Core restarts reset
 runtime state/counters. Persistent reconciliation, restart epochs, quota handling
 and financial accounting are not implemented by this adapter. Removing a user is
 verified for new connections; termination of existing sessions is unverified.
-Traffic tests use loopback VLESS. Public encrypted VPN transport configuration,
-Django authorization/provisioning and bot purchase/delivery remain pending.
+Traffic tests use loopback VLESS. Main includes scoped Django provisioning and a
+bot purchase/delivery prototype. Public encrypted VPN transport configuration and
+live Telegram acceptance remain pending.
 
 ## Development checks
 

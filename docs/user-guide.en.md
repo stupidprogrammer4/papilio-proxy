@@ -186,9 +186,9 @@ runs them in the foreground for development. Reinstalling with the same initial
 identity, options and bundle preserves modified operator configuration and keys.
 Changed initial options or binaries are rejected without replacement. Existing
 node editing/rotation, clean-host acceptance, automatic local panel registration,
-backups of native instance files and persisted user reconciliation remain open.
-A core restart can lose dynamically provisioned users until reconciliation is
-implemented; this is not a completed MVP.
+backups of native instance files remain open. Configurable Django synchronization
+now restores saved native accounts after managed or attached core restarts;
+see [synchronization](#native-account-synchronization-on-main). This is not a completed MVP.
 
 ## Operator bot setup on main (newer than alpha.1)
 
@@ -299,9 +299,8 @@ The status page's **Service provisioning delivery** schedule enables/disables
 new delivery and edits its interval without restart. Initialization preserves
 operator changes. Work already published or in flight can still finish.
 
-Current `status` describes the latest initial provisioning result, not continuous
-core health. Dynamic native users are not yet rebuilt automatically after core
-restart, although their service/credential records persist in PostgreSQL. Quota,
+Current `status` describes the latest initial provisioning result. Separate native
+account synchronization restores persisted credentials after core restarts. Quota,
 expiry, mutable lifecycle, additional subscription formats, billing
 and complete bot payment intake/notifications remain required before declaring the sales MVP complete. The
 published alpha.3 artifacts do not include this development API or service page.
@@ -567,3 +566,43 @@ Local
 integration uses a controlled external Telegram HTTP endpoint, actual
 PostgreSQL/RabbitMQ/Redis/Beat/workers and an actual agent/Xray/client; live
 Telegram conversations have not been exercised.
+
+
+## Native account synchronization on main
+
+Select a service in **Services** to edit **Native account synchronization**. The
+initial policy enables a check every 60seconds, first due 60seconds after the
+policy is seeded. You can pause checks for that service or change the interval
+without restarting the panel. Save schedules the current policy for delivery.
+Reload explicitly fetches current values; a revision conflict retains your draft.
+
+The **Native service synchronization** schedule in Overview controls the shared
+Beat scan. Its enable flag and timing persist across migrations/restarts. Pausing
+keeps existing native accounts in place. Checks already running may finish.
+Execution also depends on queue availability, leases and redelivery bounds; an
+interval specifies eligibility rather than a guaranteed completion deadline.
+
+The worker revalidates owner/core/inbound/node permissions and reapplies the
+service's original UUID, email and level through the existing mTLS control API.
+It restores accounts after managed or independently restarted attached cores,
+including an attached restart with the same live agent. It preserves the
+original provisioning result, credential, signed link, order and wallet journal.
+Only successfully provisioned services are eligible. Pausing synchronization
+leaves initial provisioning and the current network account unchanged.
+
+GET `/api/v1/services/{id}/synchronization` returns policy, settings revision,
+work generation and the last native observation. PUT accepts `enabled`,
+`interval_seconds` (positive 32-bit seconds) and `expected_revision` (decimal
+string). Readonly fields in a request are ignored. Foreign/mismatched services
+remain 404; staff lack owner access. Revision, generation and total attempts are
+decimal strings in JSON. Normal provisioning `status` and `attempts` retain their
+existing meaning; synchronization observations are separate.
+
+A failed check records its error and becomes due again at the selected interval.
+PostgreSQL retains due work during broker outage. Old generations and expired
+leases cannot acknowledge a newer attempt. Native delivery is bounded fan-out,
+with one task/control request per service; it is not constant-call-count batch
+core mutation. The existing outbox batch size, IO worker concurrency and task
+bounds apply. Global/per-service controls and exact limits are documented in
+[configuration](configuration.md). Quotas, expiry and the full mutable lifecycle
+remain separate work. Published alpha.3 does not include synchronization.

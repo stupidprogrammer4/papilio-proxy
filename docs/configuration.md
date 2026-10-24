@@ -287,5 +287,25 @@ can use a private home path. Newly created binary directories use 0755 even with
 a private umask, while credentials remain in a 0700 directory with 0600 files.
 `--prepare-only` creates files without touching systemd. Foreground `node run`
 supports the development acceptance path. Clean-host service execution, mutable
-panel settings, core-restart reconciliation and native node backup/upgrade remain
+panel settings and native node backup/upgrade remain
 open; see the [node guide](user-guide.en.md#native-node-installation-candidate-on-main).
+
+
+## Native account synchronization (services, main)
+
+| Control | Initial default | Scope / application |
+| --- | --- | --- |
+| Service `enabled` | true | Owner's service; pauses new synchronization claims and preserves the current native account. |
+| Service `interval_seconds` | 60 | Positive 32-bit seconds; first due 60seconds after seeding. A saved policy becomes eligible immediately. No panel restart. |
+| Managed `service-synchronization` schedule | enabled; existing outbox scan seed interval | Shared native database Beat scan; owner Overview enable/timing controls. |
+| Existing outbox batch/redelivery bounds | existing deployment values | Bounded native Celery fan-out and retained publication state. |
+| Service operation timeout | captured node transport bound | Existing hard/soft task limits and recovery lease; changing deployment/worker settings may require coordinated restart. |
+
+The API revision fences policy edits; a separate work generation/lease fences
+replays and old completions. A running core RPC can finish after policy changes.
+Only a successfully provisioned service is eligible, and the worker revalidates
+authoritative ownership and parent relationships. Source credentials/level and
+financial effects remain unchanged. A failed check becomes due at the selected
+interval; unavailable queues and lease/redelivery bounds can delay execution.
+Operator choices survive migrate/restart. This does not complete quota/expiry or
+service disable/delete lifecycle, nor environment-only controls for other modules.
