@@ -253,7 +253,7 @@ transaction, during HTTP. The native browser payment case follows the exact
 invoice and receipt IDs through required login in a review link, preselects the
 matching private attachment and uses the existing approval flow. A foreign login
 return destination is rejected; native resource permissions remain authoritative.
-Explicit failed/held-work recovery controls and live Telegram remain open gates.
+Live Telegram remains an open gate. Owner recovery is exercised separately below.
 
 The native service browser also opens each bot's shop editor. It creates two
 independently configured paused bots, saves every policy field and EN/FA messages,
@@ -278,3 +278,16 @@ real child exited (or became a zombie awaiting reaping), advances only that test
 work's lease deadline, restores the broker and observes native Beat/worker reclaim,
 one stored receipt and no wallet credit. The deadline advance is explicit fault
 injection; it does not establish elapsed production lease timing or live Telegram.
+
+Owner recovery tests use native scoped HTTP endpoints and PostgreSQL transactions
+for work/message search, histories, retry, cancellation, replay and revision
+conflicts. Independent concurrent transactions verify one recovery/audit for the
+same key and one winner for different keys at the same revision. Lease tests
+fence stale workers and senders. A nonempty migration preserves prior counters,
+ciphertext and operator choices. The native Beat/worker receipt test retries the
+original failed work, then verifies one credit after explicit owner approval.
+The real browser cancels failed work and resends a held reply through native
+workers; fresh DB reads check audits and unchanged reply ciphertext. Both locales
+are exercised. Telegram HTTP is a controlled external double throughout.
+The final scoped recovery/payment/browser matrix passed 52 tests in 132.86s;
+this is component/integration evidence, not live Telegram or release acceptance.

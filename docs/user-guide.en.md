@@ -495,8 +495,8 @@ leave an event waiting for native retries/outbox redelivery. Receipt connection
 failures, HTTP5xx and rate limits now retry using this bot's delay and attempt
 limit. Set attempts to 1 to disable automatic retries; reply and receipt budgets
 are counted separately. Missing/oversized files remain failed. No success acknowledgement
-or financial effect is committed before a download succeeds. Explicit recovery
-of failed/held work, automatic ready notifications, advanced service terms and
+or financial effect is committed before a download succeeds. Automatic ready
+notifications, advanced service terms and
 independent offline intake remain pending.
 
 Private replies are encrypted in PostgreSQL; queue payloads contain identifiers.
@@ -505,7 +505,22 @@ Per-bot `enabled` pauses shop processing; `delivery_enabled` separately pauses
 outgoing replies. Queued work remains persisted. Retries and uncertain sends
 never replay a financial operation. With the default `hold` policy, an uncertain
 Telegram outcome is held as `ambiguous`; explicit `retry` can duplicate a remote
-message. A panel control for resolving held messages remains pending. Local
+message.
+
+In **Bots → Shop recovery**, choose incoming work or outgoing messages, filter
+by state and search by record ID/error code. Selection stays available across
+searches and pages. Open a record to refresh its current state and review its
+paginated recovery history. Eligible records expose **Retry**, **Resend** or
+**Cancel**, with an optional private operator note. A stale revision requires
+refresh before another action. Active leases, completed work and sent messages
+cannot be replayed. Explicit retry resets that record's attempt budget while
+retaining its previous count in the audit; existing bot pauses still apply.
+Message resend uses the original stored reply without rerunning payment or
+purchase. Cancellation stops future processing, but cannot undo a remote send.
+A receipt retry keeps its original event/request identity; it does not approve
+payment or credit a wallet. Related invoices open through their known ID.
+
+Local
 integration uses a controlled external Telegram HTTP endpoint, actual
 PostgreSQL/RabbitMQ/Redis/Beat/workers and an actual agent/Xray/client; live
 Telegram conversations have not been exercised.

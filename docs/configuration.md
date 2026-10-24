@@ -234,8 +234,15 @@ but lack the owner-only `bot-shop:read/write` session grants and financial contr
 | Managed `shop-outbox` schedule | 1 second, enabled | Native database Beat enable/interval controls, seeded only when missing. No restart. |
 
 Templates and defaults are creation inputs, not automatic rewrites of existing
-operator settings. Explicit failed/ambiguous work recovery controls remain
-pending. Receipt connection failures, HTTP5xx and rate limits retry with the
+operator settings. In **Bots → Shop recovery**, the owner can inspect incoming
+work and outgoing message metadata, search their histories, retry eligible failed
+or held records, and cancel queued records or expired leases. Active leases and
+completed work/sent messages cannot be retried. Each action requires the current
+revision and an idempotency key, and records its actor, optional note and previous
+attempt count. Explicit retry starts a new attempt budget for that record; it
+does not change bot pauses, schedules or issued invoice terms. Resending an
+uncertain message can duplicate remote delivery. Cancellation cannot retract an
+already delivered message. Receipt connection failures, HTTP5xx and rate limits retry with the
 per-bot policy; missing files, invalid paths and byte limits remain terminal.
 The original inbox stays unprocessed during a queued retry, with no receipt or
 financial write before successful preparation. Telegram manual invoice/evidence/decision notification uses the existing
