@@ -10,7 +10,7 @@ from rest_framework.exceptions import ValidationError
 from papilio_panel.config.queues import QueueKind, queue_name
 from papilio_panel.shared.errors import ApplicationError, Conflict
 
-from .domain import ShopTaskName
+from .domain import ReceiptDownloadFailure, ShopTaskName
 from .providers import execution, publications, sending, settlements
 
 
@@ -37,18 +37,24 @@ def dispatch() -> None:
 
 
 @shared_task(
+    bind=True,
     name=ShopTaskName.PROCESS.value,
     queue=queue_name(QueueKind.IO),
     autoretry_for=(OperationalError,),
     retry_backoff=True,
-    max_retries=5,
+    retry_kwargs={"max_retries": 5},
+    max_retries=None,
 )
-def process(*, work_id: str) -> None:
+def process(self: Task, *, work_id: str) -> None:
     claim = execution.begin(UUID(work_id))
     if claim is not None:
         try:
             prepared = execution.prepare(claim)
             execution.process(claim, prepared)
+        except ReceiptDownloadFailure as error:
+            retry = execution.retry_receipt(claim, error)
+            if retry.retry_after_seconds is not None:
+                raise self.retry(countdown=retry.retry_after_seconds) from None
         except ApplicationError as error:
             execution.fail(claim, error.code, str(error))
         except ValidationError:

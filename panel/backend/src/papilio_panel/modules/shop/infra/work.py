@@ -1,16 +1,17 @@
 """Native set-based inbox discovery and per-event conditional processing leases."""
 
 import os
-from datetime import timedelta
+from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
 from django.conf import settings
-from django.db.models import Q
+from django.db import transaction
+from django.db.models import F, Q
 from django.utils import timezone
 
 from papilio_panel.shared.errors import Conflict, Missing
 
-from ..domain import WorkClaim, WorkDelivery, WorkRead, WorkState
+from ..domain import WorkClaim, WorkDelivery, WorkLease, WorkRead, WorkState
 from ..models import InboxWork, ShopConfiguration
 
 
@@ -36,17 +37,27 @@ class DjangoShopWorkStorage:
             row = InboxWork.objects.get(pk=work_id)
         except InboxWork.DoesNotExist as error:
             raise Missing("The bot conversation work was not found.") from error
-        return WorkRead(row.id, row.event_id, WorkState(row.status))
+        return WorkRead(row.id, row.event_id, WorkState(row.status), row.attempts, row.error_code)
 
-    def claim(self, work_id: UUID, lease_seconds: int) -> UUID | None:
+    @transaction.atomic
+    def claim(self, work_id: UUID, lease_seconds: int) -> WorkLease | None:
         now, token = timezone.now(), uuid4()
-        eligible = Q(status=WorkState.QUEUED) | Q(status=WorkState.RUNNING, lease_until__lt=now)
+        due = Q(retry_at__isnull=True) | Q(retry_at__lte=now)
+        eligible = (Q(status=WorkState.QUEUED) & due) | Q(
+            status=WorkState.RUNNING, lease_until__lt=now
+        )
         updated = InboxWork.objects.filter(eligible, pk=work_id).update(
             status=WorkState.RUNNING,
             lease_token=token,
             lease_until=now + timedelta(seconds=lease_seconds),
+            attempts=F("attempts") + 1,
+            retry_at=None,
+            worker_pid=os.getpid(),
         )
-        return token if updated else None
+        if not updated:
+            return None
+        claimed = InboxWork.objects.get(pk=work_id, lease_token=token)
+        return WorkLease(token, claimed.attempts)
 
     def complete(self, claim: WorkClaim, error_code: str | None = None) -> None:
         updated = InboxWork.objects.filter(
@@ -58,6 +69,7 @@ class DjangoShopWorkStorage:
             lease_token=None,
             lease_until=None,
             worker_pid=os.getpid(),
+            retry_at=None,
         )
         if updated != 1:
             raise Conflict("The bot conversation lease changed before its effects committed.")
@@ -65,15 +77,39 @@ class DjangoShopWorkStorage:
     def release(self, claim: WorkClaim) -> None:
         updated = InboxWork.objects.filter(
             pk=claim.id, event_id=claim.event.id, lease_token=claim.token, status=WorkState.RUNNING
-        ).update(status=WorkState.QUEUED, lease_token=None, lease_until=None, dispatched_at=None)
+        ).update(
+            status=WorkState.QUEUED,
+            lease_token=None,
+            lease_until=None,
+            dispatched_at=None,
+            retry_at=None,
+        )
         if updated != 1:
             raise Conflict("The bot conversation lease changed before it could be released.")
+
+    def defer(self, claim: WorkClaim, retry_at: datetime, error_code: str) -> None:
+        updated = InboxWork.objects.filter(
+            pk=claim.id, event_id=claim.event.id, lease_token=claim.token, status=WorkState.RUNNING
+        ).update(
+            status=WorkState.QUEUED,
+            retry_at=retry_at,
+            error_code=error_code,
+            lease_token=None,
+            lease_until=None,
+            dispatched_at=None,
+            worker_pid=os.getpid(),
+        )
+        if updated != 1:
+            raise Conflict("The receipt preparation lease changed before retry was recorded.")
 
     def pending(self) -> tuple[WorkDelivery, ...]:
         now = timezone.now()
         before = now - timedelta(seconds=settings.PAPILIO_OUTBOX_REDELIVERY_SECONDS)
         pending = Q(dispatched_at__isnull=True) | Q(dispatched_at__lt=before)
-        active = Q(status=WorkState.QUEUED) | Q(status=WorkState.RUNNING, lease_until__lt=now)
+        due = Q(retry_at__isnull=True) | Q(retry_at__lte=now)
+        active = (Q(status=WorkState.QUEUED) & due) | Q(
+            status=WorkState.RUNNING, lease_until__lt=now
+        )
         rows = (
             InboxWork.objects.filter(
                 pending,

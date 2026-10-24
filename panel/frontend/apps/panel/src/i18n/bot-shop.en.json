@@ -9,7 +9,7 @@
   "advanced": "Timing and delivery policy",
   "hold": "Hold for review",
   "retry": "Retry (a duplicate message is possible)",
-  "retryHelp": "If Telegram may have received a reply, retrying can duplicate the message. It does not repeat a wallet credit or purchase. Lease duration should cover the bot's HTTP request timeout.",
+  "retryHelp": "Retry delay and attempt limits apply separately to each outgoing reply and receipt preparation. Set attempts to 1 to disable automatic retries. An uncertain send can duplicate a message; it does not repeat a wallet credit or purchase. Lease duration should cover the bot's HTTP timeout.",
   "texts": "Messages and button labels",
   "textLocale": "Template language",
   "templateHelp": "Edit English and Persian separately. Use plain text and the placeholders below; write $$ for a literal dollar sign. Final rendered messages must fit Telegram's limit. Internal owner audit notes are not customer templates.",
@@ -23,7 +23,7 @@
     "page_size": "Products and purchases per page",
     "retry_seconds": "Retry delay (seconds)",
     "lease_seconds": "Work and send lease (seconds)",
-    "max_attempts": "Maximum delivery attempts",
+    "max_attempts": "Maximum reply or receipt preparation attempts",
     "confirmation_ttl_seconds": "Purchase confirmation lifetime (seconds)",
     "ambiguous_delivery": "Uncertain delivery outcome"
   },

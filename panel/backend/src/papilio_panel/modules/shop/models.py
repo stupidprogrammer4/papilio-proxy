@@ -55,6 +55,8 @@ class InboxWork(models.Model):
         "bots.TelegramInbox", on_delete=models.PROTECT, related_name="shop_work"
     )
     status = models.CharField(max_length=8, default=WorkState.QUEUED)
+    attempts = models.PositiveIntegerField(default=0)
+    retry_at = models.DateTimeField(null=True)
     lease_token = models.UUIDField(null=True)
     lease_until = models.DateTimeField(null=True)
     dispatched_at = models.DateTimeField(null=True)

@@ -24,8 +24,9 @@ pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.runtime]
 
 
 @pytest.mark.timeout(100)
+@pytest.mark.parametrize("download_failures", [1, 6])
 def test_bot_confirmation_worker_delivery_and_real_client(
-    native_control: tuple[XrayApply, int, str], tmp_path: Path
+    native_control: tuple[XrayApply, int, str], tmp_path: Path, download_failures: int
 ) -> None:
     node, data_port, binary = native_control
     owner = existing_owner_client()
@@ -81,6 +82,8 @@ def test_bot_confirmation_worker_delivery_and_real_client(
         definition = owner.get("/api/v1/bot-shop-defaults").json() | {
             "enabled": True,
             "locale": "en",
+            "retry_seconds": 1,
+            "max_attempts": download_failures + 1,
             "public_origin": "http://panel.example.invalid",
         }
         assert (
@@ -126,6 +129,7 @@ def test_bot_confirmation_worker_delivery_and_real_client(
             if str(invoice.id) in values["text"] and "Payment invoice:" in values["text"]
         )
         server.files["photos/bank-proof.jpg"] = b"controlled-bot-receipt"
+        server.file_statuses = [503] * download_failures
         server.push_photo(
             33,
             "bank-proof",
@@ -134,7 +138,7 @@ def test_bot_confirmation_worker_delivery_and_real_client(
             bot_id=identity,
             caption="Controlled transfer proof",
         )
-        until(lambda: Receipt.objects.filter(invoice=invoice).exists(), timeout=12)
+        until(lambda: Receipt.objects.filter(invoice=invoice).exists(), timeout=25)
         until(
             lambda: any(
                 str(invoice.id) in values["text"] and values["chat_id"] == 456789
@@ -143,6 +147,9 @@ def test_bot_confirmation_worker_delivery_and_real_client(
             timeout=12,
         )
         evidence = Receipt.objects.get(invoice=invoice)
+        receipt_work = InboxWork.objects.get(event__bot_id=bot["id"], event__update_id=33)
+        assert receipt_work.attempts == download_failures + 1 and receipt_work.status == "done"
+        assert server.file_calls == ["photos/bank-proof.jpg"] * (download_failures + 1)
         assert bytes(evidence.content) == b"controlled-bot-receipt"
         assert owner.get(wallet).json()["balance_minor"] == "0"
         root = f"/api/v1/invoices/{invoice.id}"

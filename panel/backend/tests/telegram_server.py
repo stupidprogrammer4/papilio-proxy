@@ -23,6 +23,7 @@ class TelegramServer:
         self.messages: list[tuple[int, dict[str, Any]]] = []
         self.files: dict[str, bytes] = {}
         self.file_calls: list[str] = []
+        self.file_statuses: list[int] = []
         self.download_observer: Callable[[], None] | None = None
 
     def push(
@@ -70,28 +71,26 @@ class TelegramServer:
         file_id: str,
         *,
         chat_id: int,
-        reply_to_message_id: int,
-        bot_id: int,
+        reply_to_message_id: int | None = None,
+        bot_id: int | None = None,
         caption: str = "",
     ) -> None:
+        message: dict[str, Any] = {
+            "message_id": identifier,
+            "chat": {"id": chat_id, "type": "private"},
+            "from": {"id": chat_id},
+            "photo": [{"file_id": file_id}],
+            "caption": caption,
+        }
+        if reply_to_message_id is not None:
+            assert bot_id is not None
+            message["reply_to_message"] = {
+                "message_id": reply_to_message_id,
+                "chat": {"id": chat_id, "type": "private"},
+                "from": {"id": bot_id, "is_bot": True},
+            }
         with self.lock:
-            self.pending.append(
-                {
-                    "update_id": identifier,
-                    "message": {
-                        "message_id": identifier,
-                        "chat": {"id": chat_id, "type": "private"},
-                        "from": {"id": chat_id},
-                        "reply_to_message": {
-                            "message_id": reply_to_message_id,
-                            "chat": {"id": chat_id, "type": "private"},
-                            "from": {"id": bot_id, "is_bot": True},
-                        },
-                        "photo": [{"file_id": file_id}],
-                        "caption": caption,
-                    },
-                }
-            )
+            self.pending.append({"update_id": identifier, "message": message})
 
     def hold(self) -> None:
         self.entered.clear()
@@ -170,7 +169,15 @@ class TelegramServer:
                 with state.lock:
                     state.file_calls.append(path)
                     content = state.files.get(path)
-                self.send_response(200 if content is not None else 404)
+                    status = (
+                        state.file_statuses.pop(0)
+                        if state.file_statuses
+                        else (200 if content is not None else 404)
+                    )
+                if status == 0:
+                    self.close_connection = True
+                    return
+                self.send_response(status)
                 self.send_header("Content-Type", "application/octet-stream")
                 self.end_headers()
                 self.wfile.write(content or b"")

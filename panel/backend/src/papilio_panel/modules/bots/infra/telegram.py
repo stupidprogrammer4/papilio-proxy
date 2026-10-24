@@ -269,6 +269,10 @@ class NativeTelegramGateway:
         try:
             client.request("GET", f"/file/bot{source.token}/{quote(path, safe='/')}")
             response = client.getresponse()
+            if response.status == 429:
+                raise TelegramTransportError("rate_limited")
+            if 500 <= response.status < 600:
+                raise TelegramTransportError("telegram_unavailable")
             if response.status != 200:
                 raise TelegramTransportError("file_unavailable")
             content = response.read(max_bytes + 1)

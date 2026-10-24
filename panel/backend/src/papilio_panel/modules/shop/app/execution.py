@@ -1,8 +1,10 @@
 """Process one durable verified conversation event with its replies atomically."""
 
+from datetime import timedelta
 from uuid import UUID
 
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import serializers
 
 from papilio_panel.modules.bots.interfaces import BotConversationCapability
@@ -11,10 +13,12 @@ from papilio_panel.shared.serializers import MoneyAmountField
 
 from ..domain import (
     PreparedReceipt,
+    ReceiptDownloadFailure,
     ReplyWrite,
     ShopCustomerContext,
     ShopTextContext,
     WorkClaim,
+    WorkRetryOutcome,
     WorkState,
 )
 from ..interfaces import (
@@ -29,6 +33,7 @@ from ..interfaces import (
     ShopWorkStorage,
 )
 from .presentation import reply
+from .receipt_policy import exhausted, retry_delay
 
 
 def is_pairing_command(text: str) -> bool:
@@ -77,15 +82,37 @@ class ShopExecution:
             or not event.bot.verified
         ):
             return None
-        token = self.storage.claim(
+        lease = self.storage.claim(
             row.id,
             max(settings.definition.lease_seconds, 3 * event.bot.runtime.http_timeout_seconds + 60),
         )
-        return WorkClaim(row.id, token, event, settings) if token is not None else None
+        if lease is None:
+            return None
+        claim = WorkClaim(row.id, lease.token, event, settings, lease.attempts)
+        if exhausted(row.error_code, claim.attempts, settings.definition):
+            self.fail(
+                claim, "receipt_attempt_limit", "The receipt preparation attempt limit was reached."
+            )
+            return None
+        return claim
 
     def prepare(self, claim: WorkClaim) -> PreparedReceipt | None:
         result = self.receipt_preparation.prepare(claim.event.id)
         return result
+
+    @transaction.atomic
+    def retry_receipt(self, claim: WorkClaim, error: ReceiptDownloadFailure) -> WorkRetryOutcome:
+        event = self.events.event(claim.event.id)
+        policy = self.control.read(event.bot.id, event.bot.owner_id).definition
+        if not policy.enabled or not event.bot.schedule.enabled or not self.schedule.enabled():
+            self.storage.release(claim)
+            return WorkRetryOutcome()
+        delay = retry_delay(error, claim.attempts, policy)
+        if delay is None:
+            self.fail(claim, error.transport_code, str(error))
+            return WorkRetryOutcome()
+        self.storage.defer(claim, timezone.now() + timedelta(seconds=delay), error.transport_code)
+        return WorkRetryOutcome(delay)
 
     @transaction.atomic
     def process(self, claim: WorkClaim, receipt: PreparedReceipt | None = None) -> None:

@@ -2,9 +2,8 @@
 
 from papilio_panel.modules.bots.interfaces import BotConversationCapability
 from papilio_panel.modules.payments.domain import ReceiptContent
-from papilio_panel.shared.errors import Conflict
 
-from ..domain import PreparedReceipt
+from ..domain import PreparedReceipt, ReceiptDownloadFailure
 from ..interfaces import ShopCustomerQueryCapability, ShopInvoiceQueryCapability
 
 
@@ -37,9 +36,8 @@ class ShopReceiptPreparation:
         if message.file is not None:
             downloaded = self.events.file(event.id, target.max_bytes)
             if downloaded.content is None:
-                raise Conflict(
-                    "The receipt could not be downloaded: "
-                    + (downloaded.error_code or "unknown_error")
+                raise ReceiptDownloadFailure(
+                    downloaded.error_code or "unknown_error", downloaded.retry_after_seconds
                 )
             content = ReceiptContent(
                 downloaded.content.filename, downloaded.content.media_type, downloaded.content.data

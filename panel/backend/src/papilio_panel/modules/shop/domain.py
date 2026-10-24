@@ -9,6 +9,16 @@ from uuid import UUID
 from papilio_panel.modules.bots.domain import BotEventRead, TelegramReply
 from papilio_panel.modules.customers.domain import CustomerRead
 from papilio_panel.modules.payments.domain import ReceiptContent
+from papilio_panel.shared.errors import Conflict
+
+
+class ReceiptDownloadFailure(Conflict):
+    """Safe transport outcome retained for the native task's retry decision."""
+
+    def __init__(self, transport_code: str, retry_after_seconds: int | None = None) -> None:
+        super().__init__("The receipt could not be downloaded: " + transport_code)
+        self.transport_code = transport_code
+        self.retry_after_seconds = retry_after_seconds
 
 
 class ShopTaskName(StrEnum):
@@ -213,6 +223,19 @@ class WorkRead:
     id: UUID
     event_id: int
     status: WorkState
+    attempts: int
+    error_code: str | None
+
+
+@dataclass(frozen=True)
+class WorkLease:
+    token: UUID
+    attempts: int
+
+
+@dataclass(frozen=True)
+class WorkRetryOutcome:
+    retry_after_seconds: int | None = None
 
 
 @dataclass(frozen=True)
@@ -248,6 +271,7 @@ class WorkClaim:
     token: UUID
     event: BotEventRead
     settings: ShopSettingsRead
+    attempts: int
 
 
 @dataclass(frozen=True)
