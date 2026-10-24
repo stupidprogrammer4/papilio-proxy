@@ -45,6 +45,13 @@ than the alpha.3 artifacts; see the [synchronization guide](docs/user-guide.en.m
 Bot worker/browser tests substitute the external Telegram API; live identity
 inspection is separate from real bot commerce.
 
+Local node initialization on main now connects first-owner setup to durable
+credential issuance, private bootstrap publication and a real agent/core check.
+The panel exposes initial advanced choices and preparation/retry controls. A
+native executable test reaches actual subscription-client traffic. Automatic
+installer activation and local-volume recovery are still pending; this is absent
+from alpha.3. [Local node guide](docs/user-guide.en.md#local-node-initialization-on-main).
+
 The connected shop API prototype on main now exercises private catalogue, wallet,
 replay-safe purchase confirmations and subscription delivery through an actual
 Xray client. Manual bot invoices/photo receipts and durable owner-decision

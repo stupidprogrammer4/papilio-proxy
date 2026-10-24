@@ -16,6 +16,14 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 
 ## Current component evidence
 
+- Local node initialization on main: atomic first-owner/node/core/inbound and
+  durable work, native CPU/IO/Beat private publication and actual Go/Xray/client
+  traffic are exercised. EN/FA setup and scoped preparation/retry controls have a
+  separate controlled-HTTP browser check. PostgreSQL claim races, replay, pause,
+  expired leases and nonempty upgrade are exercised. Automatic installer
+  activation, worker volume wiring and local-volume recovery remain open; no
+  new installable version is claimed. See [local node guide](docs/user-guide.en.md#local-node-initialization-on-main).
+
 - Installer on main: explicit HTTP/HTTPS selection in every environment; a public
   HTTP browser fixture exercises production setup/login, actual worker operations,
   nodes/bot onboarding and recovery. Native ready-image build/load and browser/recovery are locally exercised; the alpha.3

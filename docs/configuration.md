@@ -335,3 +335,28 @@ instance and publish it atomically. These runtime/build controls do not establis
 completed panel controls or automatic local installation; that wiring remains
 open. The release image build contains its own toolchain, so source builds do not
 require a Go installation on the host. Ready-image installs perform no Go build.
+
+## Bundled local node preparation (main)
+
+| Setting | Initial value | Owner / application |
+| --- | --- | --- |
+| Local preparation enabled | true | Installation owner; setup and Overview panel. Pauses claims, preserves work and running services. No restart. |
+| Retry delay | 1 second | Owner; positive 32-bit seconds. Eligibility after a failed attempt, not a completion deadline. No restart. |
+| Attempts per request | 5 | Owner; positive 32-bit count. Explicit new preparation creates a new budget; old work is retained. No restart. |
+| `local-node-outbox` | enabled; outbox scan seed interval | Shared native DB Beat schedule, owner Overview enable/timing controls. Seed missing only. |
+| Initial node/core/inbound and certificate/runtime values | Existing node defaults plus installation host/port | First-owner advanced panel choices; immutable registration snapshot. Existing runtime files are not overwritten by retries/restarts. |
+| `PAPILIO_LOCAL_NODE_AVAILABLE` | false | Physical installation capability; coordinated runtime/image/volume setup required. Not a substitute for the owner's preparation flag. |
+| `PAPILIO_LOCAL_NODE_ENDPOINT` | `https://local-node.papilio.internal:9443` | Initial private endpoint; must match network, issued TLS hostname and agent listener. |
+| `PAPILIO_LOCAL_NODE_PUBLIC_HOST` / `PUBLIC_PORT` | localhost / 8444 | Initial subscription endpoint; must match external routing and host port mapping. |
+| `PAPILIO_LOCAL_NODE_BIND_ADDRESS` / `BIND_PORT` | 0.0.0.0 / 8443 | Initial managed-core listener; changes require coordinated container port mapping. |
+| `PAPILIO_LOCAL_NODE_STATE_ROOT` | `/var/lib/papilio/local-node` | Private IO-worker publication root shared with the agent. Changes require coordinated volume mounts/restart. |
+| `PAPILIO_LOCAL_XRAY_BINARY` | `/usr/local/bin/xray` | Installed agent-side executable path seeded once; coordinated runtime configuration/restart required to change an existing file. |
+
+Setup commits metadata and pending local preparation with the owner. Certificate
+issuance runs on the native CPU queue; local file publication/check runs on IO.
+Waiting for initial credentials does not consume preparation attempts. Files are
+published as a complete private `instance/` directory; recognized existing files
+are preserved. An interrupted staging directory can remain private and unused
+until operator cleanup; atomic rename does not establish power-loss durability.
+The runtime volume is not yet part of automatic installer recovery. Do not enable
+this physical capability on an installation without its matching native runtime.

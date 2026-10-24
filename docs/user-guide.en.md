@@ -609,3 +609,40 @@ core mutation. The existing outbox batch size, IO worker concurrency and task
 bounds apply. Global/per-service controls and exact limits are documented in
 [configuration](configuration.md). Quotas, expiry and the full mutable lifecycle
 remain separate work. Published alpha.3 does not include synchronization.
+
+## Local node initialization on main
+
+When a local runtime is configured, **Set up Papilio** offers **Set up Xray on
+this server**. Simple setup uses the installation's initial host/port and node
+settings. Advanced settings expose the node, core, inbound, runtime, certificate
+and preparation choices. Unchecking the option creates only the owner. Source
+installations without a configured local runtime retain owner-only setup.
+
+Owner creation, node/core/inbound metadata and pending preparation are committed
+in one PostgreSQL transaction. CPU workers issue credentials; IO workers publish
+one private runtime directory and check the actual mTLS agent/core connection.
+The setup HTTP response does not wait for installation or external HTTP. An
+invalid choice rolls back owner setup and leaves the setup token usable.
+
+In **Overview → This server's node**, refresh the operation, pause preparation,
+change the retry delay or maximum attempts, and request preparation again. Policy
+changes require the current revision and apply without restarting. A new request
+supersedes earlier preparation; repeating its request key returns the same work.
+The shared **Local node preparation** schedule controls Beat delivery and its
+interval. Pausing preserves work and existing services. Already-started work may
+finish; a superseded/expired lease cannot acknowledge replacement work.
+
+Initial files are seeded once with private permissions. Retries preserve existing
+operator configuration and credentials; mismatched identities, symlinked files
+and unrecognized runtime directories require operator review. Listen addresses,
+binary paths, private endpoint and published ports must match the native runtime
+installation. Editing an initial database value does not reconfigure Docker or
+rewrite an existing runtime. A successful operation proves the private agent/core
+observation; each service still needs successful provisioning and client access.
+
+Current evidence covers first-owner API → real CPU/IO/Beat → private files → Go
+agent/managed Xray → a working subscription client, plus PostgreSQL replay,
+concurrent claims, pause and expired-lease fencing. UI forms have a separate
+controlled-HTTP browser check. The shipped Compose profile remains opt-in: shared
+worker volume wiring, automatic installer activation and local-volume recovery
+are still pending. Alpha.3 public artifacts do not include this development work.
