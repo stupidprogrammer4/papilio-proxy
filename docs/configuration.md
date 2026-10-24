@@ -261,3 +261,31 @@ Owner audit reasons remain inside the permission-scoped panel history. Rejection
 uses the configurable invoice template and its actual state; the factory invoice
 message sends payment instructions separately to fit Telegram's UTF-16 limit.
 Existing custom templates and previously issued terms are never rewritten.
+
+## Native node installation candidate (main)
+
+The `node install` CLI seeds a private native instance from the selected panel
+bootstrap and a verified host-architecture bundle. These installer controls are
+not evidence of completed panel editors for existing node/core settings.
+
+| Input | Initial default | Owner / application |
+| --- | --- | --- |
+| Global `--environment` | sandbox in the source CLI; installed command retains its selected environment | Separate node directories and systemd unit names for dev/test/sandbox/production. |
+| `node --node-home` | `--home/nodes` | Native instance root; node UUID determines the instance directory. |
+| `--inbound-tag` / `--listen` / `--port` | vless / 0.0.0.0 / 8443 | Initial native VLESS/TCP inbound; register matching facts in the panel. |
+| `--restart-seconds` | 3 | Native systemd failure restart delay; unit changes require reload/restart. |
+| `--bootstrap-byte-limit` / `--bundle-byte-limit` | 1048576 / 536870912 bytes | Limits on private bootstrap and native bundle inputs/downloads. |
+| Bootstrap runtime fields | Issued node values | Existing per-node agent timeouts, addresses and bounds; require agent restart. Native seed validation uses the issued shutdown timeout. |
+
+The core API must remain on a literal loopback address. Initial credentials,
+configuration and metadata are private files; native binaries and license notices
+have distinct permissions. Reinstall preserves operator edits when initial inputs
+are unchanged and rejects a different bundle identity without replacing files.
+Service binaries need traversable parent directories outside protected home
+directories. Existing parent permissions are preserved; foreground development
+can use a private home path. Newly created binary directories use 0755 even with
+a private umask, while credentials remain in a 0700 directory with 0600 files.
+`--prepare-only` creates files without touching systemd. Foreground `node run`
+supports the development acceptance path. Clean-host service execution, mutable
+panel settings, core-restart reconciliation and native node backup/upgrade remain
+open; see the [node guide](user-guide.en.md#native-node-installation-candidate-on-main).

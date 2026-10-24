@@ -23,6 +23,12 @@ Primary upstream license locations:
 - [Google UUID](https://github.com/google/uuid/blob/master/LICENSE)
 - [Go synchronization extensions](https://cs.opensource.google/go/x/sync/+/master:LICENSE)
 
+The native node candidate bundles the original Xray release license, Papilio's
+MIT license and license/notice texts from the modules recorded in the actual
+agent and core Go build information, plus Go's standard library notices. The
+release builder resolves those exact dependency versions through native Go
+tooling and fails if a dependency root license is missing.
+
 Reference panel/bot repositories are feature references. Their implementation
 code is not bundled. Future Xray/Hysteria2/WireGuard/OpenVPN artifacts and their
 dependencies must retain their original licenses when distributed.

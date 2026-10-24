@@ -107,6 +107,11 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
   and the real browser/worker path. Independent offline intake remains incomplete.
   Alpha.3 artifacts do not include this prototype.
 - Real PostgreSQL: atomic owner setup, session/CSRF, ownership and revocation.
+- Native node installation candidate on main: separate verified agent/Xray
+  bundles, private bootstrap preparation, preserved operator files and native
+  lifecycle commands. Actual foreground CLI -> mTLS worker -> core -> subscription
+  client passes. Clean-host systemd, automatic local panel registration, restart
+  reconciliation, native node backup/upgrade and new published artifacts remain.
 - Real RabbitMQ/Celery/Beat: separate worker queues, durable outbox, replay and
   recovery after broker outage.
 - Native database schedules: operator edits survive migrations and concurrent

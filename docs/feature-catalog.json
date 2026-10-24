@@ -301,7 +301,7 @@
         "OWNER"
       ],
       "guide": "docs/user-guide.en.md",
-      "verified_scope": "Executable Go mTLS/core/client traffic plus owner-scoped Django onboarding, CPU-issued encrypted node keys and actual I/O-worker HTTPS identity/core-status checks. Panel registration, advanced creation fields, search and private download. Existing-node editing/rotation, automatic installation, process supervision and subscription provisioning remain pending."
+      "verified_scope": "Executable Go mTLS/core/client traffic plus owner-scoped Django onboarding, CPU-issued encrypted node keys and actual I/O-worker HTTPS identity/core-status checks. Panel registration, advanced creation fields, search and private download. Main adds verified native agent/Xray bundle preparation, preserved operator files and lifecycle CLI. Actual foreground prepared-node mTLS/worker/core/subscription-client execution passes; generated systemd unit syntax is checked. Existing-node editing/rotation, clean-host systemd execution, automatic local registration, restart reconciliation, native node backup/upgrade and new artifacts remain pending."
     },
     {
       "id": "FLOW-XRAY",

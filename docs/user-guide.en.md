@@ -147,6 +147,49 @@ apply when the agent starts. Editing an existing node, certificate renewal/rotat
 and automatic installation remain pending. Retain the installation secret key
 with backups: it is needed to decrypt node keys after restore.
 
+### Native node installation candidate on main
+
+Main builds a separate `papilio-node-VERSION-linux-amd64.tar.gz` or `linux-arm64`
+bundle containing the agent, checksum-verified official Xray 26.3.27 and their
+license notices. Published alpha.3 has no node bundle or `node` command. Native
+preparation and actual panel/Beat/worker/mTLS/Xray/client execution are exercised;
+clean-host systemd installation and ARM execution of the new workflow remain
+unverified.
+
+From the current source checkout, with the downloaded private bootstrap:
+
+```sh
+sudo python3 deployment/papilio.py --environment production node install \
+  --bootstrap /private/papilio-node-NODE_ID.zip \
+  --bundle /private/papilio-node-VERSION-linux-amd64.tar.gz \
+  --inbound-tag vless --port 8443
+```
+
+The bundle must match the host architecture. Once a release includes native
+bundles, omitting `--bundle` downloads the matching source release's bundle and
+verifies its published SHA-256. Go and a compiler are not needed on the target.
+Native service installation requires root and systemd. It checks listener ports
+before creating an instance, validates the certificate/key pair and native Xray
+seed, then uses `DynamicUser` and `LoadCredential` for private credentials.
+Service start is not proof of connectivity; run **Check connection** in the panel.
+
+The default root is `/opt/papilio/nodes/ENVIRONMENT/NODE_ID`; `--home` selects the
+Papilio home and `node --node-home PATH` selects a separate node home. Environments
+have independent files and distinct units. Register the same inbound tag, public
+host and port through the panel's core/inbound controls before creating services.
+This seed is the initial unlimited VLESS/TCP mode without TLS.
+
+`node start|stop|restart|status --node NODE_ID` and
+`node logs --node NODE_ID [--follow]` operate on that native unit. `--prepare-only`
+creates validated files without installing a service; `node run --node NODE_ID`
+runs them in the foreground for development. Reinstalling with the same initial
+identity, options and bundle preserves modified operator configuration and keys.
+Changed initial options or binaries are rejected without replacement. Existing
+node editing/rotation, clean-host acceptance, automatic local panel registration,
+backups of native instance files and persisted user reconciliation remain open.
+A core restart can lose dynamically provisioned users until reconciliation is
+implemented; this is not a completed MVP.
+
 ## Operator bot setup on main (newer than alpha.1)
 
 1. Create your Telegram bot with BotFather, then open **Telegram bots** in Papilio.

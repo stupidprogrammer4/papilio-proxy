@@ -291,3 +291,20 @@ workers; fresh DB reads check audits and unchanged reply ciphertext. Both locale
 are exercised. Telegram HTTP is a controlled external double throughout.
 The final scoped recovery/payment/browser matrix passed 52 tests in 132.86s;
 this is component/integration evidence, not live Telegram or release acceptance.
+
+Native node installation tests validate archive identities, ELF architecture,
+certificate/key loading, actual native Xray configuration and preservation of
+operator files on repeated preparation. HTTP download tests use an external local
+server and check SHA-256, bounded transfer, verified cache reuse and failed-file
+cleanup. Release tests require both node architectures before packaging and bind
+their checksums to the selected source version; fixture ELF bytes establish
+metadata validation only.
+
+`test_node_installation_runtime.py` uses the actual candidate bundle and private
+credentials issued by native Django/Celery workers. The real CLI prepares files,
+repeats preparation without resetting them, and starts the actual managed Go
+agent/Xray in foreground mode. A worker checks live mTLS identity, provisions a
+service and an actual subscription client transfers traffic. Native
+`systemd-analyze verify` checks the generated unit; this does not establish service
+execution or boot recovery on a clean systemd host. New release workflow ARM and
+artifact acceptance must be observed separately. No normal host unit is installed.

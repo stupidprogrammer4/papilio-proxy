@@ -9,6 +9,12 @@ registration/mTLS bootstrap and connectivity checks are in alpha.2; automatic
 node installation, persisted user reconciliation and service provisioning are
 still being built. These components are not the completed MVP.
 
+Main now includes a [native node installation candidate](../../docs/user-guide.en.md#native-node-installation-candidate-on-main)
+with prebuilt agent/Xray bundles and private instance preparation. Its actual
+foreground CLI/mTLS/core/subscription-client path is exercised. Clean-host
+systemd execution and restart reconciliation remain open; alpha.3 does not ship
+these node bundles or CLI controls.
+
 ## Verified adapter boundary
 
 - Official Xray v26.3.27, the stable release selected for this first baseline.
