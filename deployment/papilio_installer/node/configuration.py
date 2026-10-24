@@ -134,8 +134,10 @@ def unit_path(path: Path) -> str:
 def service_unit(root: Path, bootstrap: Bootstrap, settings: NodeInstallSettings) -> str:
     settings.validate()
     folder = unit_path(root)
+    # LoadCredential parses a literal ID:path; ExecStart has separate quoting rules.
+    credential_folder = str(root).replace("%", "%%")
     credentials = "\n".join(
-        f'LoadCredential="{name}:{folder}/credentials/{name}"'
+        f"LoadCredential={name}:{credential_folder}/credentials/{name}"
         for name in sorted(BOOTSTRAP_FILES | {"xray.json"})
     )
     stop_seconds = 3 * bootstrap.runtime["shutdown_timeout_seconds"] + 5

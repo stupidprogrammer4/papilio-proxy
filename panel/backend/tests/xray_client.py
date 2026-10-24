@@ -31,16 +31,19 @@ class TestOrigin(BaseHTTPRequestHandler):
 class HttpTunnelProbe:
     proxy_port: int
     origin_port: int
+    origin_host: str = "127.0.0.1"
 
     def fetch(self) -> bytes:
-        request = urllib.request.Request(f"http://127.0.0.1:{self.origin_port}/")
+        request = urllib.request.Request(f"http://{self.origin_host}:{self.origin_port}/")
         request.set_proxy(f"127.0.0.1:{self.proxy_port}", "http")
         with urllib.request.urlopen(request, timeout=3) as response:
             return response.read()
 
 
 @contextmanager
-def subscription_client(binary: str, directory: Path, uri: str) -> Iterator[HttpTunnelProbe]:
+def subscription_client(
+    binary: str, directory: Path, uri: str, *, origin_host: str = "127.0.0.1"
+) -> Iterator[HttpTunnelProbe]:
     endpoint, proxy_port = urlsplit(uri), port()
     assert endpoint.scheme == "vless" and endpoint.username is not None
     configuration = {
@@ -73,7 +76,7 @@ def subscription_client(binary: str, directory: Path, uri: str) -> Iterator[Http
         )
         try:
             until(lambda: listening(proxy_port), timeout=10)
-            yield HttpTunnelProbe(proxy_port, origin.server_port)
+            yield HttpTunnelProbe(proxy_port, origin.server_port, origin_host)
         finally:
             stop(process)
             origin.shutdown()

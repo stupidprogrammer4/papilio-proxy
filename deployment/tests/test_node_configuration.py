@@ -103,7 +103,7 @@ def test_service_uses_native_private_credentials_and_bounded_shutdown(tmp_path: 
     settings = NodeInstallSettings(environment="sandbox", restart_seconds=7)
     unit = service_unit(tmp_path / "node instance", supplied, settings)
     assert "DynamicUser=yes" in unit
-    assert 'LoadCredential="server.key:' in unit
+    assert "LoadCredential=server.key:" in unit
     assert "-config %d/agent.json" in unit
     assert "Restart=on-failure" in unit and "RestartSec=7s" in unit
     assert "TimeoutStopSec=65s" in unit
@@ -116,3 +116,17 @@ def test_service_uses_native_private_credentials_and_bounded_shutdown(tmp_path: 
             replace(supplied, runtime=supplied.runtime | {"xray_api_address": "0.0.0.0:10085"}),
             settings,
         )
+
+
+@pytest.mark.parametrize(
+    "name", ["node instance", "node % instance", 'node "instance"', r"node \ instance"]
+)
+def test_credential_sources_preserve_literal_paths_without_shell_quoting(
+    tmp_path: Path,
+    name: str,
+) -> None:
+    supplied = inspect_bootstrap(bootstrap(tmp_path / "bootstrap.zip"))
+    root = tmp_path / name
+    unit = service_unit(root, supplied, NodeInstallSettings())
+    expected = f"server.key:{str(root).replace('%', '%%')}/credentials/server.key"
+    assert f"LoadCredential={expected}" in unit.splitlines()
