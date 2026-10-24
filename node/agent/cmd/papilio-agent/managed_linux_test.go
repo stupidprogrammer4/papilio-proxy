@@ -11,7 +11,7 @@ import (
 )
 
 func TestUnexpectedManagedCoreExitStopsTheActualAgent(t *testing.T) {
-	exerciseAgentExecutable(t, true, func(agent *exec.Cmd) {
+	exerciseAgentExecutable(t, true, false, func(agent *exec.Cmd) {
 		output, err := exec.Command("ps", "-o", "pid=", "--ppid", strconv.Itoa(agent.Process.Pid)).Output()
 		if err != nil {
 			t.Fatal(err)

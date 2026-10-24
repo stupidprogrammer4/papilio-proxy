@@ -19,7 +19,13 @@ import (
 	"github.com/stupidprogrammer4/papilio-proxy/node/agent/internal/xrayprocess"
 )
 
-func run(path string) (runError error) {
+func run(parent context.Context, path string, waitForConfig bool, checkInterval time.Duration) (runError error) {
+	if waitForConfig {
+		fmt.Fprintln(os.Stdout, "Papilio node agent awaiting configuration")
+		if err := config.WaitForFile(parent, path, checkInterval); err != nil {
+			return err
+		}
+	}
 	settings, err := config.Load(path)
 	if err != nil {
 		return err
@@ -28,9 +34,7 @@ func run(path string) (runError error) {
 	if err != nil {
 		return err
 	}
-	signals, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	ctx, cancel := context.WithCancelCause(signals)
+	ctx, cancel := context.WithCancelCause(parent)
 	defer cancel(nil)
 	if settings.ManagedXray != nil {
 		managed, err := xrayprocess.Start(ctx, settings.ManagedXray.BinaryFile, settings.ManagedXray.ConfigurationFile, time.Duration(settings.ShutdownTimeoutSeconds)*time.Second)
@@ -70,8 +74,12 @@ func run(path string) (runError error) {
 
 func main() {
 	path := flag.String("config", "/etc/papilio-agent/agent.json", "Operator-selected node configuration file")
+	waitForConfig := flag.Bool("wait-for-config", false, "Wait for initial private configuration publication")
+	checkInterval := flag.Duration("config-check-interval", time.Second, "Positive interval between initial configuration checks")
 	flag.Parse()
-	if err := run(*path); err != nil {
+	signals, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := run(signals, *path, *waitForConfig, *checkInterval); err != nil && err != context.Canceled {
 		fmt.Fprintln(os.Stderr, "Papilio node agent:", err)
 		os.Exit(1)
 	}

@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,11 +34,12 @@ func privateFile(t *testing.T, path string, content []byte) {
 }
 
 func TestAgentExecutableUsesSelectedCredentialsAndActualXray(t *testing.T) {
-	t.Run("attached", func(t *testing.T) { exerciseAgentExecutable(t, false, nil) })
-	t.Run("managed", func(t *testing.T) { exerciseAgentExecutable(t, true, nil) })
+	t.Run("attached", func(t *testing.T) { exerciseAgentExecutable(t, false, false, nil) })
+	t.Run("managed", func(t *testing.T) { exerciseAgentExecutable(t, true, false, nil) })
+	t.Run("wait-managed", func(t *testing.T) { exerciseAgentExecutable(t, true, true, nil) })
 }
 
-func exerciseAgentExecutable(t *testing.T, managed bool, failCore func(*exec.Cmd)) {
+func exerciseAgentExecutable(t *testing.T, managed bool, waitForConfig bool, failCore func(*exec.Cmd)) {
 	t.Helper()
 	root := t.TempDir()
 	binary := filepath.Join(root, "papilio-agent")
@@ -99,6 +101,12 @@ func exerciseAgentExecutable(t *testing.T, managed bool, failCore func(*exec.Cmd
 	}
 	defer logfile.Close()
 	command := exec.Command(binary, "-config", path)
+	if waitForConfig {
+		if err := os.Remove(path); err != nil {
+			t.Fatal(err)
+		}
+		command.Args = append(command.Args, "-wait-for-config", "-config-check-interval=1ms")
+	}
 	command.Stdout, command.Stderr = logfile, logfile
 	if err := command.Start(); err != nil {
 		t.Fatal(err)
@@ -115,6 +123,39 @@ func exerciseAgentExecutable(t *testing.T, managed bool, failCore func(*exec.Cmd
 			<-done
 		}
 	})
+	if waitForConfig {
+		waiting := false
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			output, err := os.ReadFile(logfile.Name())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(output), "Papilio node agent awaiting configuration") {
+				waiting = true
+				break
+			}
+			select {
+			case <-done:
+				t.Fatalf("Agent exited before bootstrap publication: %v", exitError)
+			default:
+			}
+			time.Sleep(time.Millisecond)
+		}
+		if !waiting {
+			t.Fatal("Agent did not reach its configuration wait.")
+		}
+		listener, err := net.DialTimeout("tcp", settings.ListenAddress, 100*time.Millisecond)
+		if err == nil {
+			_ = listener.Close()
+			t.Fatal("Waiting agent opened a listener before bootstrap publication.")
+		}
+		staged := filepath.Join(root, ".prepared-agent.json")
+		privateFile(t, staged, data)
+		if err := os.Rename(staged, path); err != nil {
+			t.Fatal(err)
+		}
+	}
 	credential := authority.Issue(t, identity.ControlURI(), x509.ExtKeyUsageClientAuth, false)
 	transport := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: authority.Roots(), Certificates: []tls.Certificate{credential}, MinVersion: tls.VersionTLS13}}
 	defer transport.CloseIdleConnections()
