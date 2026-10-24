@@ -153,3 +153,19 @@ delivery. The lifecycle test builds and runs the agent with the race detector to
 
 [Official release](https://github.com/XTLS/Xray-core/releases/tag/v26.3.27) ·
 [Native API definitions](https://github.com/XTLS/Xray-core/blob/v26.3.27/app/proxyman/command/command.proto)
+
+## Waiting for initial local configuration on main
+
+`-wait-for-config` allows the selected configuration file to be published after
+process startup. `-config-check-interval=1s` is the positive native duration between
+checks. SIGINT/SIGTERM cancels the wait without creating files or opening a
+listener. Without the flag, missing configuration still fails immediately.
+Publication must finish private credentials/core settings before atomically
+publishing the configuration. Existing but invalid files fail with the fixed
+sanitized error. This is startup coordination; recurring business work uses Beat.
+
+Main now builds an unprivileged Go/Xray image for the optional `local-node`
+Compose profile and includes it in format3 ready-image bundles. Formats1/2 remain
+readable with their five original image roles. The image waits for
+`/var/lib/papilio/local-node/instance/agent.json`; first-owner enrollment and the
+private bootstrap publisher are still being connected. Alpha.3 has no such image.

@@ -309,3 +309,29 @@ financial effects remain unchanged. A failed check becomes due at the selected
 interval; unavailable queues and lease/redelivery bounds can delay execution.
 Operator choices survive migrate/restart. This does not complete quota/expiry or
 service disable/delete lifecycle, nor environment-only controls for other modules.
+
+## Local node runtime image prerequisite (main)
+
+Format3 image bundles contain backend, frontend, node, PostgreSQL, Redis and
+RabbitMQ roles with native OCI/config digests. Legacy formats1/2 retain exactly
+five roles and remain readable. Packaging tracked source that declares the node
+image requires format3 for both architectures; mixed platform formats fail.
+
+The `local-node` Compose profile is currently opt-in while first-owner enrollment
+and bootstrap publication are connected. It runs the Go agent as UID/GID10001,
+with a read-only root and private project-scoped volume, no added capabilities
+and no control/API port published to the host. The internal control alias is
+`local-node.papilio.internal`; the public inbound maps host8444 to container8443.
+
+| Infrastructure control | Default | Effect / restart |
+| --- | --- | --- |
+| `PAPILIO_NODE_PORT` | 8444 | Host inbound mapping; recreate node and coordinate the advertised endpoint. |
+| `PAPILIO_NODE_CONFIG_CHECK_INTERVAL` | `1s` | Positive Go duration for initial configuration checks; recreate node. |
+| `PAPILIO_GO_PROXY` build argument | `https://proxy.golang.org\|direct` | Native Go download fallback while building an image; retains checksum verification. Does not affect ready-image installs. |
+
+The image expects `instance/agent.json` below its private volume. The agent does
+not seed or overwrite operator files. The publisher must prepare the complete
+instance and publish it atomically. These runtime/build controls do not establish
+completed panel controls or automatic local installation; that wiring remains
+open. The release image build contains its own toolchain, so source builds do not
+require a Go installation on the host. Ready-image installs perform no Go build.

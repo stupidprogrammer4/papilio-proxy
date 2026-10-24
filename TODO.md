@@ -116,6 +116,11 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
   retained operator files pass on Ubuntu24.04 amd64 at the standard path. Automatic
   local panel registration, other host combinations, native node backup/upgrade
   and new published artifacts remain.
+- Local runtime prerequisite on main: a separate unprivileged Go/Xray image,
+  cancellable initial configuration wait and portable six-image bundles. Native
+  Go traffic and Docker startup/cancellation/privacy boundaries are exercised.
+  First-owner enrollment and private bootstrap publication remain open; this
+  does not complete automatic local installation.
 - Real RabbitMQ/Celery/Beat: separate worker queues, durable outbox, replay and
   recovery after broker outage.
 - Native database schedules: operator edits survive migrations and concurrent

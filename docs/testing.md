@@ -356,3 +356,21 @@ changes. It copies test inputs into that user's home, installs a uniquely named
 node/unit, reboots that VM and removes its own unit/instance afterward. Never
 point it at an ordinary host. The local test uses Ubuntu's dated20261017 cloud
 image verified against its official SHA256SUMS and a private NoCloud seed.
+
+Local node image prerequisites use native Go filesystem/cancellation tests and an
+actual managed-agent/mTLS/Xray/client test after delayed atomic configuration
+publication. A listener must remain closed before publication. Existing startup,
+managed/attached execution and managed-core death checks also run under `-race`.
+
+`test_node_image_runtime.py` builds the actual Go/Xray Docker image (or uses the
+candidate image on release runners), starts it as UID10001 with all capabilities
+dropped, verifies PID1/normal SIGTERM exit and an untouched empty private volume,
+checks the core version/notices and rejects invalid configuration without logging
+its contents. Those Docker cases prove startup and isolation, not provisioned
+container traffic or first-owner enrollment. The separate native Go test proves
+actual core/client traffic. CI runs both boundaries.
+
+Manifest/package tests cover old five-image contracts and the six-image format3,
+exact portable digests, missing/duplicate node roles, mixed platform formats and
+refusal to package current node-image source with legacy image assets. Actual
+ready-image install/browser/backup/restore remains a separate native boundary.

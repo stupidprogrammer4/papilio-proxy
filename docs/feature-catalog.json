@@ -297,13 +297,15 @@
         "panel/backend/tests/test_node_migration.py",
         "panel/backend/tests/test_node_installation_runtime.py",
         "panel/backend/tests/test_node_systemd_runtime.py",
+        "node/agent/internal/config/wait_test.go",
+        "deployment/tests/test_node_image_runtime.py",
         "panel/frontend/tests/foundation.browser.mjs"
       ],
       "sources": [
         "OWNER"
       ],
       "guide": "docs/user-guide.en.md",
-      "verified_scope": "Executable Go mTLS/core/client traffic plus owner-scoped Django onboarding, CPU-issued encrypted node keys and actual I/O-worker HTTPS identity/core-status checks. Panel registration, advanced creation fields, search and private download. Main adds verified native agent/Xray bundle preparation, preserved operator files and lifecycle CLI. Actual foreground prepared-node mTLS/worker/core/subscription-client execution passes; generated systemd unit syntax is checked. Configurable Django synchronization restores accounts after actual managed and attached-core restarts, with unchanged order funds and credentials. Actual systemd installation, main-process crash/reboot recovery, client traffic and preserved operator files pass on a disposable Ubuntu24.04 amd64 guest at the standard path. Existing-node editing/rotation, automatic local registration, other host/path combinations, native node backup/upgrade and new artifacts remain pending."
+      "verified_scope": "Executable Go mTLS/core/client traffic plus owner-scoped Django onboarding, CPU-issued encrypted node keys and actual I/O-worker HTTPS identity/core-status checks. Panel registration, advanced creation fields, search and private download. Main adds verified native agent/Xray bundle preparation, preserved operator files and lifecycle CLI. Actual foreground prepared-node mTLS/worker/core/subscription-client execution passes; generated systemd unit syntax is checked. Configurable Django synchronization restores accounts after actual managed and attached-core restarts, with unchanged order funds and credentials. Actual systemd installation, main-process crash/reboot recovery, client traffic and preserved operator files pass on a disposable Ubuntu24.04 amd64 guest at the standard path. Main also builds an unprivileged Go/Xray container image and portable six-image bundles. Delayed configuration/native traffic and container startup/cancellation/privacy are exercised as separate component boundaries. First-owner enrollment/private bootstrap publication, existing-node editing/rotation, automatic local registration, other host/path combinations, native node backup/upgrade and new artifacts remain pending."
     },
     {
       "id": "FLOW-XRAY",
