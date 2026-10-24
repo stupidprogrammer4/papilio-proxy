@@ -11,6 +11,8 @@ import botsEn from "./bots.en.json";
 import botsFa from "./bots.fa.json";
 import botShopEn from "./bot-shop.en.json";
 import botShopFa from "./bot-shop.fa.json";
+import botRecoveryEn from "./bot-recovery.en.json";
+import botRecoveryFa from "./bot-recovery.fa.json";
 import serviceSetupEn from "./service-setup.en.json";
 import serviceSetupFa from "./service-setup.fa.json";
 import salesEn from "./sales.en.json";
@@ -27,5 +29,5 @@ export const i18n = createI18n({
   legacy: false,
   locale: "en",
   fallbackLocale: "en",
-  messages: { en: { ...en, foundation: foundationEn, nodes: nodesEn, bots: botsEn, botShop: botShopEn, serviceSetup: serviceSetupEn, sales: salesEn, productCatalog: productCatalogEn, serviceOrders: serviceOrdersEn, invoices: invoicesEn }, fa: { ...fa, foundation: foundationFa, nodes: nodesFa, bots: botsFa, botShop: botShopFa, serviceSetup: serviceSetupFa, sales: salesFa, productCatalog: productCatalogFa, serviceOrders: serviceOrdersFa, invoices: invoicesFa } },
+  messages: { en: { ...en, foundation: foundationEn, nodes: nodesEn, bots: botsEn, botShop: botShopEn, botRecovery: botRecoveryEn, serviceSetup: serviceSetupEn, sales: salesEn, productCatalog: productCatalogEn, serviceOrders: serviceOrdersEn, invoices: invoicesEn }, fa: { ...fa, foundation: foundationFa, nodes: nodesFa, bots: botsFa, botShop: botShopFa, botRecovery: botRecoveryFa, serviceSetup: serviceSetupFa, sales: salesFa, productCatalog: productCatalogFa, serviceOrders: serviceOrdersFa, invoices: invoicesFa } },
 });

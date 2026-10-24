@@ -6,6 +6,7 @@ import { exerciseCustomerWallet } from "./customer-wallet.steps.mjs";
 import { fundNativeInvoice } from "./manual-payment.steps.mjs";
 import { createNativeProduct, buyNativeService } from "./product-purchase.steps.mjs";
 import { assertStaffShopDenied, exerciseBotShopSettings } from "./bot-shop-settings.steps.mjs";
+import { exerciseBotRecovery } from "./bot-shop-recovery.steps.mjs";
 
 const base = process.env.PAPILIO_BROWSER_URL;
 assert(base && process.env.PAPILIO_BROWSER_RESULT && process.env.PAPILIO_BROWSER_DATA_PORT);
@@ -103,6 +104,7 @@ try {
   assert.equal((await staff.request.get(`${base}/api/v1/invoices`)).status(), 401);
   const shops = await exerciseBotShopSettings(page, base);
   await assertStaffShopDenied(staff, base);
+  await exerciseBotRecovery(page, base);
   writeFileSync(process.env.PAPILIO_BROWSER_RESULT, JSON.stringify({ service_id: service.id, customer_id: customerId, invoice_id: invoiceId, uri, purchase, shops }), { mode: 0o600 });
 } finally {
   await browser.close();

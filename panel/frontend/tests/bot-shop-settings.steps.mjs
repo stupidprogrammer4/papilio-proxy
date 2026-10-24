@@ -80,6 +80,7 @@ export async function exerciseBotShopSettings(page, base) {
   } finally { await other.close(); }
   await page.getByTestId("bot-create-label").fill("Browser shop two");
   await page.getByTestId("bot-create-token").fill("987654321:placeholder-not-a-real-second-token");
+  await page.getByTestId("bot-create-enabled").uncheck();
   const [secondResponse] = await Promise.all([
     page.waitForResponse(r => r.url().endsWith("/api/v1/bots") && r.request().method() === "POST"),
     page.getByTestId("bot-create-submit").click(),
@@ -110,6 +111,9 @@ export async function assertStaffShopDenied(page, base) {
   const bot = await created.json();
   await expect(page.getByTestId("bot-detail")).toBeVisible();
   await expect(page.getByTestId("shop-settings")).toHaveCount(0);
+  await expect(page.getByTestId("shop-recovery-title")).toHaveCount(0);
   assert.equal((await page.request.get(`${base}/api/v1/bots/${bot.id}/shop`)).status(), 401);
   assert.equal((await page.request.get(`${base}/api/v1/bot-shop-defaults`)).status(), 401);
+  assert.equal((await page.request.get(`${base}/api/v1/bots/${bot.id}/shop/work`)).status(), 401);
+  assert.equal((await page.request.get(`${base}/api/v1/bots/${bot.id}/shop/messages`)).status(), 401);
 }

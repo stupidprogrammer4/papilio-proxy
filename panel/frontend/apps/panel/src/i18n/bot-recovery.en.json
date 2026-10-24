@@ -1,0 +1,14 @@
+{
+  "title": "Shop processing and delivery",
+  "help": "Inspect this bot's work and replies, retry a failed operation or cancel pending work. Successful work and sent messages cannot be replayed here. Active leases must expire before recovery is offered.",
+  "kind": "Queue", "work": "Incoming work", "messages": "Outgoing replies", "status": "Status", "all": "All states",
+  "attempts": "Attempts in this budget:", "error": "Last error", "lease": "Current lease expires", "invoice": "Open the related invoice",
+  "note": "Private operator note (optional)", "retry": "Retry work", "resend": "Send stored reply again", "cancel": "Cancel pending work",
+  "conflict": "This record changed. Your note is retained. Refresh the record and check its current state before choosing another action.",
+  "workHelp": "Retry keeps the original incoming event and opens a fresh attempt budget. Current customer, invoice and purchase rules are checked again. Cancellation does not reverse a completed payment or purchase. Paused processing waits for its settings or schedule to be enabled.",
+  "messageHelp": "Retry sends the stored reply and opens a fresh delivery budget. It can duplicate a message Telegram previously received. Cancel stops future delivery; it cannot retract a delivered message. Neither action posts a wallet credit or purchase. Delivery pauses are preserved.",
+  "unavailable": "There is no recovery action for the current state. Refresh after active work finishes or its lease expires.",
+  "history": "Recovery history", "actor": "Operator ID:",
+  "actions": { "retry": "Retried", "cancel": "Cancelled" },
+  "states": { "queued": "Queued", "running": "Processing", "done": "Completed", "failed": "Failed", "cancelled": "Cancelled", "sending": "Sending", "sent": "Sent", "retry": "Waiting to retry", "ambiguous": "Delivery uncertain" }
+}

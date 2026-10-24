@@ -6,6 +6,7 @@ import { useAuth } from "@papilio/auth";
 import { request, query, type BotDefaults, type BotDraft, type BotPairingGrant, type ManagedBot, type ManagedBotPage } from "@papilio/api";
 import BotConnectionEditor from "../components/bot/BotConnectionEditor.vue";
 import BotShopSettings from "../components/bot/BotShopSettings.vue";
+import BotShopRecovery from "../components/bot/BotShopRecovery.vue";
 
 const { t } = useI18n();
 const auth = useAuth();
@@ -135,5 +136,6 @@ onMounted(async () => {
       <p v-if="auth.can('bot-shop')" class="hint-box">{{ t('bots.scope') }}</p>
     </section>
     <BotShopSettings v-if="selected && auth.can('bot-shop', 'write')" :key="selected.id" :bot-id="selected.id" />
+    <BotShopRecovery v-if="selected && auth.can('bot-shop', 'write')" :key="selected.id" :bot-id="selected.id" />
   </div>
 </template>
