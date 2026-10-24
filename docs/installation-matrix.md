@@ -76,3 +76,22 @@ guarantee; the script's own initial download is excluded from the corrected run.
 PasarGuard was source-inspected, not benchmarked on this VM. Fast installation
 remains in progress. Independent Chromium setup/login, edited schedule, actual
 worker operation and session reload passed after the corrected cold run.
+
+## Current-source local node and private-volume recovery
+
+A disposable sandbox/HTTP amd64 installation with native six-image bundles now
+executes browser first-owner registration, CPU issuance, IO private publication,
+UID10001 agent/managed Xray, actual host-port subscription-client traffic and the
+shared scheduler controls. The recovery test adds operator configuration/files,
+backs up, deletes the active instance, restores byte-identical fingerprints and
+verifies client recovery after restart and a synthetic next-source upgrade.
+Only the external Telegram endpoint and traffic origin are controlled test
+services; panel/database/worker/agent/core/client execution is real.
+
+The measured CLI phase was **55016 ms** on the existing Docker build host with
+the release archive already cached. It includes importing ready images,
+migrations, panel startup and both worker checks. It excludes clean OS/Docker
+prerequisites, release downloads and the subsequent interactive owner workflow.
+The full candidate-build/browser/backup/restore/upgrade test took375.94s; that is
+not an installation-time observation. These source changes are absent from the
+public alpha.3 assets and do not certify additional clean-host/ARM64 cells.

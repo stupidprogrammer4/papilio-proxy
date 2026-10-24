@@ -144,7 +144,7 @@ The overview's **Node operation delivery** schedule can be disabled or have its
 interval changed. Pausing stops future outbox scans; already delivered tasks can
 finish. Migrations and restarts preserve the chosen schedule. Bootstrap settings
 apply when the agent starts. Editing an existing node, certificate renewal/rotation
-and automatic installation remain pending. Retain the installation secret key
+remain pending. Bundled local installation is described below. Retain the installation secret key
 with backups: it is needed to decrypt node keys after restore.
 
 ### Native node installation candidate on main
@@ -186,8 +186,8 @@ creates validated files without installing a service; `node run --node NODE_ID`
 runs them in the foreground for development. Reinstalling with the same initial
 identity, options and bundle preserves modified operator configuration and keys.
 Changed initial options or binaries are rejected without replacement. Existing
-node editing/rotation, automatic local panel registration and backups of native
-instance files remain open. Native systemd installation, crash/reboot recovery,
+node editing/rotation and backups of these separate systemd instance files remain
+open. Bundled Docker local registration/recovery is described below. Native systemd installation, crash/reboot recovery,
 client traffic and preserved operator files are exercised on a disposable
 Ubuntu24.04 amd64 guest at `/opt/papilio`; this is not a complete OS matrix. Configurable Django synchronization
 now restores saved native accounts after managed or attached core restarts;
@@ -643,6 +643,19 @@ observation; each service still needs successful provisioning and client access.
 Current evidence covers first-owner API → real CPU/IO/Beat → private files → Go
 agent/managed Xray → a working subscription client, plus PostgreSQL replay,
 concurrent claims, pause and expired-lease fencing. UI forms have a separate
-controlled-HTTP browser check. The shipped Compose profile remains opt-in: shared
-worker volume wiring, automatic installer activation and local-volume recovery
-are still pending. Alpha.3 public artifacts do not include this development work.
+controlled-HTTP browser check. The current CLI/TUI enables the local Compose
+profile for new installations; `--no-local-node` opts out and `--node-port PORT`
+selects the client port (initial8444). Saved/legacy installations retain their
+prior choice. IO alone mounts the project volume RW; the UID10001 agent mounts
+it RO, with no host control port or Docker socket.
+
+Backups now include the active private instance and its operator files with a
+checksum. Local backup briefly stops the application/core writers and resumes
+the previously running services. Restore requires matching release/environment/
+instance/local-runtime settings and creates a safety backup before replacement.
+The owned-volume test deletes the active instance, restores it with identical
+file fingerprints, then verifies real client traffic after restart and synthetic
+upgrade. Separate systemd-node directories are outside this Docker snapshot.
+Interrupted restore can require operator recovery from the safety backup; there
+is no distributed PostgreSQL/filesystem atomic commit or power-loss claim.
+Alpha.3 public artifacts do not include this development work.

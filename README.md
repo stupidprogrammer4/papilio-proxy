@@ -48,9 +48,11 @@ inspection is separate from real bot commerce.
 Local node initialization on main now connects first-owner setup to durable
 credential issuance, private bootstrap publication and a real agent/core check.
 The panel exposes initial advanced choices and preparation/retry controls. A
-native executable test reaches actual subscription-client traffic. Automatic
-installer activation and local-volume recovery are still pending; this is absent
-from alpha.3. [Local node guide](docs/user-guide.en.md#local-node-initialization-on-main).
+ready-image installation reaches actual subscription-client traffic. New source
+CLI/TUI installations enable the bundled node, with an opt-out and configurable
+client port. Private-volume backup/restore, restart and synthetic upgrade are
+exercised on sandbox/HTTP amd64. This is absent from alpha.3.
+[Local node guide](docs/user-guide.en.md#local-node-initialization-on-main).
 
 The connected shop API prototype on main now exercises private catalogue, wallet,
 replay-safe purchase confirmations and subscription delivery through an actual
@@ -103,6 +105,11 @@ From a checkout without a release manifest, auto mode builds:
 ```sh
 sudo bash ./install.sh --source "$PWD"
 ```
+
+Current source also offers `--no-local-node` and `--node-port PORT` (default8444).
+The first-owner page prepares its credentials/core through background workers.
+These options require the current source or a compatible six-image release;
+the public alpha.3 assets do not include local installation.
 
 The installer prints a setup URL and a single-use token valid for five minutes,
 and installs `papilio`. `dev`, `test`, `sandbox` and `production` keep separate data,

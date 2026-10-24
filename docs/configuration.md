@@ -317,8 +317,8 @@ RabbitMQ roles with native OCI/config digests. Legacy formats1/2 retain exactly
 five roles and remain readable. Packaging tracked source that declares the node
 image requires format3 for both architectures; mixed platform formats fail.
 
-The `local-node` Compose profile is currently opt-in while first-owner enrollment
-and bootstrap publication are connected. It runs the Go agent as UID/GID10001,
+New CLI/TUI installations enable the `local-node` Compose profile by default;
+saved/legacy installations retain their physical-runtime choice. The profile runs the Go agent as UID/GID10001,
 with a read-only root and private project-scoped volume, no added capabilities
 and no control/API port published to the host. The internal control alias is
 `local-node.papilio.internal`; the public inbound maps host8444 to container8443.
@@ -330,10 +330,9 @@ and no control/API port published to the host. The internal control alias is
 | `PAPILIO_GO_PROXY` build argument | `https://proxy.golang.org\|direct` | Native Go download fallback while building an image; retains checksum verification. Does not affect ready-image installs. |
 
 The image expects `instance/agent.json` below its private volume. The agent does
-not seed or overwrite operator files. The publisher must prepare the complete
-instance and publish it atomically. These runtime/build controls do not establish
-completed panel controls or automatic local installation; that wiring remains
-open. The release image build contains its own toolchain, so source builds do not
+not seed or overwrite operator files. The native IO publisher prepares the complete
+instance and publishes it atomically after first-owner setup. Its volume is RW
+only for IO and RO for the agent; API/CPU/Beat have no mount. The release image build contains its own toolchain, so source builds do not
 require a Go installation on the host. Ready-image installs perform no Go build.
 
 ## Bundled local node preparation (main)
@@ -358,5 +357,14 @@ Waiting for initial credentials does not consume preparation attempts. Files are
 published as a complete private `instance/` directory; recognized existing files
 are preserved. An interrupted staging directory can remain private and unused
 until operator cleanup; atomic rename does not establish power-loss durability.
-The runtime volume is not yet part of automatic installer recovery. Do not enable
-this physical capability on an installation without its matching native runtime.
+Format2 installation backups include the active private runtime plus a checksum;
+installations without a local runtime keep writing/reading format1. Only the
+active instance is exported, not abandoned preparation/restore staging folders.
+Local backup quiesces application/core writers and resumes the previous running
+set. Restore validates identities/archive paths/checksum, takes a safety backup,
+stops local processes and restores private state before startup. Target host
+ports and infrastructure credentials are retained. This is not a distributed
+database/filesystem atomic transaction; interrupted restore needs operator recovery.
+The snapshot helper currently accepts configured roots within the private
+`/var/lib/papilio/local-node` volume; moving outside it also requires changing
+the deployment/helper resource scope.

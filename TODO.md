@@ -7,7 +7,7 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 | Stage | Status | Completed version | Remaining acceptance |
 | --- | --- | --- | --- |
 | Foundation | Experimental release | 0.1.0-alpha.1 | Additional OS/environment combinations and later panel settings editors remain pending. |
-| First practical release | In progress | — | Native panel and scheduled bot purchase/subscription/client paths and owner work/message recovery are exercised; live Telegram acceptance, mutable service lifecycle, automatic node/core install and new release artifacts remain. |
+| First practical release | In progress | — | Native panel, installed local node, scheduled bot purchase/subscription/client paths and owner recovery are exercised; live Telegram acceptance, mutable service lifecycle, additional installation certification and new release artifacts remain. |
 | PasarGuard phase one | Planned | — | Reconcile and execute the complete v5.4.1 feature baseline. |
 | Full sales and bot | Planned | — | Approved Mirza/PGClock capabilities, resellers, Mini App and offline intake. |
 | Network and additional cores | Planned | — | Four complete cores and verified reference extras, certificates, Single Port, WARP, speed/IP controls. |
@@ -20,8 +20,9 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
   durable work, native CPU/IO/Beat private publication and actual Go/Xray/client
   traffic are exercised. EN/FA setup and scoped preparation/retry controls have a
   separate controlled-HTTP browser check. PostgreSQL claim races, replay, pause,
-  expired leases and nonempty upgrade are exercised. Automatic installer
-  activation, worker volume wiring and local-volume recovery remain open; no
+  expired leases and nonempty upgrade are exercised. Ready-image sandbox/HTTP
+  amd64 installation now covers automatic registration, private IO/RO-agent volume,
+  missing-file backup/restore, real client traffic and synthetic upgrade; no
   new installable version is claimed. See [local node guide](docs/user-guide.en.md#local-node-initialization-on-main).
 
 - Installer on main: explicit HTTP/HTTPS selection in every environment; a public
@@ -43,15 +44,16 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 - Native agent process ownership on main: optional managed Xray validates/starts
   the selected core and performs bounded shutdown. Actual executable/client, core
   crash and paused-process cleanup pass. Configurable Django synchronization now
-  recovers persisted native users. Automatic local node installation remains open.
+  recovers persisted native users. Bundled Docker local installation is exercised;
+  additional clean-host coverage and published assets remain open.
 
 - On main after the foundation release: runnable Go/mTLS agent and native Xray
   adapter tested through actual HTTPS/core/client traffic, including denied
   certificate scopes and expiry. Django now issues per-node credentials and
   checks the real agent through durable CPU/I/O work. The Nodes page supports
-  registration, search and private bootstrap download. Automatic installation,
-  configuration editing/renewal, core management, provisioning and purchase
-  remain incomplete. See [agent scope](node/agent/README.md).
+  registration, search and private bootstrap download. Full configuration editing/
+  renewal and core lifecycle remain incomplete; the bundled local install and
+  service/purchase prototypes below are exercised separately. See [agent scope](node/agent/README.md).
 
 - Django-to-agent user control on main: typed owner-scoped VLESS apply/remove
   uses the issued mTLS identity and native Xray API. Actual client traffic,
@@ -122,13 +124,15 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
   client passes. Configurable synchronization restores users after managed and
   attached core restarts without financial replay. Actual systemd/crash/reboot and
   retained operator files pass on Ubuntu24.04 amd64 at the standard path. Automatic
-  local panel registration, other host combinations, native node backup/upgrade
-  and new published artifacts remain.
+  other host combinations, backup/upgrade of separate systemd node directories
+  and new published artifacts remain. Bundled Docker local registration/recovery
+  is exercised separately.
 - Local runtime prerequisite on main: a separate unprivileged Go/Xray image,
   cancellable initial configuration wait and portable six-image bundles. Native
   Go traffic and Docker startup/cancellation/privacy boundaries are exercised.
-  First-owner enrollment and private bootstrap publication remain open; this
-  does not complete automatic local installation.
+  First-owner enrollment, private bootstrap publication and actual installed
+  Docker client/recovery are now exercised. Fresh-host/ARM64 certification and
+  a newly published bundle remain open.
 - Real RabbitMQ/Celery/Beat: separate worker queues, durable outbox, replay and
   recovery after broker outage.
 - Native database schedules: operator edits survive migrations and concurrent
