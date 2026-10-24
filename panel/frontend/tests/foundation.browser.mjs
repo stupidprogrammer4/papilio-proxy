@@ -65,9 +65,12 @@ try {
     await expect.poll(async () => (await readJson(`${base}/api/v1/services/${service.id}`)).status,
       { timeout: 35000, intervals: [100, 250, 500] }).toBe("succeeded");
     const subscription = await readJson(`${base}/api/v1/services/${service.id}/subscription`);
-    const feed = await page.request.get(new URL(subscription.url, base).href);
-    assert.equal(feed.status(), 200);
-    const uri = Buffer.from(await feed.text(), "base64").toString().trim();
+    const feed = await page.evaluate(async address => {
+      const response = await fetch(address);
+      return { status: response.status, body: await response.text() };
+    }, new URL(subscription.url, base).href);
+    assert.equal(feed.status, 200);
+    const uri = Buffer.from(feed.body, "base64").toString().trim();
     assert(uri.startsWith("vless://"));
     assert(process.env.PAPILIO_LOCAL_NODE_RESULT);
     writeFileSync(process.env.PAPILIO_LOCAL_NODE_RESULT, JSON.stringify({ uri, service_id: service.id }), { mode: 0o600 });
