@@ -15,6 +15,28 @@ x-application: &application
     rabbitmq: {condition: service_healthy}
 
 services:
+  local-node:
+    profiles: [local-node]
+    image: ${PAPILIO_NODE_IMAGE:-${PAPILIO_PROJECT:?project required}-node:${PAPILIO_VERSION:-local}}
+    pull_policy: ${PAPILIO_PULL_POLICY:-missing}
+    build:
+      context: .
+      dockerfile: deployment/node.Dockerfile
+      args:
+        PAPILIO_GO_PROXY: ${PAPILIO_GO_PROXY:-https://proxy.golang.org|direct}
+    restart: unless-stopped
+    read_only: true
+    stop_grace_period: ${PAPILIO_SHUTDOWN_SECONDS:-120}s
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    command: [-config, /var/lib/papilio/local-node/instance/agent.json, -wait-for-config, "-config-check-interval=${PAPILIO_NODE_CONFIG_CHECK_INTERVAL:-1s}"]
+    ports:
+      - ${PAPILIO_BIND_ADDRESS:?}:${PAPILIO_NODE_PORT:-8444}:8443
+    volumes:
+      - local-node:/var/lib/papilio/local-node:ro
+    networks:
+      default:
+        aliases: [local-node.papilio.internal]
   postgres:
     image: ${PAPILIO_POSTGRES_IMAGE:-postgres:17-bookworm}
     pull_policy: ${PAPILIO_PULL_POLICY:-missing}
@@ -98,3 +120,6 @@ services:
       - ${PAPILIO_STATE_ROOT:?}/caddy-config:/config
     depends_on:
       api: {condition: service_healthy}
+
+volumes:
+  local-node:

@@ -329,7 +329,7 @@ def test_install_browser_backup_restore_and_restart_preserve_data(
         previous_version = (source / "VERSION").read_text().strip()
         version_file.write_text(version_file.read_text().replace(previous_version, next_version))
         if image_mode == "prebuilt":
-            for name in ("backend.Dockerfile", "frontend.Dockerfile"):
+            for name in ("backend.Dockerfile", "frontend.Dockerfile", "node.Dockerfile"):
                 shutil.copy2(PROJECT / "deployment" / name, next_source / "deployment" / name)
         upgrade_arguments = [str(launcher), "update", "--source", str(next_source)]
         if image_mode == "prebuilt":

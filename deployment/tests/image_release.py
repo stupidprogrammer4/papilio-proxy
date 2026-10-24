@@ -37,7 +37,7 @@ def prebuilt_release(project: Path, directory: Path) -> Iterator[PreparedRelease
     current = subprocess.check_output(["git", "archive", "HEAD"], cwd=project)
     with tarfile.open(fileobj=io.BytesIO(current)) as archive:
         archive.extractall(source, filter="data")
-    # Only the active installer work is overlaid; preserved frontend edits are excluded.
+    # Overlay active installer/agent work; preserved frontend edits are excluded.
     shutil.copytree(
         project / "deployment",
         source / "deployment",
@@ -47,6 +47,12 @@ def prebuilt_release(project: Path, directory: Path) -> Iterator[PreparedRelease
         ),
     )
     shutil.copy2(project / "install.sh", source / "install.sh")
+    shutil.copytree(
+        project / "node/agent",
+        source / "node/agent",
+        dirs_exist_ok=True,
+        ignore=shutil.ignore_patterns("graphify-out", "__pycache__"),
+    )
     previous_version = (source / "VERSION").read_text().strip()
     supplied_assets = os.environ.get("PAPILIO_TEST_RELEASE_IMAGES")
     version = previous_version if supplied_assets else f"0.0.0-native.{uuid4().hex}"
@@ -69,7 +75,7 @@ def prebuilt_release(project: Path, directory: Path) -> Iterator[PreparedRelease
             assets = directory / "image-assets"
             bundle = build_image_bundle(source, assets)
             (source / "deployment/images.json").write_text(json.dumps(bundle_manifest(bundle)))
-        for name in ("backend.Dockerfile", "frontend.Dockerfile"):
+        for name in ("backend.Dockerfile", "frontend.Dockerfile", "node.Dockerfile"):
             (source / "deployment" / name).write_text("FROM scratch\nRUN exit 97\n")
         if not supplied_assets:
             subprocess.run(

@@ -17,9 +17,12 @@ from papilio_installer.images import PLATFORMS, archive_matches, read_image_bund
 from papilio_installer.node.artifacts import inspect_bundle
 
 
-def image_manifest(images: Path, version: str) -> tuple[bytes, dict[str, str]]:
+def image_manifest(
+    images: Path, version: str, *, requires_node: bool = False
+) -> tuple[bytes, dict[str, str]]:
     platforms: dict[str, object] = {}
     checksums: dict[str, str] = {}
+    manifest_format: int | None = None
     with tempfile.TemporaryDirectory(prefix="papilio-manifest-") as temporary:
         root = Path(temporary)
         (root / "deployment").mkdir()
@@ -37,10 +40,15 @@ def image_manifest(images: Path, version: str) -> tuple[bytes, dict[str, str]]:
             bundle = read_image_bundle(root, platform)
             if bundle is None:
                 raise ValueError("A required image platform manifest is missing.")
-            if bundle.format_version != 2:
+            if bundle.format_version not in {2, 3}:
                 raise ValueError(
                     "Public image bundles must declare portable OCI and config identities."
                 )
+            if manifest_format is not None and manifest_format != bundle.format_version:
+                raise ValueError("All image platforms must use the same manifest format.")
+            if requires_node and bundle.format_version != 3:
+                raise ValueError("This source release requires a portable node runtime image.")
+            manifest_format = bundle.format_version
             if not archive_matches(images / bundle.asset, bundle):
                 raise ValueError("The image archive size or checksum does not match its manifest.")
             normalized = bundle_manifest(bundle)["platforms"]
@@ -48,7 +56,7 @@ def image_manifest(images: Path, version: str) -> tuple[bytes, dict[str, str]]:
                 raise ValueError("The normalized image platform manifest is invalid.")
             platforms.update(normalized)
             checksums[bundle.asset] = bundle.sha256
-    manifest = {"format": 2, "version": version, "platforms": platforms}
+    manifest = {"format": manifest_format, "version": version, "platforms": platforms}
     return json.dumps(manifest, indent=2).encode() + b"\n", checksums
 
 
@@ -125,7 +133,16 @@ def main() -> None:
     checksums = {}
     artifacts: dict[str, Path] = {}
     if arguments.images is not None:
-        manifest, checksums = image_manifest(arguments.images, version)
+        node_source = subprocess.run(
+            ["git", "cat-file", "-e", "HEAD:deployment/node.Dockerfile"],
+            cwd=root,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        manifest, checksums = image_manifest(
+            arguments.images, version, requires_node=node_source.returncode == 0
+        )
         artifacts.update({name: arguments.images / name for name in checksums})
     if arguments.nodes is not None:
         native_checksums = node_checksums(arguments.nodes, version)

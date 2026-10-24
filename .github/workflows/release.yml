@@ -63,7 +63,9 @@ jobs:
           PAPILIO_XRAY_BINARY: ${{ github.workspace }}/node-assets/.build-cache/xray
         run: go test -race -count=1 ./...
       - name: Exercise actual candidate images through browser and recovery
-        run: .venv/bin/pytest -c deployment/pyproject.toml deployment/tests/test_installed_runtime.py -k prebuilt -q
+        run: |
+          .venv/bin/pytest -c deployment/pyproject.toml deployment/tests/test_installed_runtime.py -k prebuilt -q
+          .venv/bin/pytest -c deployment/pyproject.toml deployment/tests/test_node_image_runtime.py -q
       - name: Upgrade public prior releases and recover on fresh old-version state
         run: .venv/bin/pytest -c deployment/pyproject.toml deployment/tests/test_previous_release.py -q
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

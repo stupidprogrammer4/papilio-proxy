@@ -144,11 +144,12 @@ def build_image_bundle(source: Path, output: Path) -> ImageBundle:
             | {
                 "PAPILIO_BACKEND_IMAGE": references[ImageRole.BACKEND],
                 "PAPILIO_FRONTEND_IMAGE": references[ImageRole.FRONTEND],
+                "PAPILIO_NODE_IMAGE": references[ImageRole.NODE],
             },
         )
         compose = Compose(installation)
         configuration = json.loads(compose.run("config", "--format", "json", capture=True).stdout)
-        compose.run("build", "api", "gateway")
+        compose.run("build", "api", "gateway", "local-node")
         compose.run("pull", *DEPENDENCY_SERVICES.values())
         # Three fixed infrastructure services; native Docker has no multi-image tag command.
         for role, service in DEPENDENCY_SERVICES.items():
@@ -181,7 +182,7 @@ def build_image_bundle(source: Path, output: Path) -> ImageBundle:
         for block in iter(lambda: original.read(1024 * 1024), b""):
             digest.update(block)
     bundle = ImageBundle(
-        version, platform, asset.name, digest.hexdigest(), asset.stat().st_size, portable, 2
+        version, platform, asset.name, digest.hexdigest(), asset.stat().st_size, portable, 3
     )
     metadata = output / f"images-{platform.replace('/', '-')}.json"
     metadata.write_text(json.dumps(bundle_manifest(bundle), indent=2) + "\n")

@@ -165,7 +165,7 @@ jobs:
         run: |
           docker version --format '{{.Client.Version}} / {{.Server.Version}}'
           docker compose version
-      - run: .venv/bin/pytest -c deployment/pyproject.toml deployment/tests/test_installed_runtime.py deployment/tests/test_image_runtime.py -q
+      - run: .venv/bin/pytest -c deployment/pyproject.toml deployment/tests/test_installed_runtime.py deployment/tests/test_image_runtime.py deployment/tests/test_node_image_runtime.py -q
 
   installer-python:
     runs-on: ubuntu-24.04

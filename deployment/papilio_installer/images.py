@@ -21,6 +21,7 @@ PLATFORMS = {"linux/amd64", "linux/arm64"}
 class ImageRole(str, Enum):
     BACKEND = "backend"
     FRONTEND = "frontend"
+    NODE = "node"
     POSTGRES = "postgres"
     REDIS = "redis"
     RABBITMQ = "rabbitmq"
@@ -81,7 +82,7 @@ def read_reference(
     if not isinstance(content_id, str) or re.fullmatch(r"sha256:[a-f0-9]{64}", content_id) is None:
         raise ValueError("The release image identity is invalid.")
     config_id = None
-    if format_version == 2:
+    if format_version in {2, 3}:
         config_id = value.get("config_id")
         if (
             not isinstance(config_id, str)
@@ -104,7 +105,7 @@ def read_image_bundle(source: Path, platform: str) -> ImageBundle | None:
         raise ValueError("The release image manifest is not valid JSON.") from error
     if not isinstance(manifest, dict) or type(manifest.get("format")) is not int:
         raise ValueError("The release image manifest has an invalid format.")
-    if manifest["format"] not in {1, 2}:
+    if manifest["format"] not in {1, 2, 3}:
         raise ValueError("The release image manifest format is not supported.")
     version = release_version((source / "VERSION").read_text().strip())
     if manifest.get("version") != version:
@@ -128,7 +129,10 @@ def read_image_bundle(source: Path, platform: str) -> ImageBundle | None:
     images = tuple(
         read_reference(value, version, platform, manifest["format"]) for value in raw_images
     )
-    if len(images) != len(ImageRole) or {image.role for image in images} != set(ImageRole):
+    required_roles = set(ImageRole)
+    if manifest["format"] < 3:
+        required_roles.remove(ImageRole.NODE)
+    if len(images) != len(required_roles) or {image.role for image in images} != required_roles:
         raise ValueError("The release must declare each infrastructure image role exactly once.")
     return ImageBundle(version, platform, asset, checksum, size, images, manifest["format"])
 

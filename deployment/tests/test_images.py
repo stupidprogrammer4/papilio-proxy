@@ -212,3 +212,53 @@ def test_portable_manifest_requires_distinct_valid_native_config_digest(
     (source / "deployment/images.json").write_text(json.dumps(manifest))
     with pytest.raises(ValueError):
         read_image_bundle(source, "linux/amd64")
+
+
+def add_node_runtime(manifest: dict) -> None:
+    manifest["format"] = 3
+    for platform, bundle in manifest["platforms"].items():
+        arch = platform.removeprefix("linux/")
+        bundle["images"].append(
+            {
+                "role": "node",
+                "reference": f"papilio/node:{VERSION}-{arch}",
+                "id": "sha256:" + "6" * 64,
+            }
+        )
+        for image in bundle["images"]:
+            image["config_id"] = "sha256:" + "f" * 64
+
+
+@pytest.mark.parametrize("platform", ["linux/amd64", "linux/arm64"])
+def test_portable_node_release_requires_and_preserves_all_six_image_roles(
+    tmp_path: Path,
+    platform: str,
+) -> None:
+    source, manifest = release_source(tmp_path)
+    add_node_runtime(manifest)
+    (source / "deployment/images.json").write_text(json.dumps(manifest))
+    bundle = read_image_bundle(source, platform)
+    assert bundle is not None and bundle.format_version == 3
+    assert {image.role.value for image in bundle.images} == {*ROLES, "node"}
+    assert all(image.config_id == "sha256:" + "f" * 64 for image in bundle.images)
+
+
+@pytest.mark.parametrize("fault", ["missing", "duplicate", "config", "legacy_extra"])
+def test_invalid_node_role_manifests_do_not_fall_back_to_source_build(
+    tmp_path: Path,
+    fault: str,
+) -> None:
+    source, manifest = release_source(tmp_path)
+    add_node_runtime(manifest)
+    images = manifest["platforms"]["linux/amd64"]["images"]
+    if fault == "missing":
+        images.pop()
+    elif fault == "duplicate":
+        images.append(images[-1].copy())
+    elif fault == "config":
+        images[-1]["config_id"] = images[-1]["id"]
+    else:
+        manifest["format"] = 2
+    (source / "deployment/images.json").write_text(json.dumps(manifest))
+    with pytest.raises(ValueError):
+        read_image_bundle(source, "linux/amd64")
