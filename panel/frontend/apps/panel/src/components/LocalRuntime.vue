@@ -53,7 +53,7 @@ onMounted(refresh);
     <h2>{{ t('localNode.title') }}</h2>
     <p>{{ t('localNode.statusHelp') }}</p>
     <p v-if="error" class="message error" role="alert">{{ error }}</p>
-    <button class="btn secondary" data-testid="local-runtime-refresh" :disabled="busy" @click="refresh">{{ t('foundation.refresh') }}</button>
+    <button class="btn secondary" data-testid="local-runtime-refresh" :disabled="busy" @click="refresh">{{ t('localNode.refresh') }}</button>
     <template v-if="record">
       <p>{{ record.definition.node.name }} · {{ record.definition.core_name }}</p>
       <p dir="ltr">{{ record.definition.public_host }}:{{ record.definition.public_port }}</p>

@@ -1,5 +1,6 @@
 {
   "title": "This server's node",
+  "refresh": "Refresh node status",
   "setupEnabled": "Set up Xray on this server",
   "setupHelp": "After creating your account, background workers prepare the bundled node and check its connection. You can also connect separate nodes later.",
   "advanced": "Advanced local node settings",

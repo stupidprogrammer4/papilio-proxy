@@ -5,6 +5,7 @@ import { readdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { stripVTControlCharacters } from "node:util";
 
 const frontendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const testDirectory = path.join(frontendRoot, "tests");
@@ -76,13 +77,15 @@ try {
 
 function waitUntilReady(child, origin) {
   return new Promise((resolve, reject) => {
+    let startupOutput = "";
     const timeout = setTimeout(() => {
       reject(new Error(`Panel development server did not start at ${origin}.`));
     }, 30000);
     const started = (chunk) => {
       const output = chunk.toString();
       process.stdout.write(output);
-      if (output.includes(origin)) {
+      startupOutput += output;
+      if (stripVTControlCharacters(startupOutput).includes(origin)) {
         clearTimeout(timeout);
         resolve();
       }
