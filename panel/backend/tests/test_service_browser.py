@@ -2,8 +2,11 @@
 
 import json
 import os
+import signal
 import subprocess
 import sys
+import tempfile
+from contextlib import suppress
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
@@ -12,7 +15,7 @@ from conftest import until
 from django.contrib.auth.models import User
 from django.db import connection
 from recovery_browser_scenario import browser_recovery_scenario
-from test_node_runtime import listening, port, stop
+from test_node_runtime import listening, port
 from test_node_user_control import native_control as native_control
 from test_service_runtime import existing_owner_client
 from xray_client import subscription_client
@@ -31,6 +34,18 @@ from papilio_panel.modules.wallets.models import JournalEntry, Wallet
 
 pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.runtime]
 ROOT = Path(__file__).resolve().parents[3]
+
+
+def stop_browser_process(process: subprocess.Popen) -> None:
+    """Stop only the new session created for this test's server or preview."""
+    with suppress(ProcessLookupError):
+        os.killpg(process.pid, signal.SIGTERM)
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        with suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGKILL)
+        process.wait(timeout=5)
 
 
 @pytest.mark.timeout(120)
@@ -63,6 +78,7 @@ def test_panel_provisions_a_service_used_by_an_actual_native_client(
     with (
         browser_recovery_scenario(existing_owner_client()) as scenario,
         (tmp_path / "browser-server.log").open("w") as log,
+        tempfile.TemporaryDirectory(prefix="papilio-browser-", dir="/tmp") as control_folder,
     ):
         env["PAPILIO_RECOVERY_BOT_ID"] = str(scenario.bot_id)
         env["PAPILIO_RECOVERY_WORK_ID"] = str(scenario.work_id)
@@ -77,21 +93,32 @@ def test_panel_provisions_a_service_used_by_an_actual_native_client(
                 f"127.0.0.1:{backend_port}",
                 "--workers",
                 "1",
+                "--control-socket",
+                str(Path(control_folder) / "gunicorn.sock"),
             ],
             env=env,
             stdout=log,
             stderr=subprocess.STDOUT,
+            start_new_session=True,
         )
         frontend = None
         try:
-            until(lambda: listening(backend_port), timeout=10)
+            assert os.getpgid(web.pid) == web.pid
+            until(
+                lambda: (
+                    listening(backend_port) and (Path(control_folder) / "gunicorn.sock").exists()
+                ),
+                timeout=10,
+            )
             frontend = subprocess.Popen(
                 ["pnpm", "--filter", "@papilio/panel", "preview"],
                 cwd=ROOT / "panel/frontend",
                 env=env,
                 stdout=log,
                 stderr=subprocess.STDOUT,
+                start_new_session=True,
             )
+            assert os.getpgid(frontend.pid) == frontend.pid
             until(lambda: listening(frontend_port), timeout=10)
             result = subprocess.run(
                 ["node", "tests/service-provisioning.browser.mjs"],
@@ -120,6 +147,8 @@ def test_panel_provisions_a_service_used_by_an_actual_native_client(
             assert second_shop.enabled is False and second_shop.texts != first_shop.texts
             service = ServiceAccount.objects.get(pk=output["service_id"])
             assert service.status == "succeeded" and service.worker_pid != os.getpid()
+            assert service.sync_enabled is False and service.sync_interval_seconds == 7
+            assert service.sync_revision == 4
             wallet = Wallet.objects.get(customer_id=output["customer_id"])
             assert wallet.balance_minor == 0 and wallet.credit_limit_minor == 75
             assert JournalEntry.objects.filter(wallet=wallet).count() == 4
@@ -143,5 +172,5 @@ def test_panel_provisions_a_service_used_by_an_actual_native_client(
                 assert probe.fetch() == b"papilio-actual-subscription-client"
         finally:
             if frontend is not None:
-                stop(frontend)
-            stop(web)
+                stop_browser_process(frontend)
+            stop_browser_process(web)

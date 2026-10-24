@@ -33,6 +33,7 @@
   "enabled": "Enabled",
   "save": "Save",
   "scheduleNames": {
+    "service-synchronization": "Native service synchronization",
     "service-outbox": "Service provisioning delivery",
     "io-heartbeat": "I/O worker heartbeat",
     "cpu-heartbeat": "CPU worker heartbeat",

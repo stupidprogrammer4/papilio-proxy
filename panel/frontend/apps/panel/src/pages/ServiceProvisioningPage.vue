@@ -6,6 +6,7 @@ import { request, query, type ManagedCore, type ManagedInbound, type ManagedServ
 import ManagedRecordPicker from "../components/ManagedRecordPicker.vue";
 import XrayCoreSetup from "../components/XrayCoreSetup.vue";
 import XrayInboundSetup from "../components/XrayInboundSetup.vue";
+import ServiceSynchronization from "../components/ServiceSynchronization.vue";
 
 const { t } = useI18n();
 const core = ref<ManagedCore | null>(null);
@@ -93,6 +94,7 @@ onMounted(async () => { await load({ q: "", page: 1, page_size: 20 }); });
     <section class="card card-pad">
       <ManagedRecordPicker data-testid="service-picker" :title="t('serviceSetup.existing')" :items="services.items.map(item => ({ id: item.id, label: item.name }))" :count="services.count" :page="services.page" :page-size="services.page_size" :selected-id="selected?.id" :busy="busy" @search="load" @select="select" />
     </section>
+    <ServiceSynchronization v-if="selected" :key="selected.id" :service-id="selected.id" />
     <fieldset class="stack" :disabled="busy">
       <legend>{{ t('serviceSetup.newService') }}</legend>
       <XrayCoreSetup v-model="core" />

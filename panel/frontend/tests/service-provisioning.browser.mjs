@@ -7,6 +7,7 @@ import { fundNativeInvoice } from "./manual-payment.steps.mjs";
 import { createNativeProduct, buyNativeService } from "./product-purchase.steps.mjs";
 import { assertStaffShopDenied, exerciseBotShopSettings } from "./bot-shop-settings.steps.mjs";
 import { exerciseBotRecovery } from "./bot-shop-recovery.steps.mjs";
+import { exerciseServiceSynchronization } from "./service-synchronization.steps.mjs";
 
 const base = process.env.PAPILIO_BROWSER_URL;
 assert(base && process.env.PAPILIO_BROWSER_RESULT && process.env.PAPILIO_BROWSER_DATA_PORT);
@@ -72,6 +73,7 @@ try {
   await page.getByTestId("service-picker").getByRole("button", { name: service.name, exact: true }).click();
   await expect(page.getByTestId("service-status")).toContainText("Succeeded");
   await expect(page.getByTestId("subscription-url")).toHaveCount(0);
+  await exerciseServiceSynchronization(page, base, service);
   await page.getByTestId("locale-selector").selectOption("fa");
   await expect(page.getByTestId("service-title")).toHaveText("سرویس‌ها");
   await expect(page.getByTestId("service-subscription")).toHaveText("دریافت لینک اشتراک");
@@ -86,6 +88,7 @@ try {
   await staff.goto(`${base}/services`);
   await staff.waitForURL(`${base}/`);
   await expect(staff.getByTestId("service-title")).toHaveCount(0);
+  assert.equal((await staff.request.get(`${base}/api/v1/services/${service.id}/synchronization`)).status(), 401);
   const product = await createNativeProduct(page, base, core.name);
   const customerId = await exerciseCustomerWallet(page, base);
   const invoiceId = await fundNativeInvoice(page, base, customerId);

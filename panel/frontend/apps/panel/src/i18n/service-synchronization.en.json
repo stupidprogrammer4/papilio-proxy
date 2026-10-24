@@ -1,0 +1,11 @@
+{
+  "title": "Native account synchronization",
+  "help": "Periodically apply this service's saved credentials to its core so the account recovers after a core restart. Purchases and wallet entries stay unchanged.",
+  "pauseHelp": "Pausing leaves the current native account in place. The shared schedule in Overview controls checks for all services. Timing changes apply without a panel restart; already sent operations can finish.",
+  "status": "Synchronization state",
+  "paused": "Paused",
+  "lastCheck": "Last completed check",
+  "nextCheck": "Next eligible check",
+  "lastError": "Last check error",
+  "conflict": "The settings changed. Your draft is retained; refresh to load the current values."
+}

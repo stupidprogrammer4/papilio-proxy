@@ -1,6 +1,7 @@
 export * from "./bots";
 export * from "./botShop";
 export * from "./botRecovery";
+export * from "./serviceSynchronization";
 export * from "./managedServices";
 export * from "./customerAccounts";
 export * from "./productsOrders";

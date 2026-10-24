@@ -33,6 +33,7 @@
   "enabled": "فعال",
   "save": "ذخیره",
   "scheduleNames": {
+    "service-synchronization": "همگام‌سازی کاربران هسته",
     "service-outbox": "ارسال درخواست ساخت سرویس",
     "io-heartbeat": "گزارش worker ارتباطی",
     "cpu-heartbeat": "گزارش worker پردازشی",
