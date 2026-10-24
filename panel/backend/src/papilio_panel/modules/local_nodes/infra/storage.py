@@ -5,7 +5,7 @@ from typing import Any
 from uuid import UUID
 
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, Q
 from django.utils import timezone
 
 from papilio_panel.modules.nodes.domain import AgentRuntime, CertificatePolicy, NodeDefinition
@@ -136,9 +136,10 @@ class DjangoLocalStorage:
         if current is None:
             raise Missing("The local node was not found.")
         LocalNodeOperation.objects.filter(
+            Q(status=OperationStatus.QUEUED)
+            | Q(status=OperationStatus.RUNNING, lease_until__lte=timezone.now()),
             pk=current.operation.id,
             installation__owner_id=values.actor_id,
-            status=OperationStatus.QUEUED,
         ).update(due_at=timezone.now(), dispatched_at=None)
         return current.delivery
 

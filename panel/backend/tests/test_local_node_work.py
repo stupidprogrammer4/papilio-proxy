@@ -118,3 +118,54 @@ def test_independent_concurrent_workers_claim_only_one_current_lease() -> None:
         assert sorted(future.result(timeout=10) for future in futures) == [False, True]
     connection.close()
     assert LocalNodeOperation.objects.get(pk=identifier).attempts == 1
+
+
+@override_settings(PAPILIO_LOCAL_NODE_AVAILABLE=True)
+def test_expired_running_delivery_respects_redelivery_bookmarks_and_policy_resume() -> None:
+    from papilio_panel.modules.local_nodes.infra.work import DjangoLocalWorkStorage
+
+    client = initialize_local_owner()
+    root, work = "/api/v1/system/local-node", DjangoLocalWorkStorage()
+    identifier = UUID(client.get(root).json()["operation"]["id"])
+    claim = work.claim(identifier)
+    assert claim is not None
+    LocalNodeOperation.objects.filter(pk=identifier).update(
+        lease_until=timezone.now() - timedelta(seconds=1)
+    )
+    delivery = work.pending()
+    assert delivery is not None and delivery.operation_id == identifier
+    work.dispatched(delivery)
+    connection.close()
+    assert work.pending() is None
+    assert (
+        client.put(
+            root + "/delivery",
+            {
+                "enabled": False,
+                "retry_interval_seconds": 2,
+                "max_attempts": 9,
+                "expected_revision": "1",
+            },
+            format="json",
+        ).status_code
+        == 200
+    )
+    assert work.pending() is None
+    assert (
+        client.put(
+            root + "/delivery",
+            {
+                "enabled": True,
+                "retry_interval_seconds": 2,
+                "max_attempts": 9,
+                "expected_revision": "2",
+            },
+            format="json",
+        ).status_code
+        == 200
+    )
+    assert work.pending() is not None
+    recovered = work.claim(identifier)
+    assert recovered is not None and recovered.token != claim.token
+    work.dispatched(delivery)
+    assert LocalNodeOperation.objects.get(pk=identifier).dispatched_at is None

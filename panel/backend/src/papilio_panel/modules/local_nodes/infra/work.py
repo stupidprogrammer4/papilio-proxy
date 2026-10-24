@@ -152,7 +152,8 @@ class DjangoLocalWorkStorage:
             pk=delivery.operation_id,
             installation_id=1,
             installation__current_operation_id=delivery.operation_id,
-            status=OperationStatus.QUEUED,
+            installation__delivery_enabled=True,
+            status__in=(OperationStatus.QUEUED, OperationStatus.RUNNING),
             attempts=delivery.attempts,
             due_at=delivery.due_at,
         ).update(dispatched_at=timezone.now())
