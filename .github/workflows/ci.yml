@@ -118,6 +118,9 @@ jobs:
       - run: pnpm --dir panel/frontend exec playwright install --with-deps chromium
       - run: pnpm --dir panel/frontend build
       - run: pnpm --dir panel/frontend test:browser local-runtime
+        env:
+          PAPILIO_BACKEND_URL: http://127.0.0.1:9
+          PAPILIO_PANEL_PORT: "4523"
       - run: .venv/bin/ruff check panel/backend deployment
       - run: .venv/bin/ruff format --check panel/backend deployment
       - run: .venv/bin/pyright -p panel/backend
