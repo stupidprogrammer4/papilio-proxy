@@ -152,9 +152,10 @@ with backups: it is needed to decrypt node keys after restore.
 Main builds a separate `papilio-node-VERSION-linux-amd64.tar.gz` or `linux-arm64`
 bundle containing the agent, checksum-verified official Xray 26.3.27 and their
 license notices. Published alpha.3 has no node bundle or `node` command. Native
-preparation and actual panel/Beat/worker/mTLS/Xray/client execution are exercised;
-clean-host systemd installation and ARM execution of the new workflow remain
-unverified.
+preparation and actual panel/Beat/worker/mTLS/Xray/client execution are exercised.
+Native systemd/crash/reboot acceptance also passes on Ubuntu24.04 amd64 at the
+standard path. ARM execution of the new workflow and other host combinations
+remain unverified.
 
 From the current source checkout, with the downloaded private bootstrap:
 
@@ -185,8 +186,10 @@ creates validated files without installing a service; `node run --node NODE_ID`
 runs them in the foreground for development. Reinstalling with the same initial
 identity, options and bundle preserves modified operator configuration and keys.
 Changed initial options or binaries are rejected without replacement. Existing
-node editing/rotation, clean-host acceptance, automatic local panel registration,
-backups of native instance files remain open. Configurable Django synchronization
+node editing/rotation, automatic local panel registration and backups of native
+instance files remain open. Native systemd installation, crash/reboot recovery,
+client traffic and preserved operator files are exercised on a disposable
+Ubuntu24.04 amd64 guest at `/opt/papilio`; this is not a complete OS matrix. Configurable Django synchronization
 now restores saved native accounts after managed or attached core restarts;
 see [synchronization](#native-account-synchronization-on-main). This is not a completed MVP.
 

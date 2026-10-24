@@ -34,8 +34,8 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 
 - Native agent process ownership on main: optional managed Xray validates/starts
   the selected core and performs bounded shutdown. Actual executable/client, core
-  crash and paused-process cleanup pass. Automatic node install and recovery of
-  dynamic users from Django remain unfinished.
+  crash and paused-process cleanup pass. Configurable Django synchronization now
+  recovers persisted native users. Automatic local node installation remains open.
 
 - On main after the foundation release: runnable Go/mTLS agent and native Xray
   adapter tested through actual HTTPS/core/client traffic, including denied
@@ -112,8 +112,10 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
   bundles, private bootstrap preparation, preserved operator files and native
   lifecycle commands. Actual foreground CLI -> mTLS worker -> core -> subscription
   client passes. Configurable synchronization restores users after managed and
-  attached core restarts without financial replay. Clean-host systemd, automatic
-  local panel registration, native node backup/upgrade and new published artifacts remain.
+  attached core restarts without financial replay. Actual systemd/crash/reboot and
+  retained operator files pass on Ubuntu24.04 amd64 at the standard path. Automatic
+  local panel registration, other host combinations, native node backup/upgrade
+  and new published artifacts remain.
 - Real RabbitMQ/Celery/Beat: separate worker queues, durable outbox, replay and
   recovery after broker outage.
 - Native database schedules: operator edits survive migrations and concurrent

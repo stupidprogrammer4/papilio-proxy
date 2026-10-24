@@ -330,3 +330,29 @@ checks retained values, exercises two-tab conflicts/drafts, both locales and sta
 denial. Browser test servers/previews have separate owned process groups; the
 Gunicorn control socket is in a private short temporary path. These fixtures
 never own the test runner's process group or another application's control socket.
+
+The opt-in `test_node_systemd_runtime.py` additionally executes the native CLI on
+an explicitly disposable Ubuntu24.04 amd64 QEMU/KVM guest with systemd255. It
+checks DynamicUser/LoadCredential execution, actual mTLS and subscription traffic,
+a main-process SIGKILL, an observed new boot ID after reboot, stop/start recovery
+and unchanged private keys/operator configuration after reinstall and reboot.
+The standard `/opt/papilio` path is exercised; alternate paths and other OS/ARM
+combinations are not established by this case. The regular CI skips this VM gate.
+
+To run it, supply the normal isolated integration connections, verified
+`PAPILIO_XRAY_BINARY` and `PAPILIO_NODE_BUNDLE`, plus these explicit VM settings:
+
+| Variable | Required target |
+| --- | --- |
+| `PAPILIO_RUN_NODE_SYSTEMD` | `1` |
+| `PAPILIO_SYSTEMD_TEST_SSH_PORT` | Loopback host forward to guest SSH22 |
+| `PAPILIO_SYSTEMD_TEST_AGENT_PORT` | Loopback host forward to guest9443 |
+| `PAPILIO_SYSTEMD_TEST_INBOUND_PORT` | Loopback host forward to guest8443 |
+| `PAPILIO_SYSTEMD_TEST_KEY` | Private SSH key for guest user `ubuntu` with passwordless sudo |
+
+The guest must contain `/etc/papilio-test-vm-id` with exactly
+`papilio-native-systemd-vm01` and run systemd as PID1; the test checks both before
+changes. It copies test inputs into that user's home, installs a uniquely named
+node/unit, reboots that VM and removes its own unit/instance afterward. Never
+point it at an ordinary host. The local test uses Ubuntu's dated20261017 cloud
+image verified against its official SHA256SUMS and a private NoCloud seed.

@@ -286,9 +286,9 @@ directories. Existing parent permissions are preserved; foreground development
 can use a private home path. Newly created binary directories use 0755 even with
 a private umask, while credentials remain in a 0700 directory with 0600 files.
 `--prepare-only` creates files without touching systemd. Foreground `node run`
-supports the development acceptance path. Clean-host service execution, mutable
-panel settings and native node backup/upgrade remain
-open; see the [node guide](user-guide.en.md#native-node-installation-candidate-on-main).
+supports the development acceptance path. Actual systemd execution and
+crash/reboot recovery pass on Ubuntu24.04 amd64 at `/opt/papilio`. Other host/path
+combinations, mutable panel settings and native node backup/upgrade remain open; see the [node guide](user-guide.en.md#native-node-installation-candidate-on-main).
 
 
 ## Native account synchronization (services, main)

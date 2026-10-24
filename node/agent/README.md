@@ -12,9 +12,11 @@ with owner-controlled timing and pauses. These components are not the completed 
 
 Main now includes a [native node installation candidate](../../docs/user-guide.en.md#native-node-installation-candidate-on-main)
 with prebuilt agent/Xray bundles and private instance preparation. Its actual
-foreground CLI/mTLS/core/subscription-client path is exercised. Clean-host
-systemd execution remains open; alpha.3 does not ship
-these node bundles or CLI controls.
+foreground CLI/mTLS/core/subscription-client path is exercised. Native systemd
+installation, crash/reboot recovery and retained operator files are also exercised
+on a disposable Ubuntu24.04 amd64 guest at the standard installation path.
+Automatic local registration and other host combinations remain open; alpha.3
+does not ship these node bundles or CLI controls.
 
 ## Verified adapter boundary
 
