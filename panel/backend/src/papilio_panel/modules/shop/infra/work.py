@@ -12,10 +12,59 @@ from django.utils import timezone
 from papilio_panel.shared.errors import Conflict, Missing
 
 from ..domain import WorkClaim, WorkDelivery, WorkLease, WorkRead, WorkState
-from ..models import InboxWork, ShopConfiguration
+from ..models import InboxWork, ShopConfiguration, WorkRecovery
+from ..recovery_contracts import WorkRecoveryRead, WorkRecoveryReservation, WorkRecoveryWrite
+from .recovery_audits import work_recovery_read
 
 
 class DjangoShopWorkStorage:
+    def recovery(self, actor_id: int, request_key: UUID) -> WorkRecoveryRead | None:
+        try:
+            row = WorkRecovery.objects.get(actor_id=actor_id, request_key=request_key)
+        except WorkRecovery.DoesNotExist:
+            return None
+        return work_recovery_read(row)
+
+    @transaction.atomic
+    def recover(self, values: WorkRecoveryWrite) -> WorkRecoveryReservation:
+        inputs = values.values
+        definition = inputs.definition
+        row, created = WorkRecovery.objects.get_or_create(
+            actor_id=inputs.actor_id,
+            request_key=definition.request_key,
+            defaults={
+                "bot_id": inputs.bot_id,
+                "work_id": inputs.work_id,
+                "expected_revision": definition.expected_revision,
+                "action": definition.action,
+                "note": definition.note,
+                "previous_status": values.previous.status,
+                "previous_attempts": values.previous.attempts,
+            },
+        )
+        if created:
+            scoped_ids = InboxWork.objects.filter(
+                event__bot_id=inputs.bot_id, event__bot__owner_id=inputs.actor_id
+            ).values("pk")
+            updated = InboxWork.objects.filter(
+                pk=inputs.work_id,
+                pk__in=scoped_ids,
+                revision=definition.expected_revision,
+            ).update(
+                status=values.status,
+                revision=F("revision") + 1,
+                attempts=values.attempts,
+                completed_at=values.completed_at,
+                error_code=values.error_code,
+                retry_at=None,
+                lease_token=None,
+                lease_until=None,
+                dispatched_at=None,
+            )
+            if updated != 1:
+                raise Conflict("The conversation changed before recovery committed.")
+        return WorkRecoveryReservation(work_recovery_read(row), created)
+
     def discover(self) -> None:
         event_ids = (
             ShopConfiguration.objects.filter(
@@ -47,6 +96,7 @@ class DjangoShopWorkStorage:
             status=WorkState.RUNNING, lease_until__lt=now
         )
         updated = InboxWork.objects.filter(eligible, pk=work_id).update(
+            revision=F("revision") + 1,
             status=WorkState.RUNNING,
             lease_token=token,
             lease_until=now + timedelta(seconds=lease_seconds),
@@ -64,6 +114,7 @@ class DjangoShopWorkStorage:
             pk=claim.id, event_id=claim.event.id, lease_token=claim.token, status=WorkState.RUNNING
         ).update(
             status=WorkState.DONE if error_code is None else WorkState.FAILED,
+            revision=F("revision") + 1,
             completed_at=timezone.now(),
             error_code=error_code,
             lease_token=None,
@@ -79,6 +130,7 @@ class DjangoShopWorkStorage:
             pk=claim.id, event_id=claim.event.id, lease_token=claim.token, status=WorkState.RUNNING
         ).update(
             status=WorkState.QUEUED,
+            revision=F("revision") + 1,
             lease_token=None,
             lease_until=None,
             dispatched_at=None,
@@ -92,6 +144,7 @@ class DjangoShopWorkStorage:
             pk=claim.id, event_id=claim.event.id, lease_token=claim.token, status=WorkState.RUNNING
         ).update(
             status=WorkState.QUEUED,
+            revision=F("revision") + 1,
             retry_at=retry_at,
             error_code=error_code,
             lease_token=None,

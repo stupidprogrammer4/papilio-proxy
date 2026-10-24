@@ -114,6 +114,8 @@ class NativeTelegramGateway:
                     if type(value) is int and 1 <= value <= 2147483647:
                         retry = value
                 raise TelegramTransportError("rate_limited", retry_after_seconds=retry)
+            if method == "getFile" and 400 <= response.status < 500:
+                raise TelegramTransportError("file_unavailable")
             if response.status != 200:
                 raise TelegramTransportError("telegram_unavailable")
             envelope = json.loads(body, parse_constant=invalid_constant)

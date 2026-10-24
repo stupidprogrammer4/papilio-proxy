@@ -33,6 +33,7 @@ class WorkState(StrEnum):
     RUNNING = "running"
     DONE = "done"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class MessageState(StrEnum):
@@ -42,6 +43,15 @@ class MessageState(StrEnum):
     RETRY = "retry"
     AMBIGUOUS = "ambiguous"
     FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class RecoveryAction(StrEnum):
+    RETRY = "retry"
+    CANCEL = "cancel"
+
+
+RECOVERY_ACTION_CHOICES = tuple((action.value, action.value) for action in RecoveryAction)
 
 
 DEFAULT_TEXTS = {
@@ -263,6 +273,9 @@ class MessageRead:
     retry_at: datetime | None
     created_at: datetime
     lease_until: datetime | None
+    revision: int
+    invoice_id: UUID | None
+    actions: tuple[RecoveryAction, ...] = ()
 
 
 @dataclass(frozen=True)

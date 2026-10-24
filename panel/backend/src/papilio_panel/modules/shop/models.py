@@ -54,7 +54,8 @@ class InboxWork(models.Model):
     event = models.OneToOneField(
         "bots.TelegramInbox", on_delete=models.PROTECT, related_name="shop_work"
     )
-    status = models.CharField(max_length=8, default=WorkState.QUEUED)
+    status = models.CharField(max_length=9, default=WorkState.QUEUED)
+    revision = models.BigIntegerField(default=1)
     attempts = models.PositiveIntegerField(default=0)
     retry_at = models.DateTimeField(null=True)
     lease_token = models.UUIDField(null=True)
@@ -97,6 +98,7 @@ class OutgoingMessage(models.Model):
     )
     payload_ciphertext = models.BinaryField(editable=False)
     status = models.CharField(max_length=12, default=MessageState.QUEUED)
+    revision = models.BigIntegerField(default=1)
     attempts = models.PositiveIntegerField(default=0)
     lease_token = models.UUIDField(null=True)
     lease_until = models.DateTimeField(null=True)
@@ -113,3 +115,43 @@ class InvoiceConversation(models.Model):
     invoice = models.OneToOneField("payments.Invoice", primary_key=True, on_delete=models.PROTECT)
     event_id: int
     event = models.ForeignKey("bots.TelegramInbox", on_delete=models.PROTECT)
+
+
+class RecoveryRecord(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    actor_id: int
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    bot_id: uuid.UUID
+    bot = models.ForeignKey("bots.Bot", on_delete=models.PROTECT)
+    request_key = models.UUIDField()
+    expected_revision = models.BigIntegerField()
+    action = models.CharField(max_length=6)
+    note = models.CharField(max_length=500, blank=True)
+    previous_status = models.CharField(max_length=12)
+    previous_attempts = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        abstract = True
+
+
+class WorkRecovery(RecoveryRecord):
+    work_id: uuid.UUID
+    work = models.ForeignKey(InboxWork, on_delete=models.PROTECT)
+
+    class Meta(RecoveryRecord.Meta):
+        constraints = [
+            models.UniqueConstraint(fields=["actor", "request_key"], name="shop_work_recovery_key")
+        ]
+
+
+class MessageRecovery(RecoveryRecord):
+    message_id: uuid.UUID
+    message = models.ForeignKey(OutgoingMessage, on_delete=models.PROTECT)
+
+    class Meta(RecoveryRecord.Meta):
+        constraints = [
+            models.UniqueConstraint(
+                fields=["actor", "request_key"], name="shop_message_recovery_key"
+            )
+        ]

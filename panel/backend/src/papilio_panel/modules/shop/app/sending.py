@@ -30,7 +30,13 @@ class ShopSending:
     def begin(self, message_id: UUID) -> MessageClaim | None:
         row = self.storage.reference(message_id)
         if (
-            row.status in {MessageState.SENT, MessageState.AMBIGUOUS, MessageState.FAILED}
+            row.status
+            in {
+                MessageState.SENT,
+                MessageState.AMBIGUOUS,
+                MessageState.FAILED,
+                MessageState.CANCELLED,
+            }
             or not self.schedule.enabled()
         ):
             return None

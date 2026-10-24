@@ -11,21 +11,29 @@ import pytest
 from conftest import until
 from django.contrib.auth.models import User
 from django.db import connection
+from recovery_browser_scenario import browser_recovery_scenario
 from test_node_runtime import listening, port, stop
 from test_node_user_control import native_control as native_control
+from test_service_runtime import existing_owner_client
 from xray_client import subscription_client
 
 from papilio_panel.modules.nodes.domain import XrayApply
 from papilio_panel.modules.payments.models import Invoice, PaymentDecision, Receipt
 from papilio_panel.modules.services.models import ServiceAccount
-from papilio_panel.modules.shop.models import ShopConfiguration
+from papilio_panel.modules.shop.models import (
+    InboxWork,
+    MessageRecovery,
+    OutgoingMessage,
+    ShopConfiguration,
+    WorkRecovery,
+)
 from papilio_panel.modules.wallets.models import JournalEntry, Wallet
 
 pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.runtime]
 ROOT = Path(__file__).resolve().parents[3]
 
 
-@pytest.mark.timeout(100)
+@pytest.mark.timeout(120)
 @pytest.mark.skipif(
     os.environ.get("PAPILIO_RUN_SERVICE_BROWSER") != "1",
     reason="Enable the native service browser gate after building the frontend.",
@@ -52,7 +60,13 @@ def test_panel_provisions_a_service_used_by_an_actual_native_client(
     result_path = tmp_path / "browser-result.json"
     env["PAPILIO_BROWSER_RESULT"] = str(result_path)
     env["PAPILIO_BROWSER_DATA_PORT"] = str(data_port)
-    with (tmp_path / "browser-server.log").open("w") as log:
+    with (
+        browser_recovery_scenario(existing_owner_client()) as scenario,
+        (tmp_path / "browser-server.log").open("w") as log,
+    ):
+        env["PAPILIO_RECOVERY_BOT_ID"] = str(scenario.bot_id)
+        env["PAPILIO_RECOVERY_WORK_ID"] = str(scenario.work_id)
+        env["PAPILIO_RECOVERY_MESSAGE_ID"] = str(scenario.message_id)
         web = subprocess.Popen(
             [
                 sys.executable,
@@ -85,11 +99,17 @@ def test_panel_provisions_a_service_used_by_an_actual_native_client(
                 env=env,
                 capture_output=True,
                 text=True,
-                timeout=65,
+                timeout=85,
             )
             assert result.returncode == 0, result.stderr
             output = json.loads(result_path.read_text())
             connection.close()
+            assert InboxWork.objects.get(pk=scenario.work_id).status == "cancelled"
+            recovered_message = OutgoingMessage.objects.get(pk=scenario.message_id)
+            assert recovered_message.status == "sent"
+            assert bytes(recovered_message.payload_ciphertext) == scenario.message_ciphertext
+            assert WorkRecovery.objects.get(work_id=scenario.work_id).action == "cancel"
+            assert MessageRecovery.objects.get(message_id=scenario.message_id).action == "retry"
             first_shop = ShopConfiguration.objects.get(bot_id=output["shops"]["first"])
             second_shop = ShopConfiguration.objects.get(bot_id=output["shops"]["second"])
             assert first_shop.revision == 2 and first_shop.enabled is False

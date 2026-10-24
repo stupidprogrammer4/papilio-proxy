@@ -114,6 +114,10 @@ SPECTACULAR_SETTINGS = {
     "TITLE": "Papilio API",
     "VERSION": __version__,
     "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAdminUser"],
+    "ENUM_NAME_OVERRIDES": {
+        "ActionEnum": "papilio_panel.modules.payments.domain.DECISION_ACTION_CHOICES",
+        "RecoveryActionEnum": "papilio_panel.modules.shop.domain.RECOVERY_ACTION_CHOICES",
+    },
 }
 
 CELERY_BROKER_URL = required("CELERY_BROKER_URL")

@@ -24,6 +24,9 @@ class DecisionAction(StrEnum):
     REJECT = "reject"
 
 
+DECISION_ACTION_CHOICES = tuple((action.value, action.value) for action in DecisionAction)
+
+
 @dataclass(frozen=True)
 class PaymentDefinition:
     recipient: str

@@ -72,7 +72,10 @@ class ShopExecution:
 
     def begin(self, work_id: UUID) -> WorkClaim | None:
         row = self.storage.read(work_id)
-        if row.status in {WorkState.DONE, WorkState.FAILED} or not self.schedule.enabled():
+        if (
+            row.status in {WorkState.DONE, WorkState.FAILED, WorkState.CANCELLED}
+            or not self.schedule.enabled()
+        ):
             return None
         event = self.events.event(row.event_id)
         settings = self.control.read(event.bot.id, event.bot.owner_id)

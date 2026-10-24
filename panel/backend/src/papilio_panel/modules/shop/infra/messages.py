@@ -20,7 +20,13 @@ from ..domain import (
     ShopSettingsRead,
     WorkDelivery,
 )
-from ..models import OutgoingMessage
+from ..models import MessageRecovery, OutgoingMessage
+from ..recovery_contracts import (
+    MessageRecoveryRead,
+    MessageRecoveryReservation,
+    MessageRecoveryWrite,
+)
+from .recovery_audits import message_recovery_read
 from .replies import decrypt_reply, encrypt_reply
 
 
@@ -38,6 +44,8 @@ def message_read(row: OutgoingMessage) -> MessageRead:
         row.retry_at,
         row.created_at,
         row.lease_until,
+        row.revision,
+        row.invoice_id,
     )
 
 
@@ -46,6 +54,52 @@ def scoped_messages() -> QuerySet[OutgoingMessage]:
 
 
 class DjangoShopMessageStorage:
+    def recovery(self, actor_id: int, request_key: UUID) -> MessageRecoveryRead | None:
+        try:
+            row = MessageRecovery.objects.get(actor_id=actor_id, request_key=request_key)
+        except MessageRecovery.DoesNotExist:
+            return None
+        return message_recovery_read(row)
+
+    @transaction.atomic
+    def recover(self, values: MessageRecoveryWrite) -> MessageRecoveryReservation:
+        inputs = values.values
+        definition = inputs.definition
+        row, created = MessageRecovery.objects.get_or_create(
+            actor_id=inputs.actor_id,
+            request_key=definition.request_key,
+            defaults={
+                "bot_id": inputs.bot_id,
+                "message_id": inputs.message_id,
+                "expected_revision": definition.expected_revision,
+                "action": definition.action,
+                "note": definition.note,
+                "previous_status": values.previous.status,
+                "previous_attempts": values.previous.attempts,
+            },
+        )
+        if created:
+            scoped_ids = scoped_messages().filter(bot__owner_id=inputs.actor_id).values("pk")
+            updated = OutgoingMessage.objects.filter(
+                pk=inputs.message_id,
+                pk__in=scoped_ids,
+                bot_id=inputs.bot_id,
+                owner_id=inputs.actor_id,
+                revision=definition.expected_revision,
+            ).update(
+                status=values.status,
+                revision=F("revision") + 1,
+                attempts=values.attempts,
+                error_code=values.error_code,
+                retry_at=None,
+                lease_token=None,
+                lease_until=None,
+                dispatched_at=None,
+            )
+            if updated != 1:
+                raise Conflict("The outgoing message changed before recovery committed.")
+        return MessageRecoveryReservation(message_recovery_read(row), created)
+
     def append(self, values: ReplyWrite) -> UUID:
         ciphertext = encrypt_reply(values.reply)
         if values.source_event_id is not None:
@@ -102,6 +156,7 @@ class DjangoShopMessageStorage:
             eligible, pk=message_id, bot_id=settings.bot_id, owner_id=settings.owner_id
         ).update(
             status=MessageState.SENDING,
+            revision=F("revision") + 1,
             lease_token=token,
             lease_until=now + timedelta(seconds=lease_seconds),
             attempts=F("attempts") + 1,
@@ -133,6 +188,7 @@ class DjangoShopMessageStorage:
             pk=claim.id, lease_token=claim.token, status=MessageState.SENDING
         ).update(
             status=status,
+            revision=F("revision") + 1,
             retry_at=retry_at,
             message_id=result.message_id,
             chat_id=result.chat_id,
@@ -146,6 +202,7 @@ class DjangoShopMessageStorage:
             pk=message_id, status=MessageState.SENDING, lease_until__lt=timezone.now()
         ).update(
             status=status,
+            revision=F("revision") + 1,
             retry_at=retry_at,
             error_code="sender_lease_expired",
             lease_token=None,
@@ -158,6 +215,7 @@ class DjangoShopMessageStorage:
             pk=claim.id, lease_token=claim.token, status=MessageState.SENDING
         ).update(
             status=MessageState.QUEUED,
+            revision=F("revision") + 1,
             attempts=F("attempts") - 1,
             lease_token=None,
             lease_until=None,
@@ -183,7 +241,7 @@ class DjangoShopMessageStorage:
     def reject(self, message_id: UUID, error_code: str) -> None:
         OutgoingMessage.objects.filter(
             pk=message_id, status__in=[MessageState.QUEUED, MessageState.RETRY]
-        ).update(status=MessageState.FAILED, error_code=error_code)
+        ).update(status=MessageState.FAILED, error_code=error_code, revision=F("revision") + 1)
 
     def pending(self) -> tuple[WorkDelivery, ...]:
         now = timezone.now()

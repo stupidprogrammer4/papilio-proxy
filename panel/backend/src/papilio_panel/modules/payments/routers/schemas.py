@@ -7,10 +7,10 @@ from rest_framework import serializers
 from papilio_panel.shared.serializers import MoneyAmountField
 
 from ..domain import (
+    DECISION_ACTION_CHOICES,
     DEFAULT_INVOICE_ISSUANCE_ENABLED,
     DEFAULT_RECEIPT_MAX_BYTES,
     MAX_RECEIPT_BYTES,
-    DecisionAction,
     InvoiceState,
 )
 
@@ -115,7 +115,7 @@ class ReceiptPageSerializer(serializers.Serializer):
 class DecisionInputSerializer(serializers.Serializer):
     request_key = serializers.UUIDField()
     expected_revision = serializers.RegexField(r"^[1-9][0-9]{0,18}$", max_length=19)
-    action = serializers.ChoiceField(choices=[s.value for s in DecisionAction])
+    action = serializers.ChoiceField(choices=DECISION_ACTION_CHOICES)
     reason = serializers.CharField(max_length=500)
     receipt_id = serializers.UUIDField(allow_null=True, default=None)
 
@@ -126,7 +126,7 @@ class DecisionSerializer(serializers.Serializer):
     actor_id = serializers.IntegerField()
     request_key = serializers.UUIDField()
     expected_revision = serializers.CharField()
-    action = serializers.ChoiceField(choices=[s.value for s in DecisionAction])
+    action = serializers.ChoiceField(choices=DECISION_ACTION_CHOICES)
     reason = serializers.CharField()
     receipt_id = serializers.UUIDField(allow_null=True)
     wallet_entry_id = serializers.UUIDField(allow_null=True)

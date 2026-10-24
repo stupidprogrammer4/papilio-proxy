@@ -15,16 +15,20 @@ from .app.configuration import ShopConfiguration
 from .app.customers import ShopCustomerQueries, ShopCustomerRegistration
 from .app.execution import ShopExecution
 from .app.funding import ShopFunding
+from .app.inspection import ShopMessageInspection, ShopWorkInspection
 from .app.invoices import ShopInvoiceQueries
 from .app.menus import ShopMenus
+from .app.message_recovery import ShopMessageRecovery
 from .app.orders import ShopOrderQueries
 from .app.publications import ShopPublications
 from .app.purchases import ShopPurchases
 from .app.receipt_preparation import ShopReceiptPreparation
 from .app.sending import ShopSending
 from .app.settlements import ShopSettlementNotifications
+from .app.work_recovery import ShopWorkRecovery
 from .infra.broker import NativeShopPublisher
 from .infra.customers import DjangoCustomerBindingStorage
+from .infra.inspection import DjangoMessageInspectionReader, DjangoWorkInspectionReader
 from .infra.invoices import DjangoInvoiceOriginStorage
 from .infra.messages import DjangoShopMessageStorage
 from .infra.purchases import DjangoPurchaseConfirmationStorage
@@ -39,12 +43,16 @@ from .interfaces import (
     ShopFundingCapability,
     ShopInvoiceQueryCapability,
     ShopMenuCapability,
+    ShopMessageInspectionCapability,
+    ShopMessageRecoveryCapability,
     ShopOrderQueryCapability,
     ShopPublicationCapability,
     ShopPurchaseCapability,
     ShopReceiptPreparationCapability,
     ShopSendingCapability,
     ShopSettlementCapability,
+    ShopWorkInspectionCapability,
+    ShopWorkRecoveryCapability,
 )
 
 control: ShopControlCapability = ShopConfiguration(
@@ -59,6 +67,14 @@ shop_customer_queries: ShopCustomerQueryCapability = ShopCustomerQueries(
 _work = DjangoShopWorkStorage()
 _messages = DjangoShopMessageStorage()
 _schedule = NativeShopSchedule()
+work_inspection: ShopWorkInspectionCapability = ShopWorkInspection(
+    DjangoWorkInspectionReader(), admin_access, bots, settings.PAPILIO_MAX_PAGE_SIZE
+)
+message_inspection: ShopMessageInspectionCapability = ShopMessageInspection(
+    DjangoMessageInspectionReader(), admin_access, bots, settings.PAPILIO_MAX_PAGE_SIZE
+)
+work_recovery: ShopWorkRecoveryCapability = ShopWorkRecovery(_work, work_inspection, conversations)
+message_recovery: ShopMessageRecoveryCapability = ShopMessageRecovery(_messages, message_inspection)
 shop_orders: ShopOrderQueryCapability = ShopOrderQueries(orders, services)
 shop_invoices: ShopInvoiceQueryCapability = ShopInvoiceQueries(invoices, _messages)
 menus: ShopMenuCapability = ShopMenus(products, wallets, shop_orders, shop_invoices)

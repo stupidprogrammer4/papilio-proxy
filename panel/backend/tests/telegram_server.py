@@ -15,6 +15,7 @@ class TelegramServer:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.webhook = ""
         self.replies: dict[str, tuple[int, object]] = {}
+        self.scripted_replies: dict[str, list[tuple[int, object]]] = {}
         self.hold_next = False
         self.entered = threading.Event()
         self.release = threading.Event()
@@ -102,6 +103,9 @@ class TelegramServer:
     ) -> tuple[int, object]:
         with self.lock:
             self.calls.append((method, parameters))
+            scripted = self.scripted_replies.get(method)
+            if scripted:
+                return scripted.pop(0)
             if method in self.replies:
                 return self.replies[method]
             if self.next_error_status is not None:
