@@ -1,4 +1,47 @@
-# 0.1.0-alpha.3 — portable native images and managed core process
+# 0.1.0-alpha.4 — bundled Xray and shared sales prototype
+
+Experimental release candidate. The full VPN sales MVP remains in progress;
+live Telegram purchase acceptance and mutable service lifecycle remain open.
+
+Included source capabilities:
+
+- Six native ready images include a separate unprivileged Go/Xray runtime.
+  New installations offer automatic local node preparation during first-owner
+  setup, with advanced configuration and an explicit opt-out. Existing
+  installations retain their prior physical configuration.
+- Atomic owner/node/core/inbound registration and durable CPU/IO preparation;
+  permission-scoped preparation status, retry policy and retry controls in EN/FA.
+- Real VLESS/TCP/no-TLS service provisioning, signed subscriptions and native
+  account restoration after core restarts. This prototype has unlimited service
+  resources; expiry, quotas and complete lifecycle are not implemented.
+- Owner-scoped customer accounts, exact IRR wallets, versioned products, purchase
+  confirmation, manual invoices, private receipt review and replay-safe settlement.
+  Panel and bot adapters share the same accounting and service capabilities.
+- Per-operator bot configuration, editable database schedules, admin pairing,
+  shop settings/templates and durable purchase/payment delivery with operator
+  recovery controls. Runtime/browser tests substitute the external Telegram API;
+  registration alone is not live purchase acceptance.
+- Local runtime backups include private keys, core configuration and operator
+  files. Actual delete-before-restore, client recovery, restart and synthetic
+  upgrade are exercised on sandbox/HTTP amd64. Separate systemd node directories
+  and interrupted/power-loss restore recovery are outside this snapshot scope.
+
+Publication is gated by native amd64/arm64 images, classic/containerd consumers,
+installed browser/recovery checks and upgrades from public alpha.1/alpha.2/alpha.3.
+Those gates do not certify additional clean operating systems or public ACME.
+Before publication, the main bootstrap continues to select immutable alpha.3.
+
+One current-source observation reached CLI panel/worker readiness in 55,016 ms on
+an existing Docker host with images already cached. It excludes prerequisites,
+downloads and owner interaction. No cold-install timing guarantee or measured
+PasarGuard timing comparison is claimed. See the [installation matrix](installation-matrix.md).
+
+Use the [English](user-guide.en.md)/[Persian](user-guide.fa.md) usage guides and [public TODO](../TODO.md)
+for the current boundaries. Reference-panel migration, full PasarGuard/Mirza
+coverage, additional cores, Android bank matching and independent offline intake
+remain unfinished. New code is MIT; upstream artifacts retain their own notices.
+
+## 0.1.0-alpha.3 — portable native images and managed core process
 
 Experimental connected foundation; the VPN sales MVP remains in progress.
 Public alpha.3 production/HTTP installation on fresh Ubuntu 24.04.5 amd64 passed

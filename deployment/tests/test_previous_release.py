@@ -47,7 +47,7 @@ def inspect_state(installation: Installation, statement: str) -> bytes:
     return result.stdout.strip()
 
 
-@pytest.mark.parametrize("previous_version", ["0.1.0-alpha.1", "0.1.0-alpha.2"])
+@pytest.mark.parametrize("previous_version", ["0.1.0-alpha.1", "0.1.0-alpha.2", "0.1.0-alpha.3"])
 def test_published_alpha_upgrade_and_previous_backup_recovery(
     tmp_path: Path, previous_version: str
 ) -> None:
