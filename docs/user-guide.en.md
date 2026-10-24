@@ -491,9 +491,13 @@ without an attached shop conversation have no bot recipient.
 Broker outage retains the payment event. Replays and concurrent consumers produce
 one reply record and do not post another wallet credit. Event acknowledgement
 means the reply is queued, not proof that Telegram received it. Pausing a bot can
-leave an event waiting for native retries/outbox redelivery. Transient receipt
-download retry/recovery controls, automatic ready notifications, advanced service
-terms and independent offline intake remain pending.
+leave an event waiting for native retries/outbox redelivery. Receipt connection
+failures, HTTP5xx and rate limits now retry using this bot's delay and attempt
+limit. Set attempts to 1 to disable automatic retries; reply and receipt budgets
+are counted separately. Missing/oversized files remain failed. No success acknowledgement
+or financial effect is committed before a download succeeds. Explicit recovery
+of failed/held work, automatic ready notifications, advanced service terms and
+independent offline intake remain pending.
 
 Private replies are encrypted in PostgreSQL; queue payloads contain identifiers.
 The managed `shop-outbox` schedule controls incoming work and outgoing delivery.

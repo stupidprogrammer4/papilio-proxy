@@ -445,14 +445,18 @@
         "panel/backend/tests/test_payment_events.py",
         "panel/backend/tests/test_shop_payments.py",
         "panel/backend/tests/test_shop_payment_recovery.py",
-        "panel/backend/tests/test_shop_payment_migration.py"
+        "panel/backend/tests/test_shop_payment_migration.py",
+        "panel/backend/tests/test_shop_receipt_retry.py",
+        "panel/backend/tests/test_shop_receipt_retry_limits.py",
+        "panel/backend/tests/test_shop_receipt_retry_migration.py",
+        "panel/backend/tests/test_shop_receipt_recovery.py"
       ],
       "sources": [
         "OWNER",
         "MIRZA"
       ],
       "guide": "docs/user-guide.en.md#manual-invoices-and-receipt-approval-on-main",
-      "verified_scope": "Owner manual invoice/settings/review queue and private evidence/audit, one-time exact base credit and real order consumer. Bot invoice/reference/photo intake, paired-admin review link and transactional decision notification outbox now connect to the same module; native broker-outage recovery and concurrent notification consumption are exercised. Per-bot panel shop policy covers origin, pauses, timing and EN/FA messages. Automatic modes/matching, standalone replay, multiple destinations, receipt transport retry controls and a new installable release remain pending."
+      "verified_scope": "Owner manual invoice/settings/review queue and private evidence/audit, one-time exact base credit and real order consumer. Bot invoice/reference/photo intake, paired-admin review link and transactional decision notification outbox connect to the same module. Per-bot panel policy controls bounded receipt retries and outgoing delivery. Actual worker/client purchases recover repeated HTTP503 downloads; broker cancellation retains receipt work for native reclaim. Automatic matching, standalone replay, multiple destinations, explicit failed/held-work recovery controls and a new installable release remain pending."
     },
     {
       "id": "FLOW-IDENTIFIER",
@@ -547,7 +551,11 @@
         "panel/backend/tests/test_shop_purchase_runtime.py",
         "panel/backend/tests/test_shop_payments.py",
         "panel/backend/tests/test_shop_payment_recovery.py",
-        "panel/backend/tests/test_shop_payment_migration.py"
+        "panel/backend/tests/test_shop_payment_migration.py",
+        "panel/backend/tests/test_shop_receipt_retry.py",
+        "panel/backend/tests/test_shop_receipt_retry_limits.py",
+        "panel/backend/tests/test_shop_receipt_retry_migration.py",
+        "panel/backend/tests/test_shop_receipt_recovery.py"
       ],
       "sources": [
         "OWNER",
@@ -555,7 +563,7 @@
         "CLOCK"
       ],
       "guide": "docs/user-guide.en.md",
-      "verified_scope": "Operator bot setup, native schedules, private pairing/intake and connected shop prototype: scoped customers/wallets, paginated catalogue/history, replay-safe confirmations, manual invoice/reference/photo evidence, admin review link, durable decision notifications and ready-only subscription. Per-bot panel policy exposes origin, pauses, timing and complete EN/FA templates with revision conflicts and separate staff access. Actual Beat/worker -> agent/Xray/client purchase includes bot top-up/evidence and controlled owner approval. Real test-broker outage preserves one event/credit/reply. Owner audit reasons stay private. External Telegram HTTP is doubled; live identity inspection is separate. Receipt transport retry/recovery, held-message recovery, live conversations, standalone intake and new artifacts remain incomplete."
+      "verified_scope": "Operator bot setup, native schedules, private pairing/intake and connected shop prototype: scoped customers/wallets, paginated catalogue/history, replay-safe confirmations, manual invoice/reference/photo evidence, admin review link, durable decision notifications and ready-only subscription. Per-bot panel policy exposes origin, pauses, timing, receipt retry limits and complete EN/FA templates with revision conflicts and separate staff access. Actual Beat/worker -> agent/Xray/client purchase includes repeated HTTP503 receipt recovery and controlled owner approval; a budget above Celery's usual default is exercised. Real test-broker outages preserve payment notifications and cancelled receipt work. Owner audit reasons stay private. External Telegram HTTP is doubled; live identity inspection is separate. Explicit failed/held-work recovery controls, live conversations, standalone intake and new artifacts remain incomplete."
     },
     {
       "id": "PG-USER-LIFECYCLE",

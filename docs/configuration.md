@@ -228,16 +228,22 @@ but lack the owner-only `bot-shop:read/write` session grants and financial contr
 | `locale` / `texts` | fa / declared Persian and English templates | Every supported label/message is explicit and editable; plain text uses named `$placeholder` values. Invalid or overlong rendered text fails the use case without committing its financial effects. |
 | `page_size` | 10 | Catalogue/history pages, bounded by the configured API pagination limit. |
 | `confirmation_ttl_seconds` | 900 | New purchase confirmations; existing expiry remains recorded. Purchased confirmations retain replay access after expiry. |
-| `retry_seconds` / `max_attempts` | 30 / 5 | Outgoing delivery; Telegram retry-after can extend the delay. Lowered attempt limits stop a new claim. |
+| `retry_seconds` / `max_attempts` | 30 / 5 | Separate budgets for each outgoing reply and receipt preparation; 1 disables automatic retries. Telegram retry-after can extend the delay. Lowered limits stop another receipt download. Counters record claimed executions, including terminal checks. |
 | `lease_seconds` | 120 | New work/send leases; effective minimum also covers the bot's configured transport timeout. |
 | `ambiguous_delivery` | hold | Preserve an unknown send as ambiguous, or explicitly retry with possible duplicate messages. No financial replay. |
 | Managed `shop-outbox` schedule | 1 second, enabled | Native database Beat enable/interval controls, seeded only when missing. No restart. |
 
 Templates and defaults are creation inputs, not automatic rewrites of existing
-operator settings. Unresolved/ambiguous message recovery controls and receipt transport retry remain
-pending. Telegram manual invoice/evidence/decision notification uses the existing
+operator settings. Explicit failed/ambiguous work recovery controls remain
+pending. Receipt connection failures, HTTP5xx and rate limits retry with the
+per-bot policy; missing files, invalid paths and byte limits remain terminal.
+The original inbox stays unprocessed during a queued retry, with no receipt or
+financial write before successful preparation. Telegram manual invoice/evidence/decision notification uses the existing
 payment settings, per-invoice frozen cap and this shop's delivery policy. The shop
 form does not establish panel controls for unfinished product modules.
+
+Recovery of a lease after worker cancellation is separate from retrying a
+reported transport failure; the original event identity remains unchanged.
 
 
 Payment decision events acknowledge a queued reply, not remote delivery. An event

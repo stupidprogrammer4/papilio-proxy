@@ -7,7 +7,7 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 | Stage | Status | Completed version | Remaining acceptance |
 | --- | --- | --- | --- |
 | Foundation | Experimental release | 0.1.0-alpha.1 | Additional OS/environment combinations and later panel settings editors remain pending. |
-| First practical release | In progress | — | Native panel and scheduled bot purchase/subscription/client paths are exercised; receipt transport retry/recovery, held-message controls, mutable service lifecycle, automatic node/core install and new release artifacts remain. |
+| First practical release | In progress | — | Native panel and scheduled bot purchase/subscription/client paths are exercised; failed/held-work recovery controls, live Telegram acceptance, mutable service lifecycle, automatic node/core install and new release artifacts remain. |
 | PasarGuard phase one | Planned | — | Reconcile and execute the complete v5.4.1 feature baseline. |
 | Full sales and bot | Planned | — | Approved Mirza/PGClock capabilities, resellers, Mini App and offline intake. |
 | Network and additional cores | Planned | — | Four complete cores and verified reference extras, certificates, Single Port, WARP, speed/IP controls. |
@@ -101,7 +101,8 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
   paired-admin review notice and manual approval/customer notification. Broker
   outage recovery and concurrent event consumption are exercised. Per-bot shop
   panel settings expose pauses, origin, timing and complete EN/FA templates.
-  Receipt transport retry, held-message recovery and independent offline
+  Bounded receipt transport retry and cancelled-work broker recovery are exercised.
+  Explicit failed/held-work recovery controls and independent offline
   intake remain incomplete. Alpha.3 artifacts do not include this prototype.
 - Real PostgreSQL: atomic owner setup, session/CSRF, ownership and revocation.
 - Real RabbitMQ/Celery/Beat: separate worker queues, durable outbox, replay and

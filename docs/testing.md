@@ -253,7 +253,7 @@ transaction, during HTTP. The native browser payment case follows the exact
 invoice and receipt IDs through required login in a review link, preselects the
 matching private attachment and uses the existing approval flow. A foreign login
 return destination is rejected; native resource permissions remain authoritative.
-Transient receipt transport retry/recovery and live Telegram remain open gates.
+Explicit failed/held-work recovery controls and live Telegram remain open gates.
 
 The native service browser also opens each bot's shop editor. It creates two
 independently configured paused bots, saves every policy field and EN/FA messages,
@@ -262,3 +262,19 @@ reload plus a real two-tab revision conflict retain the correct draft/state.
 An ordinary staff session can connect its own bot but cannot see or read shop
 settings. Fresh PostgreSQL reads check stored choices after the browser exits.
 These configuration checks make no Telegram requests.
+
+Receipt retry tests use actual bounded HTTP downloads and PostgreSQL deadlines:
+connection/server/rate-limit failures are retryable; permanent file failures,
+exhausted budgets, paused shops and lowered limits preserve the expected state.
+No receipt or credit is committed during an unsuccessful preparation. The native
+purchase/client gate injects repeated HTTP503 responses before a successful file
+download, including an operator budget above Celery's usual default retry count.
+The migration gate retains prior failed work, processed timestamps and operator
+settings; adding counters does not replay historical failures.
+
+`test_shop_receipt_recovery.py` interrupts the explicitly test-owned broker during
+real receipt HTTP. Native Celery cancels its late-ack worker. The test verifies the
+real child exited (or became a zombie awaiting reaping), advances only that test
+work's lease deadline, restores the broker and observes native Beat/worker reclaim,
+one stored receipt and no wallet credit. The deadline advance is explicit fault
+injection; it does not establish elapsed production lease timing or live Telegram.
