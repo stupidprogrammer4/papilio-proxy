@@ -39,6 +39,7 @@
     "cpu-heartbeat": "CPU worker heartbeat",
     "outbox": "Durable message delivery",
     "node-outbox": "Node operation delivery",
+    "local-node-outbox": "Local node preparation",
     "shop-outbox": "Bot shop messages and replies"
   },
   "states": {

@@ -117,6 +117,7 @@ jobs:
       - run: pnpm --dir panel/frontend install --frozen-lockfile
       - run: pnpm --dir panel/frontend exec playwright install --with-deps chromium
       - run: pnpm --dir panel/frontend build
+      - run: pnpm --dir panel/frontend test:browser local-runtime
       - run: .venv/bin/ruff check panel/backend deployment
       - run: .venv/bin/ruff format --check panel/backend deployment
       - run: .venv/bin/pyright -p panel/backend

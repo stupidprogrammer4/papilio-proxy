@@ -9,6 +9,7 @@ export * from "./manualPayments";
 export * from "./nodes";
 export * from "./ipPolicies";
 export * from "./system";
+export * from "./localNodes";
 import type { PurchasedIpPolicyRead, EffectiveIpPolicyRead, PlanIpPolicyRead, IpLimitCapacityRead, IpPolicyTransitionOptions } from "./ipPolicies";
 export * from "./smsOrigins";
 

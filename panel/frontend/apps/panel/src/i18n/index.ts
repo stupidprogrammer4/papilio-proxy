@@ -3,6 +3,8 @@ import en from "./en.json";
 import fa from "./fa.json";
 import foundationEn from "./foundation.en.json";
 import foundationFa from "./foundation.fa.json";
+import localNodeEn from "./local-node.en.json";
+import localNodeFa from "./local-node.fa.json";
 
 import nodesEn from "./nodes.en.json";
 import nodesFa from "./nodes.fa.json";
@@ -31,5 +33,5 @@ export const i18n = createI18n({
   legacy: false,
   locale: "en",
   fallbackLocale: "en",
-  messages: { en: { ...en, foundation: foundationEn, nodes: nodesEn, bots: botsEn, botShop: botShopEn, botRecovery: botRecoveryEn, serviceSync: serviceSynchronizationEn, serviceSetup: serviceSetupEn, sales: salesEn, productCatalog: productCatalogEn, serviceOrders: serviceOrdersEn, invoices: invoicesEn }, fa: { ...fa, foundation: foundationFa, nodes: nodesFa, bots: botsFa, botShop: botShopFa, botRecovery: botRecoveryFa, serviceSync: serviceSynchronizationFa, serviceSetup: serviceSetupFa, sales: salesFa, productCatalog: productCatalogFa, serviceOrders: serviceOrdersFa, invoices: invoicesFa } },
+  messages: { en: { ...en, foundation: foundationEn, localNode: localNodeEn, nodes: nodesEn, bots: botsEn, botShop: botShopEn, botRecovery: botRecoveryEn, serviceSync: serviceSynchronizationEn, serviceSetup: serviceSetupEn, sales: salesEn, productCatalog: productCatalogEn, serviceOrders: serviceOrdersEn, invoices: invoicesEn }, fa: { ...fa, foundation: foundationFa, localNode: localNodeFa, nodes: nodesFa, bots: botsFa, botShop: botShopFa, botRecovery: botRecoveryFa, serviceSync: serviceSynchronizationFa, serviceSetup: serviceSetupFa, sales: salesFa, productCatalog: productCatalogFa, serviceOrders: serviceOrdersFa, invoices: invoicesFa } },
 });

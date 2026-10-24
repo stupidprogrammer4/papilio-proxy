@@ -39,6 +39,7 @@
     "cpu-heartbeat": "گزارش worker پردازشی",
     "outbox": "تحویل پیام‌های ثبت‌شده",
     "node-outbox": "ارسال عملیات نود",
+    "local-node-outbox": "آماده‌سازی نود همین سرور",
     "shop-outbox": "پیام‌ها و پاسخ‌های فروش بات"
   },
   "states": {

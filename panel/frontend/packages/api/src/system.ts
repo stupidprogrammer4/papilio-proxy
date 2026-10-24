@@ -31,7 +31,7 @@ export interface DiagnosticOperation {
 }
 
 export interface ManagedSchedule {
-  key: "io-heartbeat" | "cpu-heartbeat" | "outbox" | "node-outbox" | "service-outbox";
+  key: "io-heartbeat" | "cpu-heartbeat" | "outbox" | "node-outbox" | "local-node-outbox" | "service-outbox" | "service-synchronization" | "shop-outbox";
   enabled: boolean;
   interval_seconds: number;
   changed_at: string;

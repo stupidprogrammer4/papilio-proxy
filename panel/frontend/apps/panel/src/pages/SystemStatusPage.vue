@@ -5,6 +5,7 @@ import { useI18n } from "vue-i18n";
 import { request } from "@papilio/api";
 import type { DiagnosticOperation, SystemStatus, ManagedSchedule } from "@papilio/api";
 import { useAuth } from "@papilio/auth";
+import LocalRuntime from "../components/LocalRuntime.vue";
 
 const { t } = useI18n();
 const auth = useAuth();
@@ -89,6 +90,7 @@ onMounted(refresh);
     <section v-if="status?.workers.length" class="form-grid">
       <div v-for="worker in status.workers" :key="worker.role"><strong>{{ worker.role }}</strong><p>{{ worker.queue }}</p><p>{{ t('foundation.observed') }}: {{ new Date(worker.observed_at).toLocaleString() }}</p></div>
     </section>
+    <LocalRuntime v-if="auth.can('system', 'write')" />
     <section class="form-grid">
       <h2>{{ t("foundation.diagnostics") }}</h2><p>{{ t("foundation.diagnosticsHelp") }}</p>
       <button class="btn" data-testid="probe-io" :disabled="busy" @click="probe('io')">{{ t("foundation.ioCheck") }}</button>

@@ -1,0 +1,23 @@
+{
+  "title": "This server's node",
+  "setupEnabled": "Set up Xray on this server",
+  "setupHelp": "After creating your account, background workers prepare the bundled node and check its connection. You can also connect separate nodes later.",
+  "advanced": "Advanced local node settings",
+  "initialHelp": "These choices initialize the node once. Retries, restarts and upgrades preserve existing runtime files.",
+  "coreName": "Core name",
+  "inboundTag": "Inbound tag",
+  "publicHost": "Client connection host",
+  "publicPort": "Client connection port",
+  "userLevel": "Default user level",
+  "coordinatedHelp": "Listen addresses and ports must match the installed container's port mapping and private network. Changing these initial fields does not reconfigure Docker.",
+  "bindAddress": "Core listen address",
+  "bindPort": "Core listen port",
+  "deliverySettings": "Preparation and retry settings",
+  "deliveryEnabled": "Enable node preparation",
+  "retryInterval": "Delay between failed attempts (seconds)",
+  "maxAttempts": "Maximum attempts per preparation request",
+  "statusHelp": "A successful preparation means the private node connection and core responded. Service delivery and client connectivity are checked separately.",
+  "retry": "Request preparation again",
+  "pauseHelp": "Disabling preparation keeps pending work. A new request supersedes the previous preparation. Already-started work can finish; existing services keep running. The background schedules below control delivery timing.",
+  "conflict": "These settings changed in another session. Refresh before saving; your draft is retained."
+}
