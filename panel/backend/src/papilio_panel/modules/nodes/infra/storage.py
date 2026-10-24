@@ -39,6 +39,16 @@ from .readers import DjangoNodeReader, definition_read, node_read, work_read
 
 
 class DjangoNodeStorage(DjangoNodeReader):
+    def record_probe(self, node_id: UUID, actor_id: int, result: ProbeObservation) -> None:
+        changed = Node.objects.filter(pk=node_id, owner_id=actor_id).update(
+            last_reachable=result.reachable,
+            last_checked_at=timezone.now(),
+            last_error_code=result.error_code,
+            uptime_seconds=result.uptime_seconds,
+        )
+        if changed != 1:
+            raise Missing("The node was not found.")
+
     def create(self, values: NodeCreate) -> NodeCreation:
         deployment, _ = DeploymentIdentity.objects.get_or_create(pk=1)
         node, created = Node.objects.get_or_create(

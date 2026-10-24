@@ -188,6 +188,12 @@ class ProbeObservation:
 
 
 @dataclass(frozen=True)
+class NodeProbe:
+    actor_id: int
+    node_id: UUID
+
+
+@dataclass(frozen=True)
 class XrayUserIdentity:
     inbound_tag: str
     email: str

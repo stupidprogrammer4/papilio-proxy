@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "papilio_panel.modules.identity",
     "papilio_panel.modules.jobs",
     "papilio_panel.modules.nodes",
+    "papilio_panel.modules.local_nodes",
     "papilio_panel.modules.bots",
     "papilio_panel.modules.cores",
     "papilio_panel.modules.services",
@@ -80,6 +81,18 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 PAPILIO_SETUP_TOKEN_TTL_SECONDS = positive_integer("PAPILIO_SETUP_TOKEN_TTL_SECONDS", 300)
+PAPILIO_LOCAL_NODE_AVAILABLE = boolean("PAPILIO_LOCAL_NODE_AVAILABLE", False)
+PAPILIO_LOCAL_NODE_ENDPOINT = os.environ.get(
+    "PAPILIO_LOCAL_NODE_ENDPOINT", "https://local-node.papilio.internal:9443"
+)
+PAPILIO_LOCAL_NODE_PUBLIC_HOST = os.environ.get("PAPILIO_LOCAL_NODE_PUBLIC_HOST", "localhost")
+PAPILIO_LOCAL_NODE_PUBLIC_PORT = positive_integer("PAPILIO_LOCAL_NODE_PUBLIC_PORT", 8444)
+PAPILIO_LOCAL_NODE_BIND_ADDRESS = os.environ.get("PAPILIO_LOCAL_NODE_BIND_ADDRESS", "0.0.0.0")
+PAPILIO_LOCAL_NODE_BIND_PORT = positive_integer("PAPILIO_LOCAL_NODE_BIND_PORT", 8443)
+PAPILIO_LOCAL_XRAY_BINARY = os.environ.get("PAPILIO_LOCAL_XRAY_BINARY", "/usr/local/bin/xray")
+PAPILIO_LOCAL_NODE_STATE_ROOT = os.environ.get(
+    "PAPILIO_LOCAL_NODE_STATE_ROOT", "/var/lib/papilio/local-node"
+)
 SESSION_COOKIE_NAME = f"papilio_{PAPILIO_INSTANCE}_{PAPILIO_ENV}_session"
 CSRF_COOKIE_NAME = f"papilio_{PAPILIO_INSTANCE}_{PAPILIO_ENV}_csrf"
 SESSION_COOKIE_HTTPONLY = True

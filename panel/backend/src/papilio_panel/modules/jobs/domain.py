@@ -108,6 +108,7 @@ class ScheduleKind(StrEnum):
     SERVICE_OUTBOX = "service-outbox"
     SERVICE_SYNCHRONIZATION = "service-synchronization"
     NODE_OUTBOX = "node-outbox"
+    LOCAL_NODE_OUTBOX = "local-node-outbox"
     IO_HEARTBEAT = "io-heartbeat"
     CPU_HEARTBEAT = "cpu-heartbeat"
     OUTBOX = "outbox"

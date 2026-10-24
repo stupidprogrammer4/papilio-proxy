@@ -14,8 +14,11 @@ from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
+from papilio_panel.modules.local_nodes.domain import OwnerInitialization
+from papilio_panel.modules.local_nodes.providers import owner_initialization
+from papilio_panel.modules.local_nodes.schemas import LocalChoiceSerializer
+
 from ..domain import OwnerSetupInput
-from ..providers import owner_setup
 
 
 class OwnerSetupSerializer(serializers.Serializer):
@@ -24,6 +27,7 @@ class OwnerSetupSerializer(serializers.Serializer):
     password = serializers.CharField(
         max_length=1024, trim_whitespace=False, write_only=True, validators=[validate_password]
     )
+    local_node = LocalChoiceSerializer(required=False)
 
 
 class OwnerIdentitySerializer(serializers.Serializer):
@@ -47,5 +51,7 @@ class OwnerSetupView(APIView):
             username=serializer.validated_data["username"],
             password=serializer.validated_data["password"],
         )
-        owner = owner_setup.complete(values)
+        owner = owner_initialization.complete(
+            OwnerInitialization(values, serializer.validated_data.get("local_node"))
+        )
         return Response(asdict(owner), status=201)
