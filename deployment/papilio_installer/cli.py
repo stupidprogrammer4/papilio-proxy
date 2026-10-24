@@ -18,6 +18,7 @@ from .configuration import (
 )
 from .docker import Compose
 from .launcher import ManagedLauncher
+from .node import cli as node_cli
 from .preflight import check_host, check_ports
 from .releases import download_release
 
@@ -139,6 +140,7 @@ def parser() -> argparse.ArgumentParser:
     root.add_argument("--environment", choices=ENVIRONMENTS, default="sandbox")
     root.add_argument("--instance", default="default")
     commands = root.add_subparsers(dest="command", required=True)
+    node_cli.register(commands.add_parser("node"))
     setup = commands.add_parser("install")
     setup.add_argument("--source", type=Path, default=Path(__file__).resolve().parents[2])
     setup.add_argument("--settings-file", type=Path)
@@ -196,6 +198,9 @@ def update_entrypoint(installation: Installation, source: Path, image_mode: str 
 
 
 def execute(arguments: argparse.Namespace) -> None:
+    if arguments.command == "node":
+        node_cli.execute(arguments, Path(__file__).resolve().parents[2])
+        return
     if arguments.command == "install":
         install(arguments)
         return

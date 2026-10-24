@@ -14,6 +14,7 @@ from pathlib import Path
 
 from papilio_installer.image_build import bundle_manifest
 from papilio_installer.images import PLATFORMS, archive_matches, read_image_bundle
+from papilio_installer.node.artifacts import inspect_bundle
 
 
 def image_manifest(images: Path, version: str) -> tuple[bytes, dict[str, str]]:
@@ -83,12 +84,31 @@ def source_archive(root: Path, version: str, destination: Path, manifest: bytes 
             archive.addfile(extra, io.BytesIO(manifest))
 
 
+def node_checksums(nodes: Path, version: str) -> dict[str, str]:
+    checksums = {}
+    for platform in sorted(PLATFORMS):
+        name = f"papilio-node-{version}-{platform.replace('/', '-')}.tar.gz"
+        path = nodes / name
+        if not path.is_file() or path.is_symlink():
+            raise ValueError("A required node platform bundle is missing.")
+        bundle = inspect_bundle(path, platform)
+        if bundle.version != version:
+            raise ValueError("The native node bundle does not match the selected release version.")
+        digest = hashlib.sha256()
+        with path.open("rb") as source:
+            for block in iter(lambda: source.read(1048576), b""):
+                digest.update(block)
+        checksums[name] = digest.hexdigest()
+    return checksums
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--tag", required=True)
     parser.add_argument("--source", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--images", type=Path)
+    parser.add_argument("--nodes", type=Path)
     arguments = parser.parse_args()
     root = arguments.source.resolve()
     version = (root / "VERSION").read_text().strip()
@@ -103,19 +123,23 @@ def main() -> None:
     )
     manifest = None
     checksums = {}
+    artifacts: dict[str, Path] = {}
     if arguments.images is not None:
         manifest, checksums = image_manifest(arguments.images, version)
+        artifacts.update({name: arguments.images / name for name in checksums})
+    if arguments.nodes is not None:
+        native_checksums = node_checksums(arguments.nodes, version)
+        checksums.update(native_checksums)
+        artifacts.update({name: arguments.nodes / name for name in native_checksums})
     arguments.output.mkdir(parents=True, exist_ok=True)
     archive = arguments.output / f"papilio-{version}.tar.gz"
     source_archive(root, version, archive, manifest)
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-    if arguments.images is not None:
-        for name in checksums:
-            source = arguments.images / name
-            destination = arguments.output / name
-            if source.resolve() != destination.resolve():
-                with source.open("rb") as original, destination.open("xb") as output:
-                    shutil.copyfileobj(original, output, length=1024 * 1024)
+    for name, source in artifacts.items():
+        destination = arguments.output / name
+        if source.resolve() != destination.resolve():
+            with source.open("rb") as original, destination.open("xb") as output:
+                shutil.copyfileobj(original, output, length=1024 * 1024)
     checksums[archive.name] = digest
     with (arguments.output / "SHA256SUMS").open("x") as output:
         output.write("".join(f"{digest}  {name}\n" for name, digest in sorted(checksums.items())))

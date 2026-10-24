@@ -75,6 +75,17 @@ jobs:
           python3 node/agent/tools/fetch_test_xray.py
           cd node/agent
           go build -o "$PAPILIO_AGENT_BINARY" ./cmd/papilio-agent
+      - name: Build the native node installation candidate
+        run: |
+          python3 deployment/build_node.py --output .ci/node-assets
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          version = Path("VERSION").read_text().strip()
+          bundle = Path(f".ci/node-assets/papilio-node-{version}-linux-amd64.tar.gz").resolve()
+          with open(os.environ["GITHUB_ENV"], "a") as output:
+              output.write(f"PAPILIO_NODE_BUNDLE={bundle}\n")
+          PY
       - name: Configure test-owned integration connections
         env:
           DATABASE_URL: postgresql://papilio_test:integration-only@127.0.0.1:${{ job.services.postgres.ports[5432] }}/papilio_test
