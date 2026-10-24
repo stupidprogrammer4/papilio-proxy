@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { writeFileSync } from "node:fs";
 import { chromium } from "playwright";
 import { expect } from "playwright/test";
 
@@ -18,6 +20,11 @@ try {
     return response.json();
   }), url);
   await page.goto(`${base}/setup`);
+  if (process.env.PAPILIO_EXPECT_LOCAL_NODE === "true") {
+    await expect(page.getByTestId("setup-local-enabled")).toBeChecked();
+    await page.getByTestId("local-definition-advanced").click();
+    await page.getByLabel("Client connection host", { exact: true }).fill("127.0.0.1");
+  }
   if (insecureDomain) {
     assert.equal(await page.evaluate(() => window.isSecureContext), false);
     assert.equal(await page.evaluate(() => typeof crypto.randomUUID), "undefined");
@@ -42,6 +49,29 @@ try {
   assert.equal(cookies.length, 2);
   assert(cookies.every(cookie => cookie.secure === (new URL(base).protocol === "https:")));
   await page.getByTestId("system-status").waitFor();
+  if (process.env.PAPILIO_EXPECT_LOCAL_NODE === "true") {
+    const localPath = `${base}/api/v1/system/local-node`;
+    await expect.poll(async () => (await readJson(localPath)).operation.status,
+      { timeout: 35000, intervals: [100, 250, 500] }).toBe("succeeded");
+    const local = await readJson(localPath);
+    const service = await page.evaluate(async values => {
+      const csrf = await (await fetch("/api/v1/admin/auth/csrf")).json();
+      const response = await fetch("/api/v1/services", { method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf.csrf_token }, body: JSON.stringify(values) });
+      if (response.status !== 202) throw new Error(`Local service creation returned ${response.status}`);
+      return response.json();
+    }, { request_key: randomUUID(), name: "Installed local service", core_id: local.core_id,
+      inbound_id: local.inbound_id, identifier: randomUUID() });
+    await expect.poll(async () => (await readJson(`${base}/api/v1/services/${service.id}`)).status,
+      { timeout: 35000, intervals: [100, 250, 500] }).toBe("succeeded");
+    const subscription = await readJson(`${base}/api/v1/services/${service.id}/subscription`);
+    const feed = await page.request.get(new URL(subscription.url, base).href);
+    assert.equal(feed.status(), 200);
+    const uri = Buffer.from(await feed.text(), "base64").toString().trim();
+    assert(uri.startsWith("vless://"));
+    assert(process.env.PAPILIO_LOCAL_NODE_RESULT);
+    writeFileSync(process.env.PAPILIO_LOCAL_NODE_RESULT, JSON.stringify({ uri, service_id: service.id }), { mode: 0o600 });
+  }
   assert.match(await page.getByTestId("system-status").innerText(), /base01|browser/);
   const schedule = page.getByTestId("schedule-outbox");
   await schedule.locator('input[type="number"]').fill("2");
@@ -124,7 +154,7 @@ try {
   await expect(page.getByTestId("node-list")).toContainText("browser-node");
   await page.reload();
   await expect(page.getByTestId("node-list")).toContainText("browser-node");
-  await page.getByTestId("node-row").click();
+  await page.getByTestId("node-row").filter({ hasText: /^browser-node$/ }).click();
   await expect(page.getByTestId("node-detail")).toContainText("https://127.0.0.1:19443");
   await page.getByRole("link", { name: "Overview", exact: true }).click();
   const deliverySchedule = page.getByTestId("schedule-node-outbox");

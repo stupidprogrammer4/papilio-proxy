@@ -9,6 +9,8 @@ import socket
 import ssl
 import subprocess
 import sys
+import tarfile
+import time
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from pathlib import Path
@@ -21,6 +23,7 @@ from deployment.papilio_installer.configuration import Installation
 from deployment.papilio_installer.docker import Compose
 from deployment.tests.image_release import PreparedRelease, prebuilt_release
 from deployment.tests.installer_terminal import read_until, safe_terminal_output, wizard_process
+from deployment.tests.local_node_client import published_client_traffic
 
 pytestmark = [
     pytest.mark.installed,
@@ -125,6 +128,9 @@ def test_install_browser_backup_restore_and_restart_preserve_data(
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         tls_port = listener.getsockname()[1]
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        node_port = listener.getsockname()[1]
     identity_arguments = [
         "--home",
         str(home),
@@ -137,6 +143,7 @@ def test_install_browser_backup_restore_and_restart_preserve_data(
     installation = None
     launcher = tmp_path / "commands/papilio"
     try:
+        install_started = time.monotonic()
         setup_arguments = [
             "--source",
             str(source),
@@ -146,6 +153,8 @@ def test_install_browser_backup_restore_and_restart_preserve_data(
             "https" if environment == "production" else scheme,
             "--https-port",
             str(tls_port),
+            "--node-port",
+            str(node_port),
             "--bind",
             "127.0.0.1",
             "--host",
@@ -175,13 +184,26 @@ def test_install_browser_backup_restore_and_restart_preserve_data(
                 read_until(terminal, b"Installed command:", timeout=900)
                 assert process.wait(timeout=10) == 0
         else:
-            subprocess.run(
+            install_result = subprocess.run(
                 [*command, "install", *setup_arguments],
-                check=True,
                 capture_output=True,
                 timeout=900,
             )
+            assert install_result.returncode == 0, safe_terminal_output(
+                install_result.stdout + install_result.stderr
+            )
         installation = Installation.load(home / environment / instance)
+        (tmp_path / "installation-timing.json").write_text(
+            json.dumps(
+                {
+                    "cli_elapsed_ms": round((time.monotonic() - install_started) * 1000),
+                    "environment": environment,
+                    "image_mode": image_mode,
+                    "local_node": installation.settings.local_node,
+                    "scope": "warm-host CLI readiness; release images already cached",
+                }
+            )
+        )
         compose = Compose(installation)
         rendered = json.loads(compose.run("config", "--format", "json", capture=True).stdout)
         assert len(rendered["services"]["gateway"]["ports"]) == (2 if scheme == "https" else 1)
@@ -227,6 +249,8 @@ def test_install_browser_backup_restore_and_restart_preserve_data(
             "PAPILIO_SETUP_TOKEN": token,
             "PAPILIO_BROWSER_USERNAME": "browser-owner",
             "PAPILIO_BROWSER_PASSWORD": "isolated-browser-test-password-749!",
+            "PAPILIO_EXPECT_LOCAL_NODE": str(installation.settings.local_node).lower(),
+            "PAPILIO_LOCAL_NODE_RESULT": str(tmp_path / "local-service.json"),
         }
         with telegram_api(compose, instance) as (api_address, api_container):
             browser_environment["PAPILIO_TEST_TELEGRAM_API_URL"] = api_address
@@ -242,6 +266,10 @@ def test_install_browser_backup_restore_and_restart_preserve_data(
             browser_environment["PAPILIO_BROWSER_PASSWORD"], "[test password redacted]"
         )
         assert browser_result.returncode == 0, browser_error
+        local_service = None
+        if installation.settings.local_node:
+            local_service = json.loads((tmp_path / "local-service.json").read_text())
+            published_client_traffic(compose, tmp_path, local_service["uri"])
         role = compose.run(
             "exec",
             "-T",
@@ -257,8 +285,52 @@ def test_install_browser_backup_restore_and_restart_preserve_data(
         )
         assert role.stdout.strip() == b"f"
         saved = tmp_path / "backup.tar.gz"
+        local_fingerprints = None
+        fingerprint_program = (
+            "import hashlib,json; from pathlib import Path; "
+            "root=Path('/var/lib/papilio/local-node/instance'); "
+            "print(json.dumps({str(path.relative_to(root)):"
+            "hashlib.sha256(path.read_bytes()).hexdigest() "
+            "for path in root.rglob('*') if path.is_file()}, sort_keys=True))"
+        )
+        if local_service is not None:
+            compose.run(
+                "run",
+                "-T",
+                "--rm",
+                "--no-deps",
+                "--entrypoint",
+                "python",
+                "worker-io",
+                "-c",
+                "import json; from pathlib import Path; "
+                "root=Path('/var/lib/papilio/local-node/instance'); "
+                "path=root/'agent.json'; value=json.loads(path.read_bytes()); "
+                "value['idle_timeout_seconds']=71; path.write_text(json.dumps(value)); "
+                "note=root/'operator-note'; note.write_text('operator-file-to-preserve'); "
+                "note.chmod(0o600)",
+                capture=True,
+            )
+            local_fingerprints = compose.run(
+                "run",
+                "-T",
+                "--rm",
+                "--no-deps",
+                "--entrypoint",
+                "python",
+                "worker-io",
+                "-c",
+                fingerprint_program,
+                capture=True,
+            ).stdout
         backup(installation, saved)
         assert saved.stat().st_mode & 0o777 == 0o600
+        if local_service is not None:
+            with tarfile.open(saved) as archive:
+                assert "local-node.tar" in archive.getnames()
+                manifest = archive.extractfile("manifest.json")
+                assert manifest is not None
+                assert json.load(manifest)["local_node"] is True
         compose.run(
             "exec",
             "-T",
@@ -272,9 +344,40 @@ def test_install_browser_backup_restore_and_restart_preserve_data(
             "User.objects.create_user(username='after-backup')",
             capture=True,
         )
+        if local_service is not None:
+            # Fault injection is limited to this test-owned project's private volume.
+            compose.run("stop", "worker-io", "local-node")
+            compose.run(
+                "run",
+                "-T",
+                "--rm",
+                "--no-deps",
+                "--entrypoint",
+                "python",
+                "worker-io",
+                "-c",
+                "from pathlib import Path; import shutil; "
+                "target=Path('/var/lib/papilio/local-node/instance'); "
+                "assert target.is_dir() and not target.is_symlink(); shutil.rmtree(target)",
+                capture=True,
+            )
         restore(installation, saved, tmp_path / "before-restore.tar.gz")
         restored = Installation.load(installation.root)
         assert restored.values["PAPILIO_SECRET_KEY"] == installation.values["PAPILIO_SECRET_KEY"]
+        if local_fingerprints is not None:
+            observed = compose.run(
+                "run",
+                "-T",
+                "--rm",
+                "--no-deps",
+                "--entrypoint",
+                "python",
+                "worker-io",
+                "-c",
+                fingerprint_program,
+                capture=True,
+            ).stdout
+            assert observed == local_fingerprints
         compose.stop()
         compose.start()
         result = compose.run(
@@ -308,8 +411,10 @@ def test_install_browser_backup_restore_and_restart_preserve_data(
             capture=True,
         )
         assert result.stdout.strip() == b"independent-read-passed"
+        if local_service is not None:
+            published_client_traffic(compose, tmp_path, local_service["uri"])
         next_source = tmp_path / "next-release"
-        for folder in ("deployment", "panel/backend", "panel/frontend"):
+        for folder in ("deployment", "panel/backend", "panel/frontend", "node/agent"):
             shutil.copytree(
                 source / folder,
                 next_source / folder,
@@ -323,6 +428,7 @@ def test_install_browser_backup_restore_and_restart_preserve_data(
                 ),
             )
         shutil.copy2(source / ".dockerignore", next_source / ".dockerignore")
+        shutil.copy2(source / "LICENSE", next_source / "LICENSE")
         next_version = f"0.0.0-upgrade.{uuid4().hex}"
         (next_source / "VERSION").write_text(next_version + "\n")
         version_file = next_source / "panel/backend/src/papilio_panel/__init__.py"
@@ -366,12 +472,14 @@ def test_install_browser_backup_restore_and_restart_preserve_data(
             capture=True,
         )
         assert upgraded_state.stdout.strip() == b"synthetic-upgrade-passed"
+        if local_service is not None:
+            published_client_traffic(Compose(upgraded), tmp_path, local_service["uri"])
     finally:
         root = home / environment / instance
         if (root / "installation.json").exists():
             installation = Installation.load(root)
         if installation is not None:
-            Compose(installation).run("down", "--remove-orphans")
+            Compose(installation).run("down", "--remove-orphans", "--volumes")
             # Only this test's private bind-mounted state is removed, after its containers stop.
             assert home.resolve().is_relative_to(tmp_path.resolve())
             subprocess.run(

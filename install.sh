@@ -12,6 +12,7 @@ papilio_release_source=false
 papilio_has_image_mode=false
 papilio_allow_unverified=false
 papilio_has_host=false
+papilio_has_node_options=false
 papilio_interactive=auto
 papilio_update=false
 papilio_update_arguments=()
@@ -44,13 +45,20 @@ while (($#)); do
             papilio_install_arguments+=(--scheme "$2")
             papilio_configuration_arguments+=(--scheme "$2")
             shift 2 ;;
-        --host|--bind|--port|--https-port)
+        --local-node|--no-local-node)
+            papilio_has_node_options=true
+            papilio_install_arguments+=("$1")
+            papilio_configuration_arguments+=("$1")
+            shift ;;
+        --host|--bind|--port|--https-port|--node-port)
             if [[ "$1" == --host ]]; then papilio_has_host=true; fi
+            if [[ "$1" == --node-port ]]; then papilio_has_node_options=true; fi
             papilio_install_arguments+=("$1" "${2:?value required}")
             papilio_configuration_arguments+=("$1" "$2")
             shift 2 ;;
         --help)
             printf '%s\n' 'Usage: install.sh [--update] [--environment dev|test|sandbox|production] [--host DOMAIN_OR_IP] [--scheme http|https] [--image-mode auto|prebuilt|build] [--interactive|--non-interactive] [--instance NAME] [--port PORT] [--home PATH]'
+            printf '%s\n' 'Current-source local runtime: [--local-node|--no-local-node] [--node-port PORT]'
             exit 0 ;;
         *) printf 'Unknown installer option: %s\n' "$1" >&2; exit 2 ;;
     esac
@@ -59,6 +67,10 @@ done
 [[ "$papilio_instance" =~ ^[a-z0-9][a-z0-9-]{0,39}$ ]] || { echo 'Invalid instance name.' >&2; exit 2; }
 case "$papilio_environment" in dev|test|sandbox|production) ;; *) echo 'Invalid environment.' >&2; exit 2 ;; esac
 if $papilio_update; then papilio_interactive=false; fi
+if $papilio_update && $papilio_has_node_options; then
+    echo 'Update preserves local runtime settings; use install options for a new installation.' >&2
+    exit 2
+fi
 if [[ "$papilio_interactive" == auto ]]; then
     if (: </dev/tty) 2>/dev/null; then papilio_interactive=true; else papilio_interactive=false; fi
 fi
@@ -133,6 +145,10 @@ PY
     fi
 fi
 papilio_source=$(realpath "$papilio_source")
+if $papilio_has_node_options && [[ ! -f "$papilio_source/deployment/compose.local-node.yml" ]]; then
+    echo 'This release has no local node installer. Use a current source bundle or a later release.' >&2
+    exit 2
+fi
 if $papilio_update; then
     python3 "$papilio_source/deployment/papilio.py" --home "$papilio_home" --environment "$papilio_environment" --instance "$papilio_instance" update --source "$papilio_source" "${papilio_update_arguments[@]}"
     exit 0
@@ -155,7 +171,7 @@ fi
 PYTHONPATH="$papilio_source/deployment" python3 - "$papilio_environment" --home "$papilio_home" --instance "$papilio_instance" "${papilio_install_arguments[@]}" <<'PY'
 import argparse, sys
 from pathlib import Path
-from papilio_installer.configuration import InstallSettings, load_settings
+from papilio_installer.configuration import Installation, InstallSettings, load_settings
 from papilio_installer.preflight import check_ports
 parser = argparse.ArgumentParser()
 parser.add_argument("environment")
@@ -163,6 +179,8 @@ parser.add_argument("--home", type=Path)
 parser.add_argument("--instance")
 parser.add_argument("--port", type=int)
 parser.add_argument("--https-port", type=int)
+parser.add_argument("--local-node", action=argparse.BooleanOptionalAction, default=None)
+parser.add_argument("--node-port", type=int)
 parser.add_argument("--host")
 parser.add_argument("--scheme", choices=("http", "https"))
 parser.add_argument("--bind")
@@ -173,7 +191,18 @@ args = parser.parse_args()
 if args.settings_file is not None:
     settings = load_settings(args.settings_file)
 else:
-    settings = InstallSettings.from_options(environment=args.environment, instance=args.instance, host=args.host or "localhost", scheme=args.scheme, http_port=args.port, https_port=args.https_port, bind_address=args.bind, image_mode=args.image_mode)
+    options = dict(environment=args.environment, instance=args.instance, host=args.host or "localhost", scheme=args.scheme, http_port=args.port, https_port=args.https_port, bind_address=args.bind, image_mode=args.image_mode)
+    existing = args.home / args.environment / args.instance
+    if existing.exists():
+        saved = Installation.load(existing).settings
+        if hasattr(saved, "local_node"):
+            options["local_node"] = saved.local_node
+            options["node_port"] = saved.node_port
+    if args.local_node is not None:
+        options["local_node"] = args.local_node
+    if args.node_port is not None:
+        options["node_port"] = args.node_port
+    settings = InstallSettings.from_options(**options)
 settings.validate()
 if not (args.home / settings.environment / settings.instance / "installation.json").exists():
     check_ports(settings)

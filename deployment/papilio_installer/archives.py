@@ -6,13 +6,41 @@ import os
 import shutil
 import tarfile
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
 from .configuration import Installation, decode_env, encode_env, replace_private
 from .docker import Compose
+from .local_state import inspect_local_state, restore_local_state, snapshot_local_state
 
 REQUIRED = {"manifest.json", "database.dump", "runtime.env"}
+APPLICATION_SERVICES = ("gateway", "beat", "worker-io", "worker-cpu", "api", "local-node")
+
+
+@contextmanager
+def snapshot_window(compose: Compose) -> Iterator[None]:
+    running: tuple[str, ...] = ()
+    if compose.installation.settings.local_node:
+        current = (
+            compose.run("ps", "--status", "running", "--services", capture=True)
+            .stdout.decode()
+            .split()
+        )
+        running = tuple(name for name in APPLICATION_SERVICES if name in current)
+    try:
+        if running:
+            compose.run(
+                "stop",
+                "--timeout",
+                compose.installation.values["PAPILIO_SHUTDOWN_SECONDS"],
+                *running,
+            )
+        yield
+    finally:
+        if running:
+            compose.run("start", *running)
 
 
 def database_digest(path: Path) -> str:
@@ -32,7 +60,7 @@ def inspect_archive(path: Path) -> dict[str, object]:
                 raise ValueError("Unsafe or duplicate backup member.")
             if not member.isfile() and not member.isdir():
                 raise ValueError("Backup links and special files are not accepted.")
-            if member.name not in REQUIRED | {"certificates.tar"}:
+            if member.name not in REQUIRED | {"certificates.tar", "local-node.tar"}:
                 raise ValueError("Unexpected backup member.")
             seen.add(member.name)
         if not REQUIRED.issubset(seen):
@@ -41,8 +69,19 @@ def inspect_archive(path: Path) -> dict[str, object]:
         if manifest_file is None:
             raise ValueError("The backup manifest is missing.")
         manifest = json.load(manifest_file)
-    if not isinstance(manifest, dict) or manifest.get("format") != 1:
+    if (
+        not isinstance(manifest, dict)
+        or type(manifest.get("format")) is not int
+        or manifest.get("format") not in (1, 2)
+    ):
         raise ValueError("Unsupported backup format.")
+    if manifest["format"] == 2 and (
+        type(manifest.get("local_node")) is not bool
+        or manifest["local_node"] != ("local-node.tar" in seen)
+    ):
+        raise ValueError("The backup local runtime declaration is inconsistent.")
+    if manifest["format"] == 1 and "local-node.tar" in seen:
+        raise ValueError("Legacy backups cannot declare a local runtime snapshot.")
     return manifest
 
 
@@ -50,7 +89,10 @@ def backup(installation: Installation, destination: Path) -> None:
     if destination.exists():
         raise FileExistsError("Choose a new backup filename.")
     compose = Compose(installation)
-    with tempfile.TemporaryDirectory(prefix="papilio-backup-") as temporary:
+    with (
+        snapshot_window(compose),
+        tempfile.TemporaryDirectory(prefix="papilio-backup-") as temporary,
+    ):
         folder = Path(temporary)
         dump = folder / "database.dump"
         with dump.open("wb") as output:
@@ -67,7 +109,8 @@ def backup(installation: Installation, destination: Path) -> None:
                 stdout=output,
             )
         manifest = {
-            "format": 1,
+            "format": 2 if installation.settings.local_node else 1,
+            "local_node": installation.settings.local_node,
             "postgres_major": 17,
             "version": (installation.source / "VERSION").read_text().strip(),
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -75,13 +118,34 @@ def backup(installation: Installation, destination: Path) -> None:
             "instance": installation.settings.instance,
             "database_sha256": database_digest(dump),
         }
+        local_state = folder / "local-node.tar"
+        if installation.settings.local_node:
+            snapshot_local_state(compose, local_state)
+            manifest["local_node_sha256"] = database_digest(local_state)
         manifest_path = folder / "manifest.json"
         manifest_path.write_text(json.dumps(manifest))
         certificates = folder / "certificates.tar"
         with certificates.open("wb") as output:
-            compose.run(
-                "exec", "-T", "gateway", "tar", "-C", "/data", "-cf", "-", ".", stdout=output
-            )
+            if installation.settings.local_node:
+                compose.run(
+                    "run",
+                    "-T",
+                    "--rm",
+                    "--no-deps",
+                    "--entrypoint",
+                    "tar",
+                    "gateway",
+                    "-C",
+                    "/data",
+                    "-cf",
+                    "-",
+                    ".",
+                    stdout=output,
+                )
+            else:
+                compose.run(
+                    "exec", "-T", "gateway", "tar", "-C", "/data", "-cf", "-", ".", stdout=output
+                )
         descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with (
             os.fdopen(descriptor, "wb") as output,
@@ -91,6 +155,8 @@ def backup(installation: Installation, destination: Path) -> None:
             archive.add(dump, arcname="database.dump")
             archive.add(installation.root / "runtime.env", arcname="runtime.env")
             archive.add(certificates, arcname="certificates.tar")
+            if installation.settings.local_node:
+                archive.add(local_state, arcname="local-node.tar")
 
 
 def restore(installation: Installation, source: Path, safety_backup: Path) -> None:
@@ -103,10 +169,12 @@ def restore(installation: Installation, source: Path, safety_backup: Path) -> No
         installation.settings.instance,
     ):
         raise ValueError("Restore requires matching environment and instance identities.")
+    if bool(manifest.get("local_node", False)) != installation.settings.local_node:
+        raise ValueError("Restore requires matching local runtime installation settings.")
     with tempfile.TemporaryDirectory(prefix="papilio-restore-") as temporary:
         folder = Path(temporary)
         with tarfile.open(source, "r:*") as archive:
-            for filename in REQUIRED | {"certificates.tar"}:
+            for filename in REQUIRED | {"certificates.tar", "local-node.tar"}:
                 if filename not in archive.getnames():
                     continue
                 member = archive.extractfile(filename)
@@ -117,6 +185,11 @@ def restore(installation: Installation, source: Path, safety_backup: Path) -> No
         dump = folder / "database.dump"
         if database_digest(dump) != manifest.get("database_sha256"):
             raise ValueError("The database checksum does not match the manifest.")
+        local_state = folder / "local-node.tar"
+        if installation.settings.local_node:
+            if database_digest(local_state) != manifest.get("local_node_sha256"):
+                raise ValueError("The local runtime checksum does not match the manifest.")
+            inspect_local_state(local_state)
         certificates = folder / "certificates.tar"
         if certificates.exists():
             with tarfile.open(certificates) as archive:
@@ -142,6 +215,7 @@ def restore(installation: Installation, source: Path, safety_backup: Path) -> No
             "worker-io",
             "worker-cpu",
             "api",
+            *(("local-node",) if installation.settings.local_node else ()),
         )
         with dump.open("rb") as input_file:
             compose.run(
@@ -186,6 +260,11 @@ def restore(installation: Installation, source: Path, safety_backup: Path) -> No
                 "PAPILIO_SESSION_COOKIE_SECURE",
                 "PAPILIO_CSRF_COOKIE_SECURE",
                 "PAPILIO_SECURE_SSL_REDIRECT",
+                "PAPILIO_LOCAL_NODE_AVAILABLE",
+                "PAPILIO_LOCAL_NODE_PUBLIC_HOST",
+                "PAPILIO_LOCAL_NODE_PUBLIC_PORT",
+                "PAPILIO_NODE_PORT",
+                "PAPILIO_LOCAL_NODE_STATE_ROOT",
             }
         }
         restored_values = previous_values | retained
@@ -193,6 +272,8 @@ def restore(installation: Installation, source: Path, safety_backup: Path) -> No
         replace_private(env_file, encode_env(restored_values))
         updated = Installation.load(installation.root)
         compose = Compose(updated)
+        if installation.settings.local_node:
+            restore_local_state(compose, local_state)
         if certificates.exists():
             with certificates.open("rb") as input_file:
                 compose.run(

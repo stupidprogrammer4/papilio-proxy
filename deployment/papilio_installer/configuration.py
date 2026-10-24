@@ -34,6 +34,8 @@ class InstallSettings:
     https_port: int = 8443
     scheme: str | None = None
     image_mode: str = "auto"
+    local_node: bool = False
+    node_port: int = 8444
 
     @classmethod
     def from_options(
@@ -47,6 +49,8 @@ class InstallSettings:
         http_port: int | None = None,
         https_port: int | None = None,
         image_mode: str = "auto",
+        local_node: bool = True,
+        node_port: int = 8444,
     ) -> "InstallSettings":
         production = environment == "production"
         return cls(
@@ -55,6 +59,8 @@ class InstallSettings:
             host=host,
             scheme=scheme,
             image_mode=image_mode,
+            local_node=local_node,
+            node_port=node_port,
             bind_address=bind_address
             if bind_address is not None
             else ("0.0.0.0" if production else "127.0.0.1"),
@@ -85,6 +91,8 @@ class InstallSettings:
         )
 
     def validate(self) -> None:
+        if type(self.local_node) is not bool:
+            raise ValueError("Choose whether to install the bundled local node.")
         if self.image_mode not in {"auto", "prebuilt", "build"}:
             raise ValueError("Choose auto, prebuilt or build as the image mode.")
         if self.scheme is not None and self.scheme not in {"http", "https"}:
@@ -99,11 +107,14 @@ class InstallSettings:
             raise ValueError("Choose 127.0.0.1 or 0.0.0.0 as the bind address.")
         if not all(
             isinstance(port, int) and not isinstance(port, bool) and 1 <= port <= 65535
-            for port in (self.http_port, self.https_port)
+            for port in (self.http_port, self.https_port, self.node_port)
         ):
             raise ValueError("A port must be between 1 and 65535.")
         if self.tls_enabled and self.http_port == self.https_port:
             raise ValueError("HTTP and HTTPS require different ports.")
+        web_ports = (self.http_port, self.https_port) if self.tls_enabled else (self.http_port,)
+        if self.local_node and self.node_port in web_ports:
+            raise ValueError("The local node requires a separate client port.")
 
 
 def load_settings(path: Path) -> InstallSettings:
@@ -213,6 +224,11 @@ class Installation:
             "PAPILIO_SITE_ADDRESS": settings.host if settings.tls_enabled else ":80",
             "PAPILIO_WEB_WORKERS": "2",
             "PAPILIO_SHUTDOWN_SECONDS": "120",
+            "PAPILIO_LOCAL_NODE_AVAILABLE": str(settings.local_node).lower(),
+            "PAPILIO_LOCAL_NODE_PUBLIC_HOST": settings.host,
+            "PAPILIO_LOCAL_NODE_PUBLIC_PORT": str(settings.node_port),
+            "PAPILIO_NODE_PORT": str(settings.node_port),
+            "PAPILIO_LOCAL_NODE_STATE_ROOT": "/var/lib/papilio/local-node",
         }
         metadata = {"format": 1, "source": str(source), "settings": asdict(settings)}
         write_private(root / "installation.json", json.dumps(metadata, indent=2) + "\n")

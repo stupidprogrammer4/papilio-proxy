@@ -2,6 +2,7 @@
 
 import gzip
 import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -11,6 +12,7 @@ from uuid import uuid4
 
 import pytest
 from deployment.papilio_installer.configuration import Installation, InstallSettings, encode_env
+from deployment.papilio_installer.docker import Compose
 from deployment.papilio_installer.images import (
     ImageBundle,
     ImageReference,
@@ -29,6 +31,31 @@ pytestmark = [
         reason="Opt in to building/loading only unique test-owned Docker images.",
     ),
 ]
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_native_compose_scopes_the_local_volume_to_the_io_worker_and_readonly_agent(
+    tmp_path: Path,
+    enabled: bool,
+) -> None:
+    source = Path(__file__).resolve().parents[2]
+    installation = Installation.create(tmp_path, source, InstallSettings(local_node=enabled))
+    rendered = json.loads(
+        Compose(installation).run("config", "--format", "json", capture=True).stdout
+    )
+    services = rendered["services"]
+    io_volumes = services["worker-io"].get("volumes", [])
+    assert bool(io_volumes) == enabled
+    if enabled:
+        assert len(io_volumes) == 1 and io_volumes[0]["type"] == "volume"
+        assert io_volumes[0]["target"] == "/var/lib/papilio/local-node"
+        assert io_volumes[0].get("read_only", False) is False
+        node = services["local-node"]
+        assert node["read_only"] is True
+        assert node["volumes"][0]["read_only"] is True
+        assert node["volumes"][0]["source"] == io_volumes[0]["source"]
+        assert {port["target"] for port in node["ports"]} == {8443}
+    assert all(not services[name].get("volumes") for name in ("api", "worker-cpu", "beat"))
 
 
 @pytest.mark.parametrize("environment", ["sandbox", "production"])

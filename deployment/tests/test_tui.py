@@ -92,11 +92,30 @@ def test_real_terminal_resize_and_cancel_leaves_no_configuration(tmp_path: Path)
     assert not output.exists()
 
 
+def test_advanced_terminal_requires_room_for_all_fields_and_retains_choices(tmp_path: Path) -> None:
+    output = tmp_path / "settings.json"
+    with wizard_process(output) as (terminal, process):
+        read_until(terminal, b"PAPILIO")
+        resize_terminal(terminal, 22, 96)
+        process.send_signal(signal.SIGWINCH)
+        os.write(terminal, b"\x01")
+        read_until(terminal, b"Resize")
+        resize_terminal(terminal, 24, 96)
+        process.send_signal(signal.SIGWINCH)
+        read_until(terminal, b"VPN client port")
+        os.write(terminal, b"\x12")
+        read_until(terminal, b"Review")
+        os.write(terminal, b"\n")
+        assert process.wait(timeout=5) == 0
+    settings = InstallSettings(**json.loads(output.read_text()))
+    assert settings.local_node is True and settings.node_port == 8444
+
+
 def test_plain_terminal_fallback_uses_same_settings_contract(tmp_path: Path) -> None:
     output = tmp_path / "settings.json"
     with wizard_process(output, term="dumb") as (terminal, process):
         read_until(terminal, b"PAPILIO")
-        os.write(terminal, b"\n" * 9)
+        os.write(terminal, b"\n" * 11)
         assert process.wait(timeout=5) == 0
     assert InstallSettings(**json.loads(output.read_text())).scheme == "https"
 

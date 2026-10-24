@@ -38,6 +38,8 @@ class ConfigurationForm:
     http_port: InputField
     https_port: InputField
     image_mode: InputField
+    local_node: InputField
+    node_port: InputField
 
     @classmethod
     def from_settings(cls, settings: InstallSettings) -> "ConfigurationForm":
@@ -86,6 +88,17 @@ class ConfigurationForm:
                 "Auto uses a release bundle when present. Prebuilt never builds on this server.",
                 ("auto", "prebuilt", "build"),
             ),
+            local_node=InputField(
+                "Local Xray node",
+                "on" if settings.local_node else "off",
+                "Prepare Xray on this server after owner setup; separate remote nodes also work.",
+                ("on", "off"),
+            ),
+            node_port=InputField(
+                "VPN client port",
+                str(settings.node_port),
+                "An unused client port, separate from the panel's HTTP/HTTPS ports.",
+            ),
         )
 
     @property
@@ -99,14 +112,17 @@ class ConfigurationForm:
             self.http_port,
             self.https_port,
             self.image_mode,
+            self.local_node,
+            self.node_port,
         )
 
     def settings(self) -> InstallSettings:
         try:
             http_port = int(self.http_port.value)
             https_port = int(self.https_port.value)
+            node_port = int(self.node_port.value)
         except ValueError as error:
-            raise ValueError("Both port fields must contain whole numbers.") from error
+            raise ValueError("Port fields must contain whole numbers.") from error
         settings = InstallSettings(
             environment=self.environment.value,
             instance=self.instance.value,
@@ -116,6 +132,8 @@ class ConfigurationForm:
             http_port=http_port,
             https_port=https_port,
             image_mode=self.image_mode.value,
+            local_node=self.local_node.value == "on",
+            node_port=node_port,
         )
         settings.validate()
         return settings
@@ -152,14 +170,14 @@ class TerminalWizard:
             key = curses.KEY_RESIZE
         return key
 
-    def frame(self, title: str) -> bool:
+    def frame(self, title: str, *, minimum_rows: int = 22) -> bool:
         terminal = os.get_terminal_size(0)
         if self.screen.getmaxyx() != (terminal.lines, terminal.columns):
             curses.resizeterm(terminal.lines, terminal.columns)
         self.screen.erase()
         height, width = self.screen.getmaxyx()
-        if height < 22 or width < 68:
-            self.text(1, "Resize terminal to 68 x 22; Esc cancels.")
+        if height < minimum_rows or width < 68:
+            self.text(1, f"Resize terminal to 68 x {minimum_rows}; Esc cancels.")
             self.screen.refresh()
             return False
         self.screen.box()
@@ -171,9 +189,12 @@ class TerminalWizard:
         return self.form.fields if self.advanced else self.form.fields[:3]
 
     def render(self) -> None:
-        if not self.frame("01  Configure     02  Review     03  Install"):
-            return
         fields = self.visible_fields()
+        if not self.frame(
+            "01  Configure     02  Review     03  Install",
+            minimum_rows=max(22, len(fields) + 14),
+        ):
+            return
         for position, field in enumerate(fields):
             style = curses.A_REVERSE if self.selection == position else 0
             self.text(5 + position, f"{field.label:<20}  {field.value or '(required)'}", style)
@@ -229,9 +250,16 @@ class TerminalWizard:
             if ready:
                 for position, field in enumerate(self.form.fields):
                     self.text(5 + position, f"{field.label:<20}  {field.value}")
-                self.text(14, f"Panel address: {settings.origin}", self.accent)
-                self.text(16, "PostgreSQL + Redis + RabbitMQ + API + workers + Beat + web")
-                self.text(18, "Enter: continue to install   Esc: return to settings", curses.A_BOLD)
+                after_fields = 6 + len(self.form.fields)
+                self.text(after_fields, f"Panel address: {settings.origin}", self.accent)
+                self.text(
+                    after_fields + 2, "PostgreSQL + Redis + RabbitMQ + API + workers + Beat + web"
+                )
+                self.text(
+                    after_fields + 4,
+                    "Enter: continue to install   Esc: return to settings",
+                    curses.A_BOLD,
+                )
                 self.screen.refresh()
             key = self.read_key()
             if ready and key in ("\n", "\r", curses.KEY_ENTER):
@@ -346,6 +374,8 @@ def initial_settings(args: argparse.Namespace) -> InstallSettings:
         http_port=args.port if args.port is not None else initial.http_port,
         https_port=args.https_port if args.https_port is not None else initial.https_port,
         image_mode=args.image_mode if args.image_mode is not None else initial.image_mode,
+        local_node=args.local_node if args.local_node is not None else initial.local_node,
+        node_port=args.node_port if args.node_port is not None else initial.node_port,
     )
 
 
@@ -361,6 +391,8 @@ def main() -> None:
     parser.add_argument("--port", type=int)
     parser.add_argument("--https-port", type=int)
     parser.add_argument("--image-mode", choices=("auto", "prebuilt", "build"))
+    parser.add_argument("--local-node", action=argparse.BooleanOptionalAction, default=None)
+    parser.add_argument("--node-port", type=int)
     args = parser.parse_args()
     initial = initial_settings(args)
     try:

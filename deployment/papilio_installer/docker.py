@@ -7,6 +7,7 @@ from typing import IO
 from .configuration import Installation
 from .images import (
     ImageBundle,
+    ImageRole,
     docker_platform,
     download_image_bundle,
     inspect_image_bundle,
@@ -18,6 +19,15 @@ from .images import (
 class Compose:
     def __init__(self, installation: Installation) -> None:
         self.installation = installation
+        if installation.settings.local_node and not all(
+            (installation.source / name).exists()
+            for name in (
+                "deployment/node.Dockerfile",
+                "deployment/compose.local-node.yml",
+                "panel/backend/src/papilio_panel/modules/local_nodes",
+            )
+        ):
+            raise ValueError("This source has no bundled local runtime; choose --no-local-node.")
         self.bundle: ImageBundle | None = None
         if (
             installation.settings.image_mode != "build"
@@ -26,6 +36,14 @@ class Compose:
             self.bundle = read_image_bundle(installation.source, docker_platform())
         if installation.settings.image_mode == "prebuilt" and self.bundle is None:
             raise ValueError("This source has no prebuilt image manifest; choose build explicitly.")
+        if (
+            installation.settings.local_node
+            and self.bundle is not None
+            and ImageRole.NODE not in {image.role for image in self.bundle.images}
+        ):
+            raise ValueError(
+                "This release has no node image; choose --no-local-node or a newer release."
+            )
 
     def run(
         self,
@@ -48,6 +66,16 @@ class Compose:
             str(installation.source / "deployment/compose.yml"),
         ]
         environment = os.environ | installation.values
+        environment.pop("COMPOSE_PROFILES", None)
+        if installation.settings.local_node:
+            command.extend(
+                [
+                    "-f",
+                    str(installation.source / "deployment/compose.local-node.yml"),
+                    "--profile",
+                    "local-node",
+                ]
+            )
         if self.bundle is not None:
             environment.update(
                 {

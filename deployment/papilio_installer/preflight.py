@@ -14,6 +14,8 @@ def check_ports(settings: InstallSettings) -> None:
     ports = (
         (settings.http_port, settings.https_port) if settings.tls_enabled else (settings.http_port,)
     )
+    if settings.local_node:
+        ports += (settings.node_port,)
     for port in ports:
         try:
             with socket.socket() as listener:

@@ -28,6 +28,18 @@ def selected_settings(arguments: argparse.Namespace) -> InstallSettings:
         return load_settings(arguments.settings_file)
     if arguments.environment == "production" and not arguments.host:
         raise ValueError("Production requires --host with this server's domain or IPv4 address.")
+    identity = InstallSettings(
+        environment=arguments.environment,
+        instance=arguments.instance,
+        host=arguments.host or "localhost",
+    )
+    identity.validate()
+    root = arguments.home.resolve() / identity.environment / identity.instance
+    defaults = (
+        Installation.load(root).settings
+        if root.exists()
+        else InstallSettings.from_options(environment=arguments.environment)
+    )
     settings = InstallSettings.from_options(
         environment=arguments.environment,
         instance=arguments.instance,
@@ -36,7 +48,11 @@ def selected_settings(arguments: argparse.Namespace) -> InstallSettings:
         http_port=arguments.port,
         https_port=arguments.https_port,
         scheme=arguments.scheme,
-        image_mode=arguments.image_mode or "auto",
+        image_mode=arguments.image_mode or defaults.image_mode,
+        local_node=arguments.local_node
+        if arguments.local_node is not None
+        else defaults.local_node,
+        node_port=arguments.node_port if arguments.node_port is not None else defaults.node_port,
     )
     settings.validate()
     return settings
@@ -50,8 +66,6 @@ def install(arguments: argparse.Namespace) -> None:
     root = arguments.home.resolve() / settings.environment / settings.instance
     if root.exists():
         existing = Installation.load(root)
-        if arguments.image_mode is None and arguments.settings_file is None:
-            settings = replace(settings, image_mode=existing.settings.image_mode)
         comparable = replace(existing.settings, image_mode=settings.image_mode)
         if not comparable.matches(settings) or existing.source != source:
             raise ValueError(
@@ -62,6 +76,7 @@ def install(arguments: argparse.Namespace) -> None:
     else:
         check_ports(settings)
         check_host(allow_unverified=arguments.allow_unverified_host)
+        Compose(Installation(root, source, settings, {}))
         installation = Installation.create(arguments.home, source, settings)
     launcher = ManagedLauncher(installation)
     launcher.prepare(arguments.command_path, allow_alias=True)
@@ -147,6 +162,8 @@ def parser() -> argparse.ArgumentParser:
     setup.add_argument("--host")
     setup.add_argument("--scheme", choices=("http", "https"))
     setup.add_argument("--image-mode", choices=("auto", "prebuilt", "build"))
+    setup.add_argument("--local-node", action=argparse.BooleanOptionalAction, default=None)
+    setup.add_argument("--node-port", type=int)
     setup.add_argument("--bind")
     setup.add_argument("--port", type=int)
     setup.add_argument("--https-port", type=int)

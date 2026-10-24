@@ -3,7 +3,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/app/src DJANGO_SETT
 WORKDIR /app
 COPY panel/backend/requirements.lock ./requirements.lock
 RUN pip install --no-cache-dir --require-hashes -r requirements.lock \
-    && useradd --uid 10001 --create-home papilio
+    && useradd --uid 10001 --create-home papilio \
+    && install -d -o 10001 -g 10001 -m 0700 /var/lib/papilio/local-node
 COPY --chown=10001:10001 panel/backend/src ./src
 COPY --chown=10001:10001 panel/backend/manage.py ./manage.py
 USER 10001:10001

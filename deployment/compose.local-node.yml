@@ -1,0 +1,4 @@
+services:
+  worker-io:
+    volumes:
+      - local-node:/var/lib/papilio/local-node
