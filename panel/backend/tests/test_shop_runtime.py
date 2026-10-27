@@ -122,6 +122,7 @@ def test_native_worker_hides_and_rejects_disabled_shop_flows(runtime: None) -> N
             "enabled": True,
             "locale": "en",
             "public_origin": "http://panel.example.invalid",
+            "welcome_photo_url": "https://images.example.invalid/welcome.jpg",
             "flows": {"catalogue": False, "wallet": False, "orders": True, "help": False},
         }
         assert (
@@ -132,6 +133,20 @@ def test_native_worker_hides_and_rejects_disabled_shop_flows(runtime: None) -> N
         server.push(40, "/start", chat_id=987655)
         until(lambda: any(values["chat_id"] == 987655 for _, values in server.messages), timeout=12)
         welcome = next(values for _, values in server.messages if values["chat_id"] == 987655)
+        photo_calls = [parameters for method, parameters in server.calls if method == "sendPhoto"]
+        assert photo_calls == [
+            {
+                "chat_id": 987655,
+                "photo": "https://images.example.invalid/welcome.jpg",
+                "caption": welcome["text"],
+                "reply_markup": welcome["reply_markup"],
+            }
+        ]
+        work = InboxWork.objects.get(event__bot_id=bot["id"], event__update_id=40)
+        stored_reply = OutgoingMessage.objects.get(event_id=work.event_id)
+        assert b"https://images.example.invalid/welcome.jpg" not in bytes(
+            stored_reply.payload_ciphertext
+        )
         callbacks = {
             button["callback_data"]
             for row in welcome["reply_markup"]["inline_keyboard"]

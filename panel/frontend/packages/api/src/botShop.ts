@@ -19,6 +19,7 @@ export interface BotShopDefinition {
   ambiguous_delivery: "hold" | "retry";
   texts: Record<ShopLocale, Record<string, string>>;
   flows: ShopFlows;
+  welcome_photo_url: string | null;
 }
 export interface BotShopSettings {
   bot_id: string;

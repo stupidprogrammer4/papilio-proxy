@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import type { BotShopDefinition, ShopLocale } from "@papilio/api";
 
@@ -14,6 +14,10 @@ const locales: { key: ShopLocale; label: string }[] = [
   { key: "ru", label: "Русский" },
   { key: "zh", label: "中文" },
 ];
+const welcomePhotoUrl = computed({
+  get: () => draft.value.welcome_photo_url ?? "",
+  set: (value: string) => { draft.value.welcome_photo_url = value.trim() || null; },
+});
 </script>
 
 <template>
@@ -23,6 +27,8 @@ const locales: { key: ShopLocale; label: string }[] = [
     <label><input v-model="draft.enabled" data-testid="shop-enabled" type="checkbox" /> {{ t('botShop.fields.enabled') }}</label>
     <label><input v-model="draft.delivery_enabled" data-testid="shop-delivery_enabled" type="checkbox" /> {{ t('botShop.fields.delivery_enabled') }}</label>
     <p>{{ t('botShop.pauseHelp') }}</p>
+    <label class="field"><span>{{ t('botShop.fields.welcome_photo_url') }}</span><input v-model="welcomePhotoUrl" data-testid="shop-welcome-photo-url" type="url" maxlength="500" dir="ltr" /></label>
+    <p>{{ t('botShop.photoHelp') }}</p>
     <fieldset class="form-grid" data-testid="shop-flows">
       <legend>{{ t('botShop.flows') }}</legend>
       <p>{{ t('botShop.flowHelp') }}</p>

@@ -219,6 +219,7 @@ class TelegramButton:
 class TelegramReply:
     text: str = field(repr=False)
     buttons: tuple[TelegramButton, ...] = ()
+    photo_url: str | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True)

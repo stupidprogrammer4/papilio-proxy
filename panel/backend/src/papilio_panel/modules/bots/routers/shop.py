@@ -58,6 +58,7 @@ class BotShopView(APIView):
             values["ambiguous_delivery"],
             values["texts"],
             ShopFlows(**values["flows"]),
+            values["welcome_photo_url"],
         )
         result = control.create(ShopSettingsCreate(actor_id(request), bot_id, definition))
         return Response(ShopSettingsSerializer(result).data, status=201)
@@ -72,11 +73,13 @@ class BotShopView(APIView):
         serializer.is_valid(raise_exception=True)
         values = serializer.validated_data
         actor = actor_id(request)
-        flows = (
-            ShopFlows(**values["flows"])
-            if "flows" in values
-            else control.read(bot_id, actor).definition.flows
-        )
+        if "flows" in values and "welcome_photo_url" in values:
+            flows = ShopFlows(**values["flows"])
+            photo_url = values["welcome_photo_url"]
+        else:
+            current = control.read(bot_id, actor).definition
+            flows = ShopFlows(**values["flows"]) if "flows" in values else current.flows
+            photo_url = values.get("welcome_photo_url", current.welcome_photo_url)
         definition = ShopDefinition(
             values["public_origin"],
             values["enabled"],
@@ -90,6 +93,7 @@ class BotShopView(APIView):
             values["ambiguous_delivery"],
             values["texts"],
             flows,
+            photo_url,
         )
         result = control.change(
             ShopSettingsChange(actor, bot_id, int(values["expected_revision"]), definition)

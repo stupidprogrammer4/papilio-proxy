@@ -54,6 +54,23 @@ def definition(values: ShopDefinition, max_page_size: int) -> None:
     ):
         raise InvalidInput("Choose explicit availability for every supported shop flow.")
     texts(values.texts)
+    validate_photo(values.welcome_photo_url, values.texts)
+
+
+def validate_photo(value: str | None, catalog: ShopTextCatalog) -> None:
+    if value is None:
+        return
+    photo = urlsplit(value)
+    if (
+        photo.scheme != "https"
+        or not photo.hostname
+        or photo.username
+        or photo.password
+        or photo.fragment
+    ):
+        raise InvalidInput("Choose a public HTTPS image URL without credentials or a fragment.")
+    if any(len(messages["welcome"]) > 1024 for messages in catalog.values()):
+        raise InvalidInput("Welcome text must fit Telegram's photo-caption limit.")
 
 
 def texts(values: ShopTextCatalog) -> None:

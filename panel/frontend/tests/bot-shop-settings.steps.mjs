@@ -25,6 +25,7 @@ export async function exerciseBotShopSettings(page, base) {
   await expect(page.getByTestId("shop-title")).toHaveText("Bot shop");
   assert.equal((await page.request.get(endpoint)).status(), 404, "Reading defaults must not create shop settings.");
   await page.getByTestId("shop-public_origin").fill("http://shop-one.example.invalid");
+  await page.getByTestId("shop-welcome-photo-url").fill("https://cdn.example.invalid/welcome.jpg");
   await page.getByTestId("shop-enabled").check();
   await page.getByTestId("shop-delivery_enabled").uncheck();
   await page.getByTestId("shop-flow-catalogue").uncheck();
@@ -56,6 +57,7 @@ export async function exerciseBotShopSettings(page, base) {
   assert.equal(initial.definition.enabled, true);
   assert.equal(initial.definition.delivery_enabled, false);
   assert.equal(initial.definition.ambiguous_delivery, "retry");
+  assert.equal(initial.definition.welcome_photo_url, "https://cdn.example.invalid/welcome.jpg");
   assert.deepEqual(initial.definition.flows, { catalogue: false, wallet: false, orders: true, help: true });
   assert.equal(initial.definition.texts.en.welcome, "Private shop $name");
   assert.equal(initial.definition.texts.fa.welcome, "فروشگاه $name");

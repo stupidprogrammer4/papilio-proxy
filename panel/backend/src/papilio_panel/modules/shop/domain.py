@@ -294,6 +294,7 @@ class ShopDefinition:
     ambiguous_delivery: str = "hold"
     texts: ShopTextCatalog = field(default_factory=default_texts)
     flows: ShopFlows = field(default_factory=ShopFlows)
+    welcome_photo_url: str | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True)

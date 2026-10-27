@@ -9,7 +9,7 @@ from papilio_panel.modules.wallets.interfaces import WalletCapability
 
 from ..domain import ShopCustomerContext, ShopTextContext
 from ..interfaces import ShopInvoiceQueryCapability, ShopOrderQueryCapability
-from .presentation import menu, render, reply
+from .presentation import menu, render, reply, welcome
 
 
 class ShopMenus:
@@ -30,7 +30,7 @@ class ShopMenus:
         command = (message.callback_data or message.text).strip() if message else ""
         settings = context.settings.definition
         if command in {"/start", "menu"}:
-            result = reply(settings, "welcome", ShopTextContext(name=context.customer.name))
+            result = welcome(settings, ShopTextContext(name=context.customer.name))
         elif command in {"/wallet", "wallet"}:
             if settings.flows.wallet:
                 wallet = self.wallets.read(context.customer.id, context.customer.owner_id)

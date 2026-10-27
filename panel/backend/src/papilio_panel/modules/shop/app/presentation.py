@@ -37,3 +37,10 @@ def reply(
     settings: ShopDefinition, key: str, context: ShopTextContext = EMPTY_TEXT_CONTEXT
 ) -> TelegramReply:
     return TelegramReply(render(settings, key, context), menu(settings))
+
+
+def welcome(settings: ShopDefinition, context: ShopTextContext) -> TelegramReply:
+    text = render(settings, "welcome", context)
+    if settings.welcome_photo_url is not None and len(text) > 1024:
+        raise InvalidInput("The configured welcome exceeds Telegram's photo-caption limit.")
+    return TelegramReply(text, menu(settings), settings.welcome_photo_url)

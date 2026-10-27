@@ -20,6 +20,7 @@ const definition = {
   confirmation_ttl_seconds: 900,
   ambiguous_delivery: "hold",
   flows: { catalogue: true, wallet: true, orders: true, help: true },
+  welcome_photo_url: null,
   texts: Object.fromEntries(["en", "fa", "ru", "zh"].map(locale => [locale, {
     welcome: `${locale} welcome $name`,
     wallet_button: `${locale} wallet`,
@@ -93,6 +94,7 @@ try {
   await page.getByTestId("shop-text-locale").selectOption("zh");
   await page.getByTestId("shop-text-wallet_button").fill("修改后的钱包按钮");
   await page.getByTestId("shop-locale").selectOption("zh");
+  await page.getByTestId("shop-welcome-photo-url").fill("https://cdn.example.test/welcome.jpg");
   await page.getByTestId("shop-flow-catalogue").uncheck();
   await page.getByTestId("shop-flow-wallet").uncheck();
   const response = page.waitForResponse(result => result.url().endsWith(`/api/v1/bots/${botId}/shop`) && result.request().method() === "PUT");
@@ -100,6 +102,7 @@ try {
   assert.equal((await response).status(), 200);
   assert.equal(savedBody.expected_revision, "7");
   assert.equal(savedBody.locale, "zh");
+  assert.equal(savedBody.welcome_photo_url, "https://cdn.example.test/welcome.jpg");
   assert.deepEqual(savedBody.flows, { catalogue: false, wallet: false, orders: true, help: true });
   assert.equal(savedBody.texts.en.welcome, "en welcome $name");
   assert.equal(savedBody.texts.fa.welcome, "fa welcome $name");

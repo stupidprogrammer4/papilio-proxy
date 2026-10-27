@@ -148,6 +148,25 @@ class TelegramServer:
                 "chat": {"id": parameters["chat_id"], "type": "private"},
                 "text": parameters["text"],
             }
+        if method == "sendPhoto":
+            with self.lock:
+                message_id = len(self.messages) + 100
+                self.messages.append(
+                    (
+                        message_id,
+                        {
+                            "chat_id": parameters["chat_id"],
+                            "text": parameters["caption"],
+                            "reply_markup": parameters.get("reply_markup"),
+                        },
+                    )
+                )
+            result = {
+                "message_id": message_id,
+                "chat": {"id": parameters["chat_id"], "type": "private"},
+                "photo": [{"file_id": "controlled-photo"}],
+                "caption": parameters["caption"],
+            }
         if method == "answerCallbackQuery":
             result = True
         if method == "getFile":

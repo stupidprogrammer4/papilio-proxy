@@ -184,11 +184,15 @@ class NativeTelegramGateway:
     def send(
         self, connection: TelegramConnection, chat_id: int, reply: TelegramReply
     ) -> TelegramSendResult:
-        parameters: dict[str, Any] = {
-            "chat_id": chat_id,
-            "text": reply.text,
-            "link_preview_options": {"is_disabled": True},
-        }
+        parameters: dict[str, Any] = {"chat_id": chat_id}
+        method = "sendMessage"
+        if reply.photo_url is None:
+            parameters["text"] = reply.text
+            parameters["link_preview_options"] = {"is_disabled": True}
+        else:
+            method = "sendPhoto"
+            parameters["photo"] = reply.photo_url
+            parameters["caption"] = reply.text
         if reply.buttons:
             parameters["reply_markup"] = {
                 "inline_keyboard": [
@@ -201,7 +205,7 @@ class NativeTelegramGateway:
                 ]
             }
         try:
-            message = self._call(connection, "sendMessage", parameters)
+            message = self._call(connection, method, parameters)
             if not isinstance(message, dict):
                 raise ValueError("Invalid outgoing message result.")
             result = TelegramSendResult(

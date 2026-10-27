@@ -36,6 +36,7 @@ def test_shop_settings_are_owned_complete_and_persist_operator_choices() -> None
         "enabled": True,
         "public_origin": "http://panel.example.invalid",
         "locale": "en",
+        "welcome_photo_url": "https://images.example.invalid/welcome.jpg",
         "flows": {"catalogue": False, "wallet": True, "orders": False, "help": True},
     }
     created = client.post(root, definition, format="json")
@@ -53,11 +54,28 @@ def test_shop_settings_are_owned_complete_and_persist_operator_choices() -> None
         == 400
     )
     assert client.get(root).json()["definition"] == replacement
+    invalid_photo = replacement | {"welcome_photo_url": "http://images.example.invalid/welcome.jpg"}
+    assert (
+        client.put(root, {"expected_revision": "2", **invalid_photo}, format="json").status_code
+        == 400
+    )
+    invalid_texts = {locale: messages.copy() for locale, messages in replacement["texts"].items()}
+    del invalid_texts["en"]["welcome"]
+    assert (
+        client.put(
+            root,
+            {"expected_revision": "2", **replacement, "texts": invalid_texts},
+            format="json",
+        ).status_code
+        == 400
+    )
     legacy_replacement = replacement.copy()
     del legacy_replacement["flows"]
+    del legacy_replacement["welcome_photo_url"]
     preserved = client.put(root, {"expected_revision": "2", **legacy_replacement}, format="json")
     assert preserved.status_code == 200
     assert preserved.json()["definition"]["flows"] == replacement["flows"]
+    assert preserved.json()["definition"]["welcome_photo_url"] == replacement["welcome_photo_url"]
     assert (
         client.put(root, {"expected_revision": "1", **definition}, format="json").status_code == 409
     )

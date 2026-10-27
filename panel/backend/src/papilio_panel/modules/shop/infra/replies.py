@@ -18,6 +18,7 @@ class ButtonSerializer(serializers.Serializer):
 class ReplySerializer(serializers.Serializer):
     text = serializers.CharField(trim_whitespace=False)
     buttons = ButtonSerializer(many=True)
+    photo_url = serializers.URLField(max_length=500, allow_null=True, required=False)
 
 
 def encrypt_reply(reply: TelegramReply) -> bytes:
@@ -34,4 +35,5 @@ def decrypt_reply(ciphertext: bytes) -> TelegramReply:
             TelegramButton(item["text"], item["callback_data"], item["url"])
             for item in values["buttons"]
         ),
+        values.get("photo_url"),
     )

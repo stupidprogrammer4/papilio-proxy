@@ -45,6 +45,7 @@ class ShopDefinitionSerializer(serializers.Serializer):
         default=default_texts,
     )
     flows = ShopFlowsSerializer(default=default_shop_flows)
+    welcome_photo_url = serializers.URLField(max_length=500, allow_null=True, default=None)
 
 
 class ShopReplacementSerializer(ShopDefinitionSerializer):
@@ -64,6 +65,7 @@ class ShopReplacementSerializer(ShopDefinitionSerializer):
         )
     )
     flows = ShopFlowsSerializer(required=False)
+    welcome_photo_url = serializers.URLField(max_length=500, allow_null=True, required=False)
 
 
 class ShopSettingsSerializer(serializers.Serializer):

@@ -28,6 +28,7 @@ class ShopConfiguration(models.Model):
     ambiguous_delivery = models.CharField(max_length=5, default=ShopDefinition.ambiguous_delivery)
     texts = models.JSONField(default=default_texts)
     flows = models.JSONField(default=default_shop_flows)
+    welcome_photo_url = models.URLField(max_length=500, null=True, blank=True, default=None)
 
 
 class ShopCustomer(models.Model):

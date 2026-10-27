@@ -36,6 +36,7 @@ def settings_read(row: ShopConfiguration) -> ShopSettingsRead:
             row.ambiguous_delivery,
             complete_texts(row.texts),
             ShopFlows(**row.flows),
+            row.welcome_photo_url,
         ),
     )
 
@@ -75,6 +76,7 @@ class DjangoShopSettingsStorage:
             ambiguous_delivery=values.definition.ambiguous_delivery,
             texts=values.definition.texts,
             flows=asdict(values.definition.flows),
+            welcome_photo_url=values.definition.welcome_photo_url,
             revision=F("revision") + 1,
         )
         if updated != 1:
