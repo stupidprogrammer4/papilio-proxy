@@ -234,3 +234,108 @@ def test_node_schedule_seed_preserves_disabled_operator_setting() -> None:
         if item["key"] == "node-outbox"
     )
     assert updated == response.json()
+
+
+def test_owner_updates_node_configuration_with_revision_and_preserves_identity() -> None:
+    client = owner_client()
+    created = client.post("/api/v1/nodes", node_input(), format="json").json()
+    node = created["node"]
+    path = f"/api/v1/nodes/{node['id']}"
+    update = {
+        "expected_revision": node["configuration_revision"],
+        "runtime": node["runtime"] | {"request_timeout_seconds": 23},
+        "certificate_policy": node["certificate_policy"] | {"backdate_seconds": 90},
+    }
+
+    response = client.put(path, update, format="json")
+
+    assert response.status_code == 200
+    saved = response.json()
+    assert saved["configuration_revision"] == node["configuration_revision"] + 1
+    assert saved["runtime"]["request_timeout_seconds"] == 23
+    assert saved["certificate_policy"]["backdate_seconds"] == 90
+    assert saved["endpoint_url"] == node["endpoint_url"]
+    assert saved["owner_id"] == node["owner_id"]
+    assert saved["credentials_ready"] is False
+    assert client.get(path).json() == saved
+
+
+def test_node_configuration_update_conflict_invalid_values_and_owner_scope() -> None:
+    first = owner_client("first")
+    second = owner_client("second")
+    created = first.post("/api/v1/nodes", node_input(), format="json").json()
+    node = created["node"]
+    path = f"/api/v1/nodes/{node['id']}"
+    update = {
+        "expected_revision": node["configuration_revision"],
+        "runtime": node["runtime"] | {"request_timeout_seconds": 23},
+        "certificate_policy": node["certificate_policy"],
+    }
+    assert first.put(path, update, format="json").status_code == 200
+
+    stale = first.put(path, update, format="json")
+    invalid = first.put(
+        path,
+        update
+        | {
+            "expected_revision": 2,
+            "runtime": update["runtime"] | {"request_timeout_seconds": 0},
+        },
+        format="json",
+    )
+    incomplete = first.put(
+        path,
+        {"expected_revision": 2, "runtime": update["runtime"]},
+        format="json",
+    )
+
+    assert stale.status_code == 409
+    assert invalid.status_code == 400
+    assert incomplete.status_code == 400
+    current = first.get(path).json()
+    assert current["configuration_revision"] == 2
+    assert current["runtime"]["request_timeout_seconds"] == 23
+    assert second.put(path, update, format="json").status_code == 404
+
+
+def test_concurrent_node_configuration_updates_have_one_revision_winner() -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    from django.contrib.auth.models import User
+    from django.db import close_old_connections
+
+    primary = owner_client("concurrent-settings")
+    owner = User.objects.get(username="concurrent-settings")
+    created = primary.post("/api/v1/nodes", node_input(), format="json").json()
+    node = created["node"]
+    path = f"/api/v1/nodes/{node['id']}"
+
+    def update(timeout: int) -> int:
+        close_old_connections()
+        try:
+            client = APIClient(enforce_csrf_checks=True)
+            csrf = client.get("/api/v1/admin/auth/csrf").json()["csrf_token"]
+            client.credentials(HTTP_X_CSRF_TOKEN=csrf)
+            session = client.post(
+                "/api/v1/admin/auth/login",
+                {"username": owner.username, "password": "isolated-node-owner-password-944!"},
+                format="json",
+            )
+            client.credentials(HTTP_X_CSRF_TOKEN=session.json()["csrf_token"])
+            payload = {
+                "expected_revision": node["configuration_revision"],
+                "runtime": node["runtime"] | {"request_timeout_seconds": timeout},
+                "certificate_policy": node["certificate_policy"],
+            }
+            response = client.put(path, payload, format="json")
+            return response.status_code
+        finally:
+            close_old_connections()
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        statuses = tuple(workers.map(update, (31, 37)))
+
+    assert sorted(statuses) == [200, 409]
+    current = primary.get(path).json()
+    assert current["configuration_revision"] == 2
+    assert current["runtime"]["request_timeout_seconds"] in {31, 37}

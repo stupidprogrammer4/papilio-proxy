@@ -75,6 +75,16 @@ class NodeRead:
     last_error_code: str | None
     uptime_seconds: int | None
     last_operation_id: UUID | None
+    configuration_revision: int
+
+
+@dataclass(frozen=True)
+class NodeConfigurationUpdate:
+    actor_id: int
+    node_id: UUID
+    expected_revision: int
+    runtime: AgentRuntime
+    certificate_policy: CertificatePolicy
 
 
 @dataclass(frozen=True)

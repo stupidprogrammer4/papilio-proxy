@@ -9,6 +9,7 @@ from papilio_panel.modules.identity.interfaces import AdminAccessCapability
 from papilio_panel.shared.errors import Conflict, InvalidInput
 
 from ..domain import (
+    NodeConfigurationUpdate,
     NodeCreate,
     NodeCreation,
     NodeDefaults,
@@ -20,7 +21,7 @@ from ..domain import (
     WorkSubmission,
 )
 from ..interfaces import BootstrapArchive, NodeStorage
-from .validation import validated_definition
+from .validation import validated_configuration, validated_definition
 
 
 class NodeManagement:
@@ -54,6 +55,15 @@ class NodeManagement:
     def read(self, node_id: UUID, actor_id: int) -> NodeRead:
         self.access.authorize_owner(actor_id)
         node = self.storage.read(node_id, actor_id)
+        return node
+
+    @transaction.atomic
+    def update_configuration(self, values: NodeConfigurationUpdate) -> NodeRead:
+        self.access.authorize_owner(values.actor_id)
+        if values.expected_revision < 1:
+            raise InvalidInput("Choose a positive node configuration revision.")
+        validated_configuration(values.runtime, values.certificate_policy)
+        node = self.storage.update_configuration(values)
         return node
 
     def search(self, values: NodeSearch) -> NodePage:

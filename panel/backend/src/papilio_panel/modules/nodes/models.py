@@ -31,6 +31,7 @@ class Node(models.Model):
     last_checked_at = models.DateTimeField(null=True)
     last_error_code = models.CharField(max_length=64, null=True)
     uptime_seconds = models.BigIntegerField(null=True)
+    configuration_revision = models.PositiveIntegerField(default=1)
     last_operation_id: uuid.UUID | None
     last_operation = models.ForeignKey(
         "NodeOperation",

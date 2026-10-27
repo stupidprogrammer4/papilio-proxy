@@ -12,13 +12,15 @@ from django.db.models import F, Q
 from django.utils import timezone
 
 from papilio_panel.shared.credentials import credential_cipher
-from papilio_panel.shared.errors import Missing
+from papilio_panel.shared.errors import Conflict, Missing
 from papilio_panel.shared.operations import OperationStatus
 
 from ..domain import (
     IssuedCredentials,
+    NodeConfigurationUpdate,
     NodeCreate,
     NodeCreation,
+    NodeRead,
     NodeWorkKind,
     ProbeObservation,
     WorkClaim,
@@ -48,6 +50,26 @@ class DjangoNodeStorage(DjangoNodeReader):
         )
         if changed != 1:
             raise Missing("The node was not found.")
+
+    def update_configuration(self, values: NodeConfigurationUpdate) -> NodeRead:
+        changed = Node.objects.filter(
+            pk=values.node_id,
+            owner_id=values.actor_id,
+            configuration_revision=values.expected_revision,
+        ).update(configuration_revision=F("configuration_revision") + 1)
+        if changed != 1:
+            if not Node.objects.filter(pk=values.node_id, owner_id=values.actor_id).exists():
+                raise Missing("The node was not found.")
+            raise Conflict("Node configuration changed. Reload before saving.")
+        runtime_changed = AgentSettings.objects.filter(node_id=values.node_id).update(
+            **asdict(values.runtime)
+        )
+        policy_changed = CredentialPolicy.objects.filter(node_id=values.node_id).update(
+            **asdict(values.certificate_policy)
+        )
+        if runtime_changed != 1 or policy_changed != 1:
+            raise Conflict("The node configuration records are incomplete.")
+        return self.read(values.node_id, values.actor_id)
 
     def create(self, values: NodeCreate) -> NodeCreation:
         deployment, _ = DeploymentIdentity.objects.get_or_create(pk=1)

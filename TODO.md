@@ -6,8 +6,8 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
 
 | Stage | Status | Completed version | Remaining acceptance |
 | --- | --- | --- | --- |
-| Foundation | Experimental release | 0.1.0-alpha.1 | Additional OS/environment combinations and later panel settings editors remain pending. |
-| First practical release | In progress | — | Native panel, installed local node, scheduled bot purchase/subscription/client paths and owner recovery are exercised; live Telegram acceptance, mutable service lifecycle, additional installation certification and new release artifacts remain. |
+| Foundation | Experimental release | 0.1.0-alpha.4 | Additional OS/environment combinations and later panel settings editors remain pending. |
+| First practical release | In progress | — | Native panel, installed local node, scheduled bot purchase/subscription/client paths and owner recovery are exercised; live Telegram acceptance, mutable service lifecycle and additional installation certification remain. |
 | PasarGuard phase one | Planned | — | Reconcile and execute the complete v5.4.1 feature baseline. |
 | Full sales and bot | Planned | — | Approved Mirza/PGClock capabilities, resellers, Mini App and offline intake. |
 | Network and additional cores | Planned | — | Four complete cores and verified reference extras, certificates, Single Port, WARP, speed/IP controls. |
@@ -51,9 +51,12 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
   adapter tested through actual HTTPS/core/client traffic, including denied
   certificate scopes and expiry. Django now issues per-node credentials and
   checks the real agent through durable CPU/I/O work. The Nodes page supports
-  registration, search and private bootstrap download. Full configuration editing/
-  renewal and core lifecycle remain incomplete; the bundled local install and
-  service/purchase prototypes below are exercised separately. See [agent scope](node/agent/README.md).
+  registration, search and private bootstrap download. Existing nodes now have
+  owner-scoped runtime/certificate policy editing with optimistic revision
+  checks. Runtime changes require a new bootstrap and agent redeploy; existing
+  certificates are not rotated or renewed. Core lifecycle remains incomplete;
+  the bundled local install and service/purchase prototypes below are exercised
+  separately. See [agent scope](node/agent/README.md).
 
 - Django-to-agent user control on main: typed owner-scoped VLESS apply/remove
   uses the issued mTLS identity and native Xray API. Actual client traffic,
@@ -141,12 +144,13 @@ acceptance and pinned references: [feature-catalog.json](docs/feature-catalog.js
   session restoration exercised through the installed gateway.
 - Full Compose: install, backup, restore and stop/start tested on owned resources.
   Exact OS/mode scope is recorded in the [matrix](docs/installation-matrix.md).
-- Published v0.1.0-alpha.1: clean Ubuntu 24.04 amd64 sandbox installation and
-  browser setup/login/schedule edit/actual worker completion passed. CI also
-  exercised a synthetic update preserving data and the managed command.
-- Configurability: managed interval schedules have panel controls. Node creation also exposes advanced runtime and certificate choices. Other
-  product setting editors remain pending; per-operator bot connection settings now
-  have a dedicated page on main; the shared
+- Published v0.1.0-alpha.4: clean Ubuntu 24.04 amd64 one-line installation and
+  browser setup/login/schedule edit/actual worker completion passed. Actual VLESS
+  client traffic also passed after guest restart. See the installation matrix.
+- Configurability: managed interval schedules have panel controls. Node creation
+  and existing-node edits expose runtime and certificate choices with revision
+  conflict protection. Other product setting editors remain pending;
+  per-operator bot connection settings now have a dedicated page on main; the shared
   acceptance contract is in [configuration.md](docs/configuration.md).
 
 Single Port, WARP registration and speed/IP enforcement remain unverified until

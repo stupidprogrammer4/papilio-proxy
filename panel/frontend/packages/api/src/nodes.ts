@@ -29,6 +29,7 @@ export interface ManagedNode {
   last_error_code: string | null;
   uptime_seconds: number | null;
   last_operation_id: string | null;
+  configuration_revision: number;
 }
 export interface NodeOperation {
   id: string;

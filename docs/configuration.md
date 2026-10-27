@@ -83,9 +83,13 @@ These are acceptance requirements, not claims that the pending editors exist.
 
 ## Node onboarding on main
 
-These settings are newer than alpha.1. The owner chooses them at registration in
-Nodes, including its advanced section; values persist per node. Existing-node
-editing, rotation and automatic runtime application are not delivered yet.
+The owner chooses these settings at registration in Nodes, including its
+advanced section; values persist per node. Owners can also edit runtime and
+certificate policy on an existing node. Saves use an expected configuration
+revision, so stale concurrent edits return a conflict instead of overwriting a
+newer choice. Runtime changes appear in the next bootstrap and require an agent
+redeploy/restart. Certificate policy changes leave existing certificates
+untouched; credential rotation and automatic renewal are not delivered yet.
 
 | Owner | Setting | Initial default | Application |
 | --- | --- | --- | --- |
@@ -93,8 +97,8 @@ editing, rotation and automatic runtime application are not delivered yet.
 | Nodes | Listen / Xray API | `0.0.0.0:9443` / `127.0.0.1:10085` | Agent startup; Xray API must be literal loopback. |
 | Nodes | Request / header / idle / shutdown timeout | 15 / 5 / 60 / 20 seconds | Agent startup; request timeout also bounds the panel's HTTPS probe. |
 | Nodes | Request body / core reply limit | 1048576 / 16777216 bytes | Agent startup; reply limit also bounds status reads. |
-| Nodes | Leaf / authority lifetime | 2592000 / 31536000 seconds | Next initial credential issuance; no automatic renewal yet. |
-| Nodes | Certificate backdate | 60 seconds | Initial issuance tolerates bounded clock skew. |
+| Nodes | Leaf / authority lifetime | 2592000 / 31536000 seconds | Saved for future credential lifecycle support; current certificates are unchanged and rotation/renewal are unavailable. |
+| Nodes | Certificate backdate | 60 seconds | Saved for future credential lifecycle support; current certificates are unchanged. |
 | Jobs/Nodes | Node outbox schedule | Enabled; 1 second | Native Beat database entry, editable live on the overview. Existing edits survive seeds. |
 
 Initial issuance is a CPU task. Probes are I/O tasks; their hard task deadline is

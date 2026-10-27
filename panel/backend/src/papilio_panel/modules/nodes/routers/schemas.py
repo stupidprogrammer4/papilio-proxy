@@ -3,6 +3,7 @@
 from dataclasses import asdict
 
 from rest_framework import serializers
+from rest_framework.fields import empty
 
 from ..domain import AgentRuntime, CertificatePolicy, NodeWorkKind
 from ..schemas import AgentRuntimeSerializer, CertificatePolicySerializer
@@ -11,6 +12,24 @@ from ..schemas import AgentRuntimeSerializer, CertificatePolicySerializer
 class NodeDefaultsSerializer(serializers.Serializer):
     runtime = AgentRuntimeSerializer()
     certificate_policy = CertificatePolicySerializer()
+
+
+class AgentRuntimeUpdateSerializer(AgentRuntimeSerializer):
+    def get_fields(self):
+        fields = super().get_fields()
+        for field in fields.values():
+            field.default = empty
+            field.required = True
+        return fields
+
+
+class CertificatePolicyUpdateSerializer(CertificatePolicySerializer):
+    def get_fields(self):
+        fields = super().get_fields()
+        for field in fields.values():
+            field.default = empty
+            field.required = True
+        return fields
 
 
 class NodeInputSerializer(serializers.Serializer):
@@ -36,6 +55,13 @@ class NodeSerializer(serializers.Serializer):
     last_error_code = serializers.CharField(allow_null=True)
     uptime_seconds = serializers.IntegerField(allow_null=True)
     last_operation_id = serializers.UUIDField(allow_null=True)
+    configuration_revision = serializers.IntegerField()
+
+
+class NodeConfigurationInputSerializer(serializers.Serializer):
+    expected_revision = serializers.IntegerField(min_value=1)
+    runtime = AgentRuntimeUpdateSerializer()
+    certificate_policy = CertificatePolicyUpdateSerializer()
 
 
 class WorkInputSerializer(serializers.Serializer):

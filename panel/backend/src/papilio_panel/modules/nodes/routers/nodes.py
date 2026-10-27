@@ -13,6 +13,7 @@ from rest_framework.views import APIView
 from ..domain import (
     AgentRuntime,
     CertificatePolicy,
+    NodeConfigurationUpdate,
     NodeCreate,
     NodeDefinition,
     NodeSearch,
@@ -22,6 +23,7 @@ from ..domain import (
 from ..providers import nodes
 from .schemas import (
     CreationSerializer,
+    NodeConfigurationInputSerializer,
     NodeDefaultsSerializer,
     NodeInputSerializer,
     NodePageSerializer,
@@ -84,6 +86,22 @@ class NodeView(APIView):
 
     def get(self, request: Request, node_id: UUID) -> Response:
         node = nodes.read(node_id, actor_id(request))
+        return Response(NodeSerializer(node).data)
+
+    @extend_schema(request=NodeConfigurationInputSerializer, responses=NodeSerializer)
+    def put(self, request: Request, node_id: UUID) -> Response:
+        serializer = NodeConfigurationInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        values = serializer.validated_data
+        node = nodes.update_configuration(
+            NodeConfigurationUpdate(
+                actor_id=actor_id(request),
+                node_id=node_id,
+                expected_revision=values["expected_revision"],
+                runtime=AgentRuntime(**values["runtime"]),
+                certificate_policy=CertificatePolicy(**values["certificate_policy"]),
+            )
+        )
         return Response(NodeSerializer(node).data)
 
 

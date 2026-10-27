@@ -11,6 +11,7 @@ const operation = ref<NodeOperation | null>(null);
 const name = ref("");
 const endpoint = ref("");
 const defaults = ref<{ runtime: AgentRuntime; certificate_policy: CertificatePolicy } | null>(null);
+const configuration = ref<{ runtime: AgentRuntime; certificate_policy: CertificatePolicy } | null>(null);
 const search = ref("");
 const page = ref(1);
 const pageSize = ref(20);
@@ -32,6 +33,10 @@ async function loadRows(): Promise<void> {
 async function readSelected(node: ManagedNode): Promise<void> {
   const current = await request<ManagedNode>(`/v1/nodes/${node.id}`, "GET", undefined, { signal: lifetime.signal });
   selected.value = current;
+  configuration.value = {
+    runtime: { ...current.runtime },
+    certificate_policy: { ...current.certificate_policy },
+  };
   operation.value = current.last_operation_id ? await request<NodeOperation>(`/v1/nodes/${current.id}/operations/${current.last_operation_id}`, "GET", undefined, { signal: lifetime.signal }) : null;
 }
 
@@ -65,6 +70,25 @@ async function create(): Promise<void> {
     name.value = "";
     endpoint.value = "";
     await loadRows();
+  });
+}
+
+async function saveConfiguration(): Promise<void> {
+  const node = selected.value;
+  const draft = configuration.value;
+  if (!node || !draft) return;
+  await perform(async () => {
+    const saved = await request<ManagedNode>(`/v1/nodes/${node.id}`, "PUT", {
+      expected_revision: node.configuration_revision,
+      runtime: draft.runtime,
+      certificate_policy: draft.certificate_policy,
+    }, { signal: lifetime.signal });
+    selected.value = saved;
+    configuration.value = {
+      runtime: { ...saved.runtime },
+      certificate_policy: { ...saved.certificate_policy },
+    };
+    rows.value = rows.value.map((row) => row.id === saved.id ? saved : row);
   });
 }
 
@@ -139,6 +163,17 @@ onMounted(async () => {
       <p v-if="selected.last_checked_at">{{ t('foundation.observed') }}: {{ new Date(selected.last_checked_at).toLocaleString() }}</p>
       <p v-if="operation" aria-live="polite">{{ t(`nodes.kinds.${operation.kind}`) }} · {{ t(`foundation.states.${operation.status}`) }} <span v-if="operation.error_code">({{ t(`nodes.errors.${operation.error_code}`) }})</span></p>
       <p>{{ t('nodes.bootstrapHelp') }}</p>
+      <form v-if="configuration" class="form-grid" data-testid="node-configuration" @submit.prevent="saveConfiguration">
+        <h3>{{ t('nodes.editConfiguration') }}</h3>
+        <p>{{ t('nodes.editRuntimeHelp') }}</p>
+        <fieldset class="form-grid" :disabled="busy">
+          <label v-for="field in (['listen_address', 'xray_api_address'] as const)" :key="field" class="field"><span>{{ t(`nodes.fields.${field}`) }}</span><input v-model="configuration.runtime[field]" dir="ltr" required /></label>
+          <label v-for="field in numericFields" :key="field" class="field"><span>{{ t(`nodes.fields.${field}`) }}</span><input v-model.number="configuration.runtime[field]" type="number" min="1" :max="field === 'max_body_bytes' ? Number.MAX_SAFE_INTEGER : 2147483647" step="1" required /></label>
+          <label v-for="field in certificateFields" :key="field" class="field"><span>{{ t(`nodes.fields.${field}`) }}</span><input v-model.number="configuration.certificate_policy[field]" type="number" :min="field === 'backdate_seconds' ? 0 : 1" max="2147483647" step="1" required /></label>
+          <p>{{ t('nodes.configurationEffects') }}</p>
+          <button class="btn" data-testid="node-configuration-save" type="submit">{{ t('foundation.save') }}</button>
+        </fieldset>
+      </form>
       <button class="btn" data-testid="node-bootstrap" :disabled="busy || !selected.credentials_ready" @click="download">{{ t('nodes.download') }}</button>
       <button class="btn secondary" :disabled="busy || !selected.credentials_ready" @click="check">{{ t('nodes.check') }}</button>
       <p class="hint-box">{{ t('nodes.limits') }}</p>

@@ -9,7 +9,7 @@ from django.core.validators import URLValidator
 
 from papilio_panel.shared.errors import InvalidInput
 
-from ..domain import AgentRuntime, NodeDefinition
+from ..domain import AgentRuntime, CertificatePolicy, NodeDefinition
 
 
 def endpoint_hostname(endpoint: str) -> str:
@@ -86,8 +86,12 @@ def validated_definition(values: NodeDefinition) -> NodeDefinition:
     name = values.name.strip()
     if not 1 <= len(name) <= 80:
         raise InvalidInput("Choose a node name of up to 80 characters.")
-    validate_runtime(values.runtime)
-    policy = values.certificate_policy
+    validated_configuration(values.runtime, values.certificate_policy)
+    return replace(values, name=name, endpoint_url=canonical_endpoint(values.endpoint_url))
+
+
+def validated_configuration(runtime: AgentRuntime, policy: CertificatePolicy) -> None:
+    validate_runtime(runtime)
     if any(
         type(value) is not int or not 1 <= value <= 2147483647
         for value in (policy.validity_seconds, policy.authority_validity_seconds)
@@ -95,9 +99,9 @@ def validated_definition(values: NodeDefinition) -> NodeDefinition:
         raise InvalidInput("Certificate lifetimes must fit positive PostgreSQL integers.")
     if (
         policy.authority_validity_seconds < policy.validity_seconds
+        or type(policy.backdate_seconds) is not int
         or not 0 <= policy.backdate_seconds <= 2147483647
     ):
         raise InvalidInput(
             "The authority must cover the leaf lifetime and backdating cannot be negative."
         )
-    return replace(values, name=name, endpoint_url=canonical_endpoint(values.endpoint_url))

@@ -74,6 +74,7 @@ def node_read(row: Node) -> NodeRead:
         last_error_code=row.last_error_code,
         uptime_seconds=row.uptime_seconds,
         last_operation_id=row.last_operation_id,
+        configuration_revision=row.configuration_revision,
     )
 
 
