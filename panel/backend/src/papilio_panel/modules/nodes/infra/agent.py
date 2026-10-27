@@ -15,7 +15,10 @@ from cryptography import x509
 from ..domain import (
     MutationObservation,
     NodeConnection,
+    NodeTrafficCounter,
+    NodeTrafficSnapshot,
     ProbeObservation,
+    TrafficObservation,
     VlessUser,
     XrayUserIdentity,
 )
@@ -69,6 +72,42 @@ def status_observation(content: bytes, node_id: UUID) -> ProbeObservation:
     return ProbeObservation(reachable=True, uptime_seconds=uptime)
 
 
+def traffic_snapshot(content: bytes, node_id: UUID) -> NodeTrafficSnapshot:
+    value = json.loads(content)
+    if not isinstance(value, dict) or not isinstance(value.get("traffic"), dict):
+        raise ValueError("The node traffic response must contain a snapshot.")
+    if UUID(value.get("node_id", "")) != node_id:
+        raise ValueError("The node traffic identity does not match.")
+    snapshot = value["traffic"]
+    uptime = snapshot.get("uptime_seconds")
+    counters = snapshot.get("counters")
+    if type(uptime) is not int or not 0 <= uptime <= 4294967295 or not isinstance(counters, list):
+        raise ValueError("The node traffic snapshot has invalid fields.")
+    result: list[NodeTrafficCounter] = []
+    identities: set[tuple[str, str]] = set()
+    for counter in counters:
+        if not isinstance(counter, dict):
+            raise ValueError("The node traffic counter must be an object.")
+        email, direction, byte_count = (
+            counter.get("email"),
+            counter.get("direction"),
+            counter.get("bytes"),
+        )
+        if (
+            not isinstance(email, str)
+            or not email
+            or len(email) > 64
+            or direction not in {"uplink", "downlink"}
+            or type(byte_count) is not int
+            or not 0 <= byte_count <= 9223372036854775807
+            or (email, direction) in identities
+        ):
+            raise ValueError("The node traffic counter has invalid values.")
+        identities.add((email, direction))
+        result.append(NodeTrafficCounter(email, direction, byte_count))
+    return NodeTrafficSnapshot(tuple(result), uptime)
+
+
 class NativeAgentGateway:
     def check(self, connection: NodeConnection) -> ProbeObservation:
         reply = self._exchange(connection, "GET", f"/v1/nodes/{connection.node_id}/status")
@@ -80,6 +119,18 @@ class NativeAgentGateway:
             result = status_observation(reply.content, connection.node_id)
         except (ValueError, TypeError, KeyError):
             result = ProbeObservation(reachable=False, error_code="invalid_node_response")
+        return result
+
+    def traffic(self, connection: NodeConnection) -> TrafficObservation:
+        reply = self._exchange(connection, "GET", f"/v1/nodes/{connection.node_id}/xray/traffic")
+        if reply.error_code is not None:
+            return TrafficObservation(None, reply.error_code)
+        if reply.status != 200:
+            return TrafficObservation(None, "node_not_ready")
+        try:
+            result = TrafficObservation(traffic_snapshot(reply.content, connection.node_id))
+        except (ValueError, TypeError, KeyError):
+            result = TrafficObservation(None, "invalid_node_response")
         return result
 
     def apply_vless(self, connection: NodeConnection, user: VlessUser) -> MutationObservation:

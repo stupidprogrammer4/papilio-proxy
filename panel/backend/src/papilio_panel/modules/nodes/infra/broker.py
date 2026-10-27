@@ -9,9 +9,11 @@ class NativeNodePublisher:
     def publish(self, deliveries: tuple[WorkDelivery, ...]) -> None:
         signatures = (
             Signature(
-                NodeTaskName.ISSUE.value
-                if item.kind == NodeWorkKind.ISSUE
-                else NodeTaskName.CHECK.value,
+                {
+                    NodeWorkKind.ISSUE: NodeTaskName.ISSUE.value,
+                    NodeWorkKind.CHECK: NodeTaskName.CHECK.value,
+                    NodeWorkKind.TRAFFIC: NodeTaskName.TRAFFIC.value,
+                }[item.kind],
                 kwargs={"operation_id": str(item.operation_id)},
             ).set(
                 task_id=str(item.operation_id),

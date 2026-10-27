@@ -23,6 +23,7 @@ from xray_client import subscription_client
 
 from papilio_panel.modules.cores.models import XrayCore
 from papilio_panel.modules.nodes.domain import XrayApply
+from papilio_panel.modules.nodes.providers import xray_control
 from papilio_panel.modules.services.domain import ServiceTaskName
 from papilio_panel.modules.services.infra.schedules import initialize_services
 from papilio_panel.modules.services.models import ServiceAccount, ServiceOutbox, XrayService
@@ -46,6 +47,41 @@ def existing_owner_client() -> APIClient:
     assert response.status_code == 200
     client.credentials(HTTP_X_CSRF_TOKEN=response.json()["csrf_token"])
     return client
+
+
+def test_node_traffic_operation_reads_native_user_counters(
+    native_control: tuple[XrayApply, int, str], tmp_path: Path
+) -> None:
+    node, data_port, binary = native_control
+    client = existing_owner_client()
+    applied = xray_control.apply(node)
+    assert applied.succeeded
+    uri = (
+        f"vless://{node.user.identifier}@127.0.0.1:{data_port}"
+        f"?encryption=none&type=tcp&security=none#{node.user.identity.email}"
+    )
+    with subscription_client(binary, tmp_path, uri) as probe:
+        assert probe.fetch() == b"papilio-actual-subscription-client"
+
+    root = f"/api/v1/nodes/{node.node_id}/operations"
+    submitted = client.post(
+        root,
+        {"request_key": str(uuid4()), "kind": "read_traffic"},
+        format="json",
+    )
+    assert submitted.status_code == 202
+    operation_id = submitted.json()["id"]
+    operation_url = f"{root}/{operation_id}"
+    until(lambda: client.get(operation_url).json()["status"] in {"succeeded", "failed"})
+    result = client.get(operation_url).json()
+    assert result["status"] == "succeeded"
+    assert result["traffic"]["uptime_seconds"] > 0
+    counters = result["traffic"]["counters"]
+    user_counters = [item for item in counters if item["email"] == node.user.identity.email]
+    assert {item["direction"] for item in user_counters} == {"uplink", "downlink"}, result
+    assert all(item["bytes"] > 0 for item in user_counters)
+    unrelated_owner = owner_client("unrelated-traffic-reader")
+    assert unrelated_owner.get(operation_url).status_code == 404
 
 
 def test_real_service_provisioning_and_public_subscription_connect_a_native_client(

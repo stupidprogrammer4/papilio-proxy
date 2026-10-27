@@ -41,6 +41,20 @@ def check_connection(self: Task, *, operation_id: str) -> None:
 
 
 @shared_task(
+    bind=True,
+    name=NodeTaskName.TRAFFIC.value,
+    queue=queue_name(QueueKind.IO),
+    autoretry_for=(OperationalError,),
+    retry_backoff=True,
+    max_retries=5,
+)
+def read_traffic(self: Task, *, operation_id: str) -> None:
+    outcome = execution.traffic(UUID(operation_id))
+    if outcome.retry_after_seconds is not None:
+        raise self.retry(countdown=outcome.retry_after_seconds, max_retries=None)
+
+
+@shared_task(
     name=NodeTaskName.DISPATCH.value,
     queue=queue_name(QueueKind.IO),
     autoretry_for=(OperationalError, BrokerError),

@@ -69,6 +69,17 @@ class WorkInputSerializer(serializers.Serializer):
     kind = serializers.ChoiceField(choices=[item.value for item in NodeWorkKind])
 
 
+class NodeTrafficCounterSerializer(serializers.Serializer):
+    email = serializers.CharField()
+    direction = serializers.ChoiceField(choices=("uplink", "downlink"))
+    bytes = serializers.IntegerField(min_value=0)
+
+
+class NodeTrafficSerializer(serializers.Serializer):
+    uptime_seconds = serializers.IntegerField(min_value=0)
+    counters = NodeTrafficCounterSerializer(many=True)
+
+
 class WorkSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     node_id = serializers.UUIDField()
@@ -77,6 +88,7 @@ class WorkSerializer(serializers.Serializer):
     attempts = serializers.IntegerField()
     error_code = serializers.CharField(allow_null=True)
     worker_pid = serializers.IntegerField(allow_null=True)
+    traffic = NodeTrafficSerializer(allow_null=True)
 
 
 class CreationSerializer(serializers.Serializer):

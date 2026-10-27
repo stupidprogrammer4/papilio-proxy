@@ -51,11 +51,13 @@ class NodeCreate:
 class NodeWorkKind(StrEnum):
     ISSUE = "issue_credentials"
     CHECK = "check_connection"
+    TRAFFIC = "read_traffic"
 
 
 class NodeTaskName(StrEnum):
     ISSUE = "papilio.nodes.issue_credentials"
     CHECK = "papilio.nodes.check_connection"
+    TRAFFIC = "papilio.nodes.read_traffic"
     DISPATCH = "papilio.nodes.dispatch_outbox"
 
 
@@ -98,6 +100,7 @@ class NodeWorkRead:
     error_code: str | None
     worker_pid: int | None
     lease_until: datetime | None
+    traffic: "NodeTrafficSnapshot | None" = None
 
 
 @dataclass(frozen=True)
@@ -194,6 +197,25 @@ class NodeConnection:
 class ProbeObservation:
     reachable: bool
     uptime_seconds: int | None = None
+    error_code: str | None = None
+
+
+@dataclass(frozen=True)
+class NodeTrafficCounter:
+    email: str
+    direction: str
+    bytes: int
+
+
+@dataclass(frozen=True)
+class NodeTrafficSnapshot:
+    counters: tuple[NodeTrafficCounter, ...]
+    uptime_seconds: int
+
+
+@dataclass(frozen=True)
+class TrafficObservation:
+    snapshot: NodeTrafficSnapshot | None
     error_code: str | None = None
 
 

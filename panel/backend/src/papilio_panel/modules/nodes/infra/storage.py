@@ -23,6 +23,7 @@ from ..domain import (
     NodeRead,
     NodeWorkKind,
     ProbeObservation,
+    TrafficObservation,
     WorkClaim,
     WorkCreation,
     WorkDelivery,
@@ -236,6 +237,24 @@ class DjangoNodeStorage(DjangoNodeReader):
                 last_error_code=result.error_code,
                 uptime_seconds=result.uptime_seconds,
             )
+
+    @transaction.atomic
+    def finish_traffic(self, claim: WorkClaim, result: TrafficObservation) -> None:
+        succeeded = result.snapshot is not None and result.error_code is None
+        NodeOperation.objects.filter(
+            pk=claim.operation.id,
+            lease_token=claim.token,
+            status=OperationStatus.RUNNING,
+            node__owner_id=claim.operation.actor_id,
+        ).update(
+            status=OperationStatus.SUCCEEDED if succeeded else OperationStatus.FAILED,
+            traffic_snapshot=asdict(result.snapshot) if result.snapshot is not None else None,
+            error_code=result.error_code,
+            completed_at=timezone.now(),
+            lease_token=None,
+            lease_until=None,
+            worker_pid=os.getpid(),
+        )
 
     def pending_deliveries(self) -> tuple[WorkDelivery, ...]:
         now = timezone.now()

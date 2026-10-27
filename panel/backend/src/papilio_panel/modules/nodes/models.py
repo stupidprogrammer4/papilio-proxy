@@ -105,6 +105,7 @@ class NodeOperation(models.Model):
     lease_until = models.DateTimeField(null=True)
     error_code = models.CharField(max_length=64, null=True)
     worker_pid = models.BigIntegerField(null=True)
+    traffic_snapshot = models.JSONField(null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True)
 

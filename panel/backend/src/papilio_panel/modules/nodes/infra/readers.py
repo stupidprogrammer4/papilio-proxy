@@ -20,6 +20,8 @@ from ..domain import (
     NodePage,
     NodeRead,
     NodeSearch,
+    NodeTrafficCounter,
+    NodeTrafficSnapshot,
     NodeWorkKind,
     NodeWorkRead,
 )
@@ -79,6 +81,13 @@ def node_read(row: Node) -> NodeRead:
 
 
 def work_read(row: NodeOperation) -> NodeWorkRead:
+    traffic = row.traffic_snapshot
+    snapshot = None
+    if traffic is not None:
+        snapshot = NodeTrafficSnapshot(
+            counters=tuple(NodeTrafficCounter(**item) for item in traffic["counters"]),
+            uptime_seconds=traffic["uptime_seconds"],
+        )
     return NodeWorkRead(
         id=row.id,
         node_id=row.node_id,
@@ -89,6 +98,7 @@ def work_read(row: NodeOperation) -> NodeWorkRead:
         error_code=row.error_code,
         worker_pid=row.worker_pid,
         lease_until=row.lease_until,
+        traffic=snapshot,
     )
 
 

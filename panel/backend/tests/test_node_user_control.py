@@ -73,6 +73,11 @@ def native_control(runtime: None, tmp_path: Path) -> Iterator[tuple[XrayApply, i
             "services": ["HandlerService", "StatsService"],
         },
         "stats": {},
+        "policy": {
+            "levels": {
+                "0": {"statsUserUplink": True, "statsUserDownlink": True},
+            }
+        },
         "inbounds": [
             {
                 "tag": "vless-test",

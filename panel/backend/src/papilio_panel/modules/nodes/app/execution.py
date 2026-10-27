@@ -84,3 +84,28 @@ class NodeExecution:
         )
         self.storage.finish_check(claim, result)
         return WorkOutcome()
+
+    def traffic(self, operation_id: UUID) -> WorkOutcome:
+        claim = self.storage.claim(operation_id, NodeWorkKind.TRAFFIC)
+        if claim.operation.kind != NodeWorkKind.TRAFFIC:
+            return WorkOutcome()
+        if claim.token is None:
+            return waiting_outcome(claim)
+        if not self.permitted(claim):
+            self.storage.reject(operation_id, claim.token, "access_revoked")
+            return WorkOutcome()
+        if not claim.node.credentials_ready:
+            self.storage.reject(operation_id, claim.token, "credentials_pending")
+            return WorkOutcome()
+        credentials = self.storage.credentials(claim.node.id, claim.operation.actor_id)
+        result = self.gateway.traffic(
+            NodeConnection(
+                node_id=claim.node.id,
+                deployment_id=claim.node.deployment_id,
+                endpoint_url=claim.node.endpoint_url,
+                runtime=claim.node.runtime,
+                credentials=credentials,
+            )
+        )
+        self.storage.finish_traffic(claim, result)
+        return WorkOutcome()
