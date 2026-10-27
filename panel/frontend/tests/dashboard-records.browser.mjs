@@ -14,18 +14,17 @@ const reply = (route, body) => route.fulfill({
   contentType: "application/json",
   body: JSON.stringify(body),
 });
-const paged = (data, pageNumber) => ({
-  data,
-  meta: {
-    pager: {
-      total_items: 3,
-      total_pages: 2,
-      current_page: pageNumber,
-      per_page: 2,
-      has_prev: pageNumber > 1,
-      has_next: pageNumber < 2,
-    },
-  },
+const customerPage = (data, pageNumber) => ({
+  items: data,
+  count: 3,
+  page: pageNumber,
+  page_size: 2,
+});
+const nodePage = (data, pageNumber) => ({
+  items: data,
+  count: 3,
+  page: pageNumber,
+  page_size: 2,
 });
 
 page.on("pageerror", error => errors.push(error.message));
@@ -41,35 +40,42 @@ await page.route(url => url.pathname.startsWith("/api/"), async route => {
   if (path === "/v1/admin/auth/me") {
     return reply(route, {
       username: "dashboard-fixture",
-      scopes: ["customers:read", "network:read"],
+      scopes: ["customers:read", "nodes:read"],
       csrf_token: "controlled",
     });
   }
   if (path === "/v1/admin/branding") {
     return reply(route, { data: { brand_title: "Dashboard fixture" } });
   }
-  if (path === "/v1/admin/customers") {
+  if (path === "/v1/customer-accounts") {
     const suffix = current === 1 ? "first" : "second";
-    return reply(route, paged([{
-      id: current,
-      display_name: `${search || "All"} customer ${suffix}`,
-      telegram_id: null,
-      is_active: true,
+    return reply(route, customerPage([{
+      id: `00000000-0000-4000-8000-00000000000${current}`,
+      owner_id: 1,
+      name: `${search || "All"} customer ${suffix}`,
     }], current));
   }
-  if (path === "/v1/admin/network/nodes") {
+  if (path === "/v1/nodes") {
     const suffix = current === 1 ? "first" : "second";
-    return reply(route, paged([{
-      id: current + 10,
-      code: `node-${current}`,
-      label: `${search || "All"} server ${suffix}`,
-      public_host: "edge.example.test",
-      public_port: 443,
-      protocol: "vless_reality",
-      is_enabled: true,
+    return reply(route, nodePage([{
+      id: `00000000-0000-4000-8000-00000000001${current}`,
+      deployment_id: "00000000-0000-4000-8000-000000000099",
+      owner_id: 1,
+      name: `${search || "All"} server ${suffix}`,
+      endpoint_url: "https://edge.example.test:443",
+      runtime: {},
+      certificate_policy: {},
+      credentials_ready: true,
+      certificate_expires_at: null,
+      last_reachable: true,
+      last_checked_at: null,
+      last_error_code: null,
+      uptime_seconds: null,
+      last_operation_id: null,
+      configuration_revision: 1,
     }], current));
   }
-  return reply(route, paged([], 1));
+    return reply(route, customerPage([], 1));
 });
 
 try {
@@ -94,7 +100,7 @@ try {
   });
   const customerPage = page.waitForRequest(request => {
     const url = new URL(request.url());
-    return url.pathname.endsWith("/v1/admin/customers")
+    return url.pathname.endsWith("/v1/customer-accounts")
       && url.searchParams.get("q") === "alice"
       && url.searchParams.get("page") === "2";
   });
@@ -104,7 +110,7 @@ try {
 
   const serverPage = page.waitForRequest(request => {
     const url = new URL(request.url());
-    return url.pathname.endsWith("/v1/admin/network/nodes")
+    return url.pathname.endsWith("/v1/nodes")
       && url.searchParams.get("q") === "west"
       && url.searchParams.get("page") === "2";
   });
@@ -112,6 +118,8 @@ try {
   await serverPage;
   await page.getByText("west server second", { exact: true }).waitFor();
   assert.equal(requests.filter(row => row.method !== "GET").length, 0);
+  assert(requests.some(row => row.path === "/v1/customer-accounts"));
+  assert(requests.some(row => row.path === "/v1/nodes"));
   assert.deepEqual(errors, []);
   console.log("PASS: dashboard shows independent customer/server lists with search and query-preserving pagination");
 } catch (error) {

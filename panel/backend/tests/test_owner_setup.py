@@ -85,6 +85,24 @@ def test_login_logout_and_anonymous_access() -> None:
     assert client.get("/api/v1/admin/auth/me").status_code == 401
 
 
+def test_customer_account_read_scope_is_owner_only() -> None:
+    owner = User.objects.create_superuser(username="owner", password="long-test-password-599!")
+    staff = User.objects.create_user(
+        username="staff", password="long-test-password-599!", is_staff=True
+    )
+    owner_client = APIClient()
+    staff_client = APIClient()
+    assert owner_client.login(username=owner.username, password="long-test-password-599!")
+    assert staff_client.login(username=staff.username, password="long-test-password-599!")
+
+    owner_scopes = owner_client.get("/api/v1/admin/auth/me").json()["scopes"]
+    staff_scopes = staff_client.get("/api/v1/admin/auth/me").json()["scopes"]
+
+    assert "customers:read" in owner_scopes
+    assert "customers:write" not in owner_scopes
+    assert "customers:read" not in staff_scopes
+
+
 def test_login_rejects_missing_csrf_and_bad_password() -> None:
     User.objects.create_superuser(username="owner", password="long-test-password-599!")
     body = {"username": "owner", "password": "incorrect"}

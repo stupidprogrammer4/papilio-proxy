@@ -6,8 +6,8 @@ const browser=await chromium.launch({headless:true,executablePath:process.env.CH
 const page=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'}),errors=[],reads=[];
 page.setDefaultTimeout(2500);
 const list={data:[],meta:{pager:{total_items:0,total_pages:1,current_page:1,per_page:20,has_prev:false,has_next:false}}};
-const customerList={data:[{id:7,display_name:'Unified customer',telegram_id:123,is_active:true,services_enabled:true,renewals_enabled:true,service_hold_pending:false,service_hold_clock:null}],meta:{pager:{total_items:21,total_pages:2,current_page:1,per_page:20,has_prev:false,has_next:true}}};
-const nodeList={data:[{id:9,code:'unified-node',label:'Unified node',public_host:'node.example.test',public_port:443,protocol:'vless_reality',is_enabled:true}],meta:{pager:{total_items:21,total_pages:2,current_page:1,per_page:20,has_prev:false,has_next:true}}};
+const customerList={items:[{id:'00000000-0000-4000-8000-000000000007',owner_id:1,name:'Unified customer'}],count:21,page:1,page_size:20};
+const nodeList={items:[{id:'00000000-0000-4000-8000-000000000009',deployment_id:'00000000-0000-4000-8000-000000000010',owner_id:1,name:'Unified node',endpoint_url:'https://node.example.test',runtime:{},certificate_policy:{},credentials_ready:true,certificate_expires_at:null,last_reachable:true,last_checked_at:null,last_error_code:null,uptime_seconds:null,last_operation_id:null,configuration_revision:1}],count:21,page:1,page_size:20};
 let currentLocale='en';
 const schedule={key:'payments',revision:1,mode:'interval',interval_seconds:60,enabled:true,cron:null,timezone:null,batch_size:20,recheck_seconds:30,capacity_valid:true,applied_revision:1,registered_at:'2026-10-13T00:00:00Z'};
 const routes=['/','/customers','/plans','/subscriptions','/loyalty','/payments','/network','/configurations','/connection-lab','/host-groups','/automation','/notifications','/support','/resellers','/roles','/staff','/settings','/customers/1/wallet','/network/1/cores','/network/1/cores/2/configurations','/reseller/customers'];
@@ -39,10 +39,10 @@ await page.route(url=>url.pathname.startsWith('/api/'),route=>{
      ? {data:{id:1,code:'route-fixture-node',label:currentLocale==='fa'?'نود':'Node',public_host:'fixture.invalid',public_port:443,protocol:'vless_reality',is_enabled:true}}
       : path==='/v1/admin/network/cores/2'
       ? {data:{id:2,node_id:1,code:'route-fixture-core',label:'Route fixture core',kind:'xray',supported_protocols:['vless_reality'],application_status:'draft'}}
-      : path==='/v1/admin/customers'
-       ? {...customerList,data:[{...customerList.data[0],display_name:currentLocale==='fa'?'مشتری یکپارچه':'Unified customer'}]}
-       : path==='/v1/admin/network/nodes'
-        ? {...nodeList,data:[{...nodeList.data[0],label:currentLocale==='fa'?'سرور یکپارچه':'Unified node'}]}
+      : path==='/v1/customer-accounts'
+       ? {...customerList,items:[{...customerList.items[0],name:currentLocale==='fa'?'مشتری یکپارچه':'Unified customer'}],page:Number(requestUrl.searchParams.get('page')||1)}
+       : path==='/v1/nodes'
+        ? {...nodeList,items:[{...nodeList.items[0],name:currentLocale==='fa'?'سرور یکپارچه':'Unified node'}],page:Number(requestUrl.searchParams.get('page')||1)}
         : list;
  return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
 });
@@ -64,22 +64,22 @@ try{
      await page.getByRole('heading',{name:'Customers and servers',exact:true}).waitFor();
      await page.getByText('Unified customer',{exact:true}).waitFor();
      await page.getByText('Unified node',{exact:true}).waitFor();
-     const customerSearch=page.waitForRequest(request=>request.url().includes('/v1/admin/customers?q=unified&page=1'));
+     const customerSearch=page.waitForRequest(request=>request.url().includes('/v1/customer-accounts?q=unified&page=1'));
      await page.getByLabel('Search customers').fill('unified');
      await customerSearch;
-     const serverSearch=page.waitForRequest(request=>request.url().includes('/v1/admin/network/nodes?q=edge&page=1'));
+     const serverSearch=page.waitForRequest(request=>request.url().includes('/v1/nodes?q=edge&page=1'));
      await page.getByLabel('Search servers').fill('edge');
      await serverSearch;
-     const customerNext=page.waitForRequest(request=>request.url().includes('/v1/admin/customers?q=unified&page=2'));
+     const customerNext=page.waitForRequest(request=>request.url().includes('/v1/customer-accounts?q=unified&page=2'));
      await page.getByRole('button',{name:'Next customer page'}).click();
      await customerNext;
-     const serverNext=page.waitForRequest(request=>request.url().includes('/v1/admin/network/nodes?q=edge&page=2'));
+     const serverNext=page.waitForRequest(request=>request.url().includes('/v1/nodes?q=edge&page=2'));
      await page.getByRole('button',{name:'Next server page'}).click();
      await serverNext;
-     assert(reads.some(value=>value.includes('/v1/admin/customers?q=unified&page=1')),`Dashboard customer search must use the customer API: ${reads.filter(value=>value.includes('/v1/admin/customers')).join(', ')}`);
-     assert(reads.some(value=>value.includes('/v1/admin/customers?q=unified&page=2')),'Dashboard customer pagination must stay independent');
-     assert(reads.some(value=>value.includes('/v1/admin/network/nodes?q=edge&page=1')),'Dashboard server search must use the node API');
-     assert(reads.some(value=>value.includes('/v1/admin/network/nodes?q=edge&page=2')),'Dashboard server pagination must stay independent');
+     assert(reads.some(value=>value.includes('/v1/customer-accounts?q=unified&page=1')),'Dashboard customer search must use the customer API');
+     assert(reads.some(value=>value.includes('/v1/customer-accounts?q=unified&page=2')),'Dashboard customer pagination must stay independent');
+     assert(reads.some(value=>value.includes('/v1/nodes?q=edge&page=1')),'Dashboard server search must use the node API');
+     assert(reads.some(value=>value.includes('/v1/nodes?q=edge&page=2')),'Dashboard server pagination must stay independent');
     }
     if(locale==='fa'){
      await page.getByRole('heading',{name:'مشتری‌ها و سرورها',exact:true}).waitFor();

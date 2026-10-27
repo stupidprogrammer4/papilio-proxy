@@ -28,6 +28,7 @@ def session_data(request: HttpRequest, principal: AdminPrincipal) -> AdminSessio
         scopes=(
             "system:read",
             "system:write",
+            "customers:read",
             "nodes:read",
             "nodes:write",
             "bots:read",

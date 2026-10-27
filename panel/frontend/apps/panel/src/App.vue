@@ -7,7 +7,7 @@ import { useI18n } from "vue-i18n";
 import DisplayPreferences from "./components/DisplayPreferences.vue";
 import { useBranding } from "./stores/branding";
 const { t } = useI18n();
-const navigationMessages: Record<string, string> = { "Telegram bots": "bots.title", "Managed services": "serviceSetup.title", "Customer wallets": "sales.title", "Service products": "productCatalog.title", "Manual payments": "invoices.title" };
+const navigationMessages: Record<string, string> = { "Telegram bots": "bots.title", "Managed services": "serviceSetup.title", "Customer wallets": "sales.title", "Service products": "productCatalog.title", "Manual payments": "invoices.title", "System status": "foundation.statusTitle" };
 const navLabel = (label: string): string => t(navigationMessages[label] ?? `navigation.${label}`);
 const route=useRoute(),router=useRouter(),auth=useAuth(),reseller=useResellerAuth(),branding=useBranding();
 const menuOpen=ref(false),signOutError=ref(""),signingOut=ref(false);
@@ -50,6 +50,7 @@ const navigation=computed(()=>dealer.value?[
  {path:"/reseller/team",label:"Team",icon:"shield",scope:"team",group:"Administration"},
 ].filter(link=>!link.scope||reseller.can(link.scope)):[
  {path:"/",label:"Overview",icon:"grid",scope:"",group:"Workspace"},
+ {path:"/system",label:"System status",icon:"settings",scope:"system",group:"Administration"},
  {path:"/customers",label:"Customers",icon:"users",scope:"customers",group:"Workspace"},
  {path:"/services",label:"Managed services",icon:"link",scope:"services",group:"Workspace"},
  {path:"/sales",label:"Customer wallets",icon:"wallet",scope:"sales",group:"Finance"},

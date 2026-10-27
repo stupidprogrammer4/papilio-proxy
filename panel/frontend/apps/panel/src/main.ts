@@ -21,6 +21,7 @@ const CustomerWalletPage = () => import("./pages/CustomerWalletPage.vue");
 const ProductCatalogPage = () => import("./pages/ProductCatalogPage.vue");
 const InvoiceReviewPage = () => import("./pages/InvoiceReviewPage.vue");
 const SystemStatusPage = () => import("./pages/SystemStatusPage.vue");
+const DashboardPage = () => import("./pages/DashboardPage.vue");
 const OwnerSetupPage = () => import("./pages/OwnerSetupPage.vue");
 const CustomersPage = () => import("./pages/CustomersPage.vue");
 const LoyaltyPage = () => import("./pages/LoyaltyPage.vue");
@@ -74,7 +75,8 @@ const router = createRouter({
     { path: "/service/:token", meta: { public: true }, component: CustomerServicePage },
     { path: "/login", component: LoginPage },
     { path: "/setup", meta: { public: true }, component: OwnerSetupPage },
-    { path: "/", component: SystemStatusPage },
+    { path: "/", component: DashboardPage },
+    { path: "/system", meta: { scope: "system" }, component: SystemStatusPage },
     { path: "/bots", meta: { scope: "bots" }, component: BotsPage },
     { path: "/nodes", meta: { scope: "nodes" }, component: NodeOnboardingPage },
     { path: "/services", meta: { scope: "services" }, component: ServiceProvisioningPage },
