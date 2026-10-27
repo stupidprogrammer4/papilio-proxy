@@ -27,6 +27,8 @@ export async function exerciseBotShopSettings(page, base) {
   await page.getByTestId("shop-public_origin").fill("http://shop-one.example.invalid");
   await page.getByTestId("shop-enabled").check();
   await page.getByTestId("shop-delivery_enabled").uncheck();
+  await page.getByTestId("shop-flow-catalogue").uncheck();
+  await page.getByTestId("shop-flow-wallet").uncheck();
   await page.getByTestId("shop-locale").selectOption("en");
   await page.getByTestId("shop-advanced").click();
   const numbers = { page_size: 3, retry_seconds: 17, lease_seconds: 65, max_attempts: 7, confirmation_ttl_seconds: 91 };
@@ -54,6 +56,7 @@ export async function exerciseBotShopSettings(page, base) {
   assert.equal(initial.definition.enabled, true);
   assert.equal(initial.definition.delivery_enabled, false);
   assert.equal(initial.definition.ambiguous_delivery, "retry");
+  assert.deepEqual(initial.definition.flows, { catalogue: false, wallet: false, orders: true, help: true });
   assert.equal(initial.definition.texts.en.welcome, "Private shop $name");
   assert.equal(initial.definition.texts.fa.welcome, "فروشگاه $name");
   assert.equal(initial.definition.texts.ru.welcome, "Магазин $name");
@@ -68,6 +71,8 @@ export async function exerciseBotShopSettings(page, base) {
   await page.getByRole("button", { name: "Browser shop one", exact: true }).click();
   await expect(page.getByTestId("shop-public_origin")).toHaveValue("http://shop-one.example.invalid");
   await expect(page.getByTestId("shop-delivery_enabled")).not.toBeChecked();
+  await expect(page.getByTestId("shop-flow-catalogue")).not.toBeChecked();
+  await expect(page.getByTestId("shop-flow-wallet")).not.toBeChecked();
   await page.getByTestId("shop-public_origin").fill("http://my-draft.example.invalid");
   await page.getByTestId("bot-refresh").click();
   await expect(page.getByTestId("shop-public_origin")).toHaveValue("http://my-draft.example.invalid");

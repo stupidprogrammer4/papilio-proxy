@@ -6,6 +6,8 @@
   "saved": "Shop settings saved. Refreshing connection status preserves this draft; reload explicitly to load concurrent changes.",
   "originHelp": "Public panel origin, including http:// or https:// and an optional port. Use no path, query, credentials or fragment. Review and subscription links use this address.",
   "pauseHelp": "Processing controls new shop work. Delivery separately controls outgoing replies. Pausing retains queued work and does not reverse a recorded payment or purchase.",
+  "flows": "Customer workflows",
+  "flowHelp": "Disabled workflows disappear from the menu and return an unavailable reply to direct commands. Existing payment records and completed purchases are unchanged.",
   "advanced": "Timing and delivery policy",
   "hold": "Hold for review",
   "retry": "Retry (a duplicate message is possible)",
@@ -19,6 +21,10 @@
     "public_origin": "Public panel address",
     "enabled": "Process shop messages",
     "delivery_enabled": "Deliver queued replies",
+    "flow_catalogue": "Product catalogue and new purchases",
+    "flow_wallet": "Wallet balance",
+    "flow_orders": "Purchase history and service status",
+    "flow_help": "Help replies and new top-ups",
     "locale": "Customer message language",
     "page_size": "Products and purchases per page",
     "retry_seconds": "Retry delay (seconds)",
@@ -36,6 +42,6 @@
     "wallet_button": "Wallet button", "help_button": "Help button", "orders_button": "Purchases button",
     "next_button": "Next page button", "previous_button": "Previous page button", "buy_button": "Confirm purchase button",
     "status_button": "Service status button", "menu_button": "Main menu button", "orders": "Purchase history heading",
-    "empty": "Empty page"
+    "empty": "Empty page", "unavailable": "Unavailable option reply"
   }
 }

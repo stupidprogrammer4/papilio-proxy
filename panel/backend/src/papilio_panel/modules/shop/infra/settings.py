@@ -9,6 +9,7 @@ from papilio_panel.shared.errors import Conflict, Missing
 
 from ..domain import (
     ShopDefinition,
+    ShopFlows,
     ShopSettingsChange,
     ShopSettingsCreate,
     ShopSettingsRead,
@@ -34,6 +35,7 @@ def settings_read(row: ShopConfiguration) -> ShopSettingsRead:
             row.confirmation_ttl_seconds,
             row.ambiguous_delivery,
             complete_texts(row.texts),
+            ShopFlows(**row.flows),
         ),
     )
 
@@ -72,6 +74,7 @@ class DjangoShopSettingsStorage:
             confirmation_ttl_seconds=values.definition.confirmation_ttl_seconds,
             ambiguous_delivery=values.definition.ambiguous_delivery,
             texts=values.definition.texts,
+            flows=asdict(values.definition.flows),
             revision=F("revision") + 1,
         )
         if updated != 1:

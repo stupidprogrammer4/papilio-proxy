@@ -7,7 +7,14 @@ from urllib.parse import urlsplit
 from papilio_panel.shared.errors import InvalidInput
 from papilio_panel.shared.money import MAX_MONEY_MINOR
 
-from ..domain import DEFAULT_TEXTS, SHOP_LOCALES, ShopDefinition, ShopTextCatalog, ShopTextContext
+from ..domain import (
+    DEFAULT_TEXTS,
+    SHOP_LOCALES,
+    ShopDefinition,
+    ShopFlows,
+    ShopTextCatalog,
+    ShopTextContext,
+)
 
 
 def definition(values: ShopDefinition, max_page_size: int) -> None:
@@ -42,6 +49,10 @@ def definition(values: ShopDefinition, max_page_size: int) -> None:
         raise InvalidInput("Timing and retry values must fit positive PostgreSQL integers.")
     if values.ambiguous_delivery not in {"hold", "retry"}:
         raise InvalidInput("Choose hold or retry for an uncertain Telegram send.")
+    if type(values.flows) is not ShopFlows or any(
+        type(getattr(values.flows, item.name)) is not bool for item in fields(ShopFlows)
+    ):
+        raise InvalidInput("Choose explicit availability for every supported shop flow.")
     texts(values.texts)
 
 

@@ -32,26 +32,40 @@ class ShopMenus:
         if command in {"/start", "menu"}:
             result = reply(settings, "welcome", ShopTextContext(name=context.customer.name))
         elif command in {"/wallet", "wallet"}:
-            wallet = self.wallets.read(context.customer.id, context.customer.owner_id)
-            result = reply(settings, "wallet", ShopTextContext(balance=str(wallet.balance_minor)))
+            if settings.flows.wallet:
+                wallet = self.wallets.read(context.customer.id, context.customer.owner_id)
+                result = reply(
+                    settings, "wallet", ShopTextContext(balance=str(wallet.balance_minor))
+                )
+            else:
+                result = reply(settings, "unavailable")
         elif command in {"/catalogue", "/catalog", "/products"} or command.startswith("catalogue:"):
-            _, _, argument = command.partition(":")
-            page = serializers.IntegerField(min_value=1).run_validation(argument or "1")
-            result = self.catalogue(context, page)
+            if settings.flows.catalogue:
+                _, _, argument = command.partition(":")
+                page = serializers.IntegerField(min_value=1).run_validation(argument or "1")
+                result = self.catalogue(context, page)
+            else:
+                result = reply(settings, "unavailable")
         elif command.startswith("invoice:"):
             _, _, argument = command.partition(":")
             invoice_id = serializers.UUIDField().run_validation(argument)
             result = self.invoices.response(context, invoice_id)
         elif command.startswith("order:"):
-            _, _, argument = command.partition(":")
-            order_id = serializers.UUIDField().run_validation(argument)
-            result = self.orders.read(context, order_id)
+            if settings.flows.orders:
+                _, _, argument = command.partition(":")
+                order_id = serializers.UUIDField().run_validation(argument)
+                result = self.orders.read(context, order_id)
+            else:
+                result = reply(settings, "unavailable")
         elif command == "/orders" or command.startswith("orders:"):
-            _, _, argument = command.partition(":")
-            page = serializers.IntegerField(min_value=1).run_validation(argument or "1")
-            result = self.orders.search(context, page)
+            if settings.flows.orders:
+                _, _, argument = command.partition(":")
+                page = serializers.IntegerField(min_value=1).run_validation(argument or "1")
+                result = self.orders.search(context, page)
+            else:
+                result = reply(settings, "unavailable")
         else:
-            result = reply(settings, "help")
+            result = reply(settings, "help" if settings.flows.help else "unavailable")
         return result
 
     def catalogue(self, context: ShopCustomerContext, page: int) -> TelegramReply:

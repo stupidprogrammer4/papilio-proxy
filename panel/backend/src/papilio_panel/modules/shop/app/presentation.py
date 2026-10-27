@@ -21,12 +21,16 @@ def render(
 
 
 def menu(settings: ShopDefinition) -> tuple[TelegramButton, ...]:
-    return (
-        TelegramButton(render(settings, "products_button"), "catalogue:1"),
-        TelegramButton(render(settings, "wallet_button"), "wallet"),
-        TelegramButton(render(settings, "orders_button"), "orders:1"),
-        TelegramButton(render(settings, "help_button"), "help"),
-    )
+    buttons = []
+    if settings.flows.catalogue:
+        buttons.append(TelegramButton(render(settings, "products_button"), "catalogue:1"))
+    if settings.flows.wallet:
+        buttons.append(TelegramButton(render(settings, "wallet_button"), "wallet"))
+    if settings.flows.orders:
+        buttons.append(TelegramButton(render(settings, "orders_button"), "orders:1"))
+    if settings.flows.help:
+        buttons.append(TelegramButton(render(settings, "help_button"), "help"))
+    return tuple(buttons)
 
 
 def reply(

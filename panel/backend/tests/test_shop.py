@@ -26,10 +26,17 @@ def test_shop_settings_are_owned_complete_and_persist_operator_choices() -> None
     assert client.get(root).status_code == 404
     defaults = client.get("/api/v1/bot-shop-defaults")
     assert defaults.status_code == 200
+    assert defaults.json()["flows"] == {
+        "catalogue": True,
+        "wallet": True,
+        "orders": True,
+        "help": True,
+    }
     definition = defaults.json() | {
         "enabled": True,
         "public_origin": "http://panel.example.invalid",
         "locale": "en",
+        "flows": {"catalogue": False, "wallet": True, "orders": False, "help": True},
     }
     created = client.post(root, definition, format="json")
     assert created.status_code == 201
@@ -38,11 +45,24 @@ def test_shop_settings_are_owned_complete_and_persist_operator_choices() -> None
     changed = client.put(root, {"expected_revision": "1", **replacement}, format="json")
     assert changed.status_code == 200
     assert client.get(root).json()["definition"] == replacement
+    invalid_flows = replacement | {
+        "flows": {"catalogue": "nope", "wallet": True, "orders": False, "help": True}
+    }
+    assert (
+        client.put(root, {"expected_revision": "2", **invalid_flows}, format="json").status_code
+        == 400
+    )
+    assert client.get(root).json()["definition"] == replacement
+    legacy_replacement = replacement.copy()
+    del legacy_replacement["flows"]
+    preserved = client.put(root, {"expected_revision": "2", **legacy_replacement}, format="json")
+    assert preserved.status_code == 200
+    assert preserved.json()["definition"]["flows"] == replacement["flows"]
     assert (
         client.put(root, {"expected_revision": "1", **definition}, format="json").status_code == 409
     )
     assert client.post(root, definition, format="json").status_code == 409
-    omitted = {"expected_revision": "2", **replacement}
+    omitted = {"expected_revision": "3", **replacement}
     del omitted["enabled"]
     assert client.put(root, omitted, format="json").status_code == 400
     other = owner_client("other-shop-owner")

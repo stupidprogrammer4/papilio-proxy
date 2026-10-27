@@ -23,6 +23,14 @@ const locales: { key: ShopLocale; label: string }[] = [
     <label><input v-model="draft.enabled" data-testid="shop-enabled" type="checkbox" /> {{ t('botShop.fields.enabled') }}</label>
     <label><input v-model="draft.delivery_enabled" data-testid="shop-delivery_enabled" type="checkbox" /> {{ t('botShop.fields.delivery_enabled') }}</label>
     <p>{{ t('botShop.pauseHelp') }}</p>
+    <fieldset class="form-grid" data-testid="shop-flows">
+      <legend>{{ t('botShop.flows') }}</legend>
+      <p>{{ t('botShop.flowHelp') }}</p>
+      <label><input v-model="draft.flows.catalogue" data-testid="shop-flow-catalogue" type="checkbox" /> {{ t('botShop.fields.flow_catalogue') }}</label>
+      <label><input v-model="draft.flows.wallet" data-testid="shop-flow-wallet" type="checkbox" /> {{ t('botShop.fields.flow_wallet') }}</label>
+      <label><input v-model="draft.flows.orders" data-testid="shop-flow-orders" type="checkbox" /> {{ t('botShop.fields.flow_orders') }}</label>
+      <label><input v-model="draft.flows.help" data-testid="shop-flow-help" type="checkbox" /> {{ t('botShop.fields.flow_help') }}</label>
+    </fieldset>
     <label class="field"><span>{{ t('botShop.fields.locale') }}</span><select v-model="draft.locale" data-testid="shop-locale"><option v-for="locale in locales" :key="locale.key" :value="locale.key">{{ locale.label }}</option></select></label>
     <details><summary data-testid="shop-advanced">{{ t('botShop.advanced') }}</summary><div class="form-grid">
       <label v-for="field in numericFields" :key="field" class="field"><span>{{ t(`botShop.fields.${field}`) }}</span><input v-model.number="draft[field]" :data-testid="`shop-${field}`" type="number" min="1" max="2147483647" step="1" required /></label>

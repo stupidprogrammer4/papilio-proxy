@@ -107,6 +107,7 @@ DEFAULT_TEXTS: ShopTextCatalog = {
         "menu_button": "Main menu",
         "orders": "Your purchases · page $page",
         "empty": "There are no items on this page.",
+        "unavailable": "This option is not available right now.",
     },
     "fa": {
         "welcome": "$name، خوش آمدید. یک گزینه را انتخاب کنید.",
@@ -153,6 +154,7 @@ DEFAULT_TEXTS: ShopTextCatalog = {
         "menu_button": "منوی اصلی",
         "orders": "خریدهای شما · صفحه $page",
         "empty": "در این صفحه موردی وجود ندارد.",
+        "unavailable": "این گزینه در حال حاضر در دسترس نیست.",
     },
     "ru": {
         "welcome": "Добро пожаловать, $name. Выберите действие.",
@@ -201,6 +203,7 @@ DEFAULT_TEXTS: ShopTextCatalog = {
         "menu_button": "Главное меню",
         "orders": "Ваши покупки · страница $page",
         "empty": "На этой странице нет записей.",
+        "unavailable": "Сейчас этот пункт недоступен.",
     },
     "zh": {
         "welcome": "欢迎，$name。请选择一项操作。",
@@ -244,6 +247,7 @@ DEFAULT_TEXTS: ShopTextCatalog = {
         "menu_button": "主菜单",
         "orders": "您的购买 · 第 $page 页",
         "empty": "此页没有记录。",
+        "unavailable": "此选项目前不可用。",
     },
 }
 
@@ -260,6 +264,23 @@ def complete_texts(values: dict[str, dict[str, str]]) -> ShopTextCatalog:
 
 
 @dataclass(frozen=True)
+class ShopFlows:
+    catalogue: bool = True
+    wallet: bool = True
+    orders: bool = True
+    help: bool = True
+
+
+def default_shop_flows() -> dict[str, bool]:
+    return {
+        "catalogue": ShopFlows.catalogue,
+        "wallet": ShopFlows.wallet,
+        "orders": ShopFlows.orders,
+        "help": ShopFlows.help,
+    }
+
+
+@dataclass(frozen=True)
 class ShopDefinition:
     public_origin: str = ""
     enabled: bool = False
@@ -272,6 +293,7 @@ class ShopDefinition:
     confirmation_ttl_seconds: int = 900
     ambiguous_delivery: str = "hold"
     texts: ShopTextCatalog = field(default_factory=default_texts)
+    flows: ShopFlows = field(default_factory=ShopFlows)
 
 
 @dataclass(frozen=True)

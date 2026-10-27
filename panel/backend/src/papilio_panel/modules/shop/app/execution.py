@@ -144,20 +144,29 @@ class ShopExecution:
         command = (message.callback_data or message.text).strip() if message is not None else ""
         parts = command.split(maxsplit=1)
         if parts and parts[0] == "/topup":
-            amount = MoneyAmountField(min_value=1).run_validation(
-                parts[1] if len(parts) == 2 else ""
-            )
-            self.funding.issue(context, work_id, amount)
-            return
-        action, _, argument = command.partition(":")
-        if action == "offer":
-            product_id = serializers.UUIDField().run_validation(argument)
-            rendered = self.purchases.select(context, work_id, product_id)
-        elif action == "buy":
-            confirmation_id = serializers.UUIDField().run_validation(argument)
-            rendered = self.purchases.confirm(context, confirmation_id)
+            if context.settings.definition.flows.help:
+                amount = MoneyAmountField(min_value=1).run_validation(
+                    parts[1] if len(parts) == 2 else ""
+                )
+                self.funding.issue(context, work_id, amount)
+                return
+            rendered = reply(context.settings.definition, "unavailable")
         else:
-            rendered = self.menus.response(context)
+            action, _, argument = command.partition(":")
+            if action == "offer":
+                if context.settings.definition.flows.catalogue:
+                    product_id = serializers.UUIDField().run_validation(argument)
+                    rendered = self.purchases.select(context, work_id, product_id)
+                else:
+                    rendered = reply(context.settings.definition, "unavailable")
+            elif action == "buy":
+                if context.settings.definition.flows.catalogue:
+                    confirmation_id = serializers.UUIDField().run_validation(argument)
+                    rendered = self.purchases.confirm(context, confirmation_id)
+                else:
+                    rendered = reply(context.settings.definition, "unavailable")
+            else:
+                rendered = self.menus.response(context)
         self.messages.append(
             ReplyWrite(context.event.id, context.event.bot.id, context.customer.owner_id, rendered)
         )

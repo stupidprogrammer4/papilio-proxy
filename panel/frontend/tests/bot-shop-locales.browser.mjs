@@ -19,6 +19,7 @@ const definition = {
   max_attempts: 5,
   confirmation_ttl_seconds: 900,
   ambiguous_delivery: "hold",
+  flows: { catalogue: true, wallet: true, orders: true, help: true },
   texts: Object.fromEntries(["en", "fa", "ru", "zh"].map(locale => [locale, {
     welcome: `${locale} welcome $name`,
     wallet_button: `${locale} wallet`,
@@ -92,11 +93,14 @@ try {
   await page.getByTestId("shop-text-locale").selectOption("zh");
   await page.getByTestId("shop-text-wallet_button").fill("修改后的钱包按钮");
   await page.getByTestId("shop-locale").selectOption("zh");
+  await page.getByTestId("shop-flow-catalogue").uncheck();
+  await page.getByTestId("shop-flow-wallet").uncheck();
   const response = page.waitForResponse(result => result.url().endsWith(`/api/v1/bots/${botId}/shop`) && result.request().method() === "PUT");
   await page.getByTestId("shop-save").click();
   assert.equal((await response).status(), 200);
   assert.equal(savedBody.expected_revision, "7");
   assert.equal(savedBody.locale, "zh");
+  assert.deepEqual(savedBody.flows, { catalogue: false, wallet: false, orders: true, help: true });
   assert.equal(savedBody.texts.en.welcome, "en welcome $name");
   assert.equal(savedBody.texts.fa.welcome, "fa welcome $name");
   assert.equal(savedBody.texts.ru.welcome, "Изменённый текст $name");

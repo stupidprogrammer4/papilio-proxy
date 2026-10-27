@@ -96,3 +96,61 @@ def test_native_scheduler_registers_customer_and_delivers_private_menu_and_walle
         until(lambda: client.get(sentinel["status_url"]).json()["status"] == "succeeded")
         assert ShopCustomer.objects.count() == 1
         assert OutgoingMessage.objects.filter(event_id=work.event_id).count() == 1
+
+
+@pytest.mark.timeout(75)
+def test_native_worker_hides_and_rejects_disabled_shop_flows(runtime: None) -> None:
+    server = TelegramServer()
+    with server.running() as address:
+        client = owner_client()
+        created = client.post(
+            "/api/v1/bots",
+            bot_input()
+            | {
+                "runtime": {
+                    "api_base_url": address,
+                    "poll_timeout_seconds": 1,
+                    "http_timeout_seconds": 6,
+                },
+                "schedule": {"enabled": True, "interval_seconds": 1},
+            },
+            format="json",
+        )
+        assert created.status_code == 202
+        bot = created.json()
+        definition = client.get("/api/v1/bot-shop-defaults").json() | {
+            "enabled": True,
+            "locale": "en",
+            "public_origin": "http://panel.example.invalid",
+            "flows": {"catalogue": False, "wallet": False, "orders": True, "help": False},
+        }
+        assert (
+            client.post(f"/api/v1/bots/{bot['id']}/shop", definition, format="json").status_code
+            == 201
+        )
+        until(lambda: client.get(f"/api/v1/bots/{bot['id']}").json()["verified"] is True)
+        server.push(40, "/start", chat_id=987655)
+        until(lambda: any(values["chat_id"] == 987655 for _, values in server.messages), timeout=12)
+        welcome = next(values for _, values in server.messages if values["chat_id"] == 987655)
+        callbacks = {
+            button["callback_data"]
+            for row in welcome["reply_markup"]["inline_keyboard"]
+            for button in row
+        }
+        assert "wallet" not in callbacks and "catalogue:1" not in callbacks
+
+        server.push(41, "/wallet", chat_id=987655)
+        until(
+            lambda: any("not available" in values["text"] for _, values in server.messages),
+            timeout=12,
+        )
+        server.push(42, "/products", chat_id=987655)
+        until(
+            lambda: sum("not available" in values["text"] for _, values in server.messages) == 2,
+            timeout=12,
+        )
+        server.push(43, "/topup 100", chat_id=987655)
+        until(
+            lambda: sum("not available" in values["text"] for _, values in server.messages) == 3,
+            timeout=12,
+        )

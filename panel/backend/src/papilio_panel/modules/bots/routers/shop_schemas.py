@@ -2,7 +2,19 @@
 
 from rest_framework import serializers
 
-from papilio_panel.modules.shop.domain import SHOP_LOCALES, ShopDefinition, default_texts
+from papilio_panel.modules.shop.domain import (
+    SHOP_LOCALES,
+    ShopDefinition,
+    default_shop_flows,
+    default_texts,
+)
+
+
+class ShopFlowsSerializer(serializers.Serializer):
+    catalogue = serializers.BooleanField()
+    wallet = serializers.BooleanField()
+    orders = serializers.BooleanField()
+    help = serializers.BooleanField()
 
 
 class ShopDefinitionSerializer(serializers.Serializer):
@@ -32,6 +44,7 @@ class ShopDefinitionSerializer(serializers.Serializer):
         ),
         default=default_texts,
     )
+    flows = ShopFlowsSerializer(default=default_shop_flows)
 
 
 class ShopReplacementSerializer(ShopDefinitionSerializer):
@@ -50,6 +63,7 @@ class ShopReplacementSerializer(ShopDefinitionSerializer):
             child=serializers.CharField(max_length=4096, trim_whitespace=False)
         )
     )
+    flows = ShopFlowsSerializer(required=False)
 
 
 class ShopSettingsSerializer(serializers.Serializer):

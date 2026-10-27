@@ -19,7 +19,7 @@ function copy(values: BotShopDefinition): BotShopDefinition {
   const texts = Object.fromEntries(
     Object.entries(values.texts).map(([locale, messages]) => [locale, { ...messages }]),
   ) as BotShopDefinition["texts"];
-  return { ...values, texts };
+  return { ...values, texts, flows: { ...values.flows } };
 }
 async function perform(action: () => Promise<void>): Promise<void> {
   if (busy.value) return;

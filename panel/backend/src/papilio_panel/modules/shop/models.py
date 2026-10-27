@@ -5,7 +5,7 @@ import uuid
 from django.conf import settings
 from django.db import models
 
-from .domain import MessageState, ShopDefinition, WorkState, default_texts
+from .domain import MessageState, ShopDefinition, WorkState, default_shop_flows, default_texts
 
 
 class ShopConfiguration(models.Model):
@@ -27,6 +27,7 @@ class ShopConfiguration(models.Model):
     )
     ambiguous_delivery = models.CharField(max_length=5, default=ShopDefinition.ambiguous_delivery)
     texts = models.JSONField(default=default_texts)
+    flows = models.JSONField(default=default_shop_flows)
 
 
 class ShopCustomer(models.Model):

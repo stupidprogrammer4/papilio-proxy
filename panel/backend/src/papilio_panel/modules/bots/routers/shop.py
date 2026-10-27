@@ -7,7 +7,12 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from papilio_panel.modules.shop.domain import ShopDefinition, ShopSettingsChange, ShopSettingsCreate
+from papilio_panel.modules.shop.domain import (
+    ShopDefinition,
+    ShopFlows,
+    ShopSettingsChange,
+    ShopSettingsCreate,
+)
 from papilio_panel.modules.shop.providers import control
 
 from .bots import actor_id
@@ -52,6 +57,7 @@ class BotShopView(APIView):
             values["confirmation_ttl_seconds"],
             values["ambiguous_delivery"],
             values["texts"],
+            ShopFlows(**values["flows"]),
         )
         result = control.create(ShopSettingsCreate(actor_id(request), bot_id, definition))
         return Response(ShopSettingsSerializer(result).data, status=201)
@@ -65,6 +71,12 @@ class BotShopView(APIView):
         serializer = ShopReplacementSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         values = serializer.validated_data
+        actor = actor_id(request)
+        flows = (
+            ShopFlows(**values["flows"])
+            if "flows" in values
+            else control.read(bot_id, actor).definition.flows
+        )
         definition = ShopDefinition(
             values["public_origin"],
             values["enabled"],
@@ -77,10 +89,9 @@ class BotShopView(APIView):
             values["confirmation_ttl_seconds"],
             values["ambiguous_delivery"],
             values["texts"],
+            flows,
         )
         result = control.change(
-            ShopSettingsChange(
-                actor_id(request), bot_id, int(values["expected_revision"]), definition
-            )
+            ShopSettingsChange(actor, bot_id, int(values["expected_revision"]), definition)
         )
         return Response(ShopSettingsSerializer(result).data)
