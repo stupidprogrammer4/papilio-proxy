@@ -39,6 +39,7 @@ def private_local_bootstrap():
         None,
         None,
         None,
+        1,
     )
     definition = LocalDefinition(
         NodeDefinition(node.name, node.endpoint_url, runtime),
