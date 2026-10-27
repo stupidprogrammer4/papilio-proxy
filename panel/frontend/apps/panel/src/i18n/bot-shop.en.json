@@ -12,7 +12,7 @@
   "retryHelp": "Retry delay and attempt limits apply separately to each outgoing reply and receipt preparation. Set attempts to 1 to disable automatic retries. An uncertain send can duplicate a message; it does not repeat a wallet credit or purchase. Lease duration should cover the bot's HTTP timeout.",
   "texts": "Messages and button labels",
   "textLocale": "Template language",
-  "templateHelp": "Edit English and Persian separately. Use plain text and the placeholders below; write $$ for a literal dollar sign. Final rendered messages must fit Telegram's limit. Internal owner audit notes are not customer templates.",
+  "templateHelp": "Edit Persian, English, Russian and Chinese separately. Use plain text and the placeholders below; write $$ for a literal dollar sign. Final rendered messages must fit Telegram's limit. Internal owner audit notes are not customer templates.",
   "scheduleHelp": "Polling timing is configured above. The shared shop delivery schedule can be paused or changed in Overview. Disabling it affects all shops in this installation.",
   "schedules": "Open schedules",
   "fields": {

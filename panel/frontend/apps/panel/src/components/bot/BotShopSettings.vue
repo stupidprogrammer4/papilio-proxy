@@ -16,7 +16,10 @@ const endpoint = `/v1/bots/${props.botId}/shop`;
 onBeforeUnmount(() => lifetime.abort());
 
 function copy(values: BotShopDefinition): BotShopDefinition {
-  return { ...values, texts: { en: { ...values.texts.en }, fa: { ...values.texts.fa } } };
+  const texts = Object.fromEntries(
+    Object.entries(values.texts).map(([locale, messages]) => [locale, { ...messages }]),
+  ) as BotShopDefinition["texts"];
+  return { ...values, texts };
 }
 async function perform(action: () => Promise<void>): Promise<void> {
   if (busy.value) return;

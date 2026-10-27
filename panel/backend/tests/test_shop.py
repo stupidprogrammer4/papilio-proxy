@@ -55,6 +55,44 @@ def test_shop_settings_are_owned_complete_and_persist_operator_choices() -> None
     assert client.get(f"/api/v1/bots/{uuid4()}/shop").status_code == 404
 
 
+def test_shop_settings_add_new_locales_without_replacing_existing_texts() -> None:
+    from papilio_panel.modules.shop.models import ShopConfiguration
+
+    client = owner_client("localized-shop-owner")
+    bot = shop_bot(client)
+    root = f"/api/v1/bots/{bot['id']}/shop"
+    definition = client.get("/api/v1/bot-shop-defaults").json() | {
+        "public_origin": "https://shop.example.invalid",
+        "enabled": True,
+        "locale": "en",
+    }
+    assert client.post(root, definition, format="json").status_code == 201
+    legacy_texts = {
+        "en": definition["texts"]["en"] | {"welcome": "Existing English $name"},
+        "fa": definition["texts"]["fa"] | {"welcome": "متن فارسی ذخیره‌شده $name"},
+    }
+    ShopConfiguration.objects.filter(bot_id=bot["id"]).update(texts=legacy_texts)
+
+    response = client.get(root)
+    assert response.status_code == 200
+    saved = response.json()["definition"]
+    assert set(saved["texts"]) == {"en", "fa", "ru", "zh"}
+    assert saved["texts"]["en"]["welcome"] == "Existing English $name"
+    assert saved["texts"]["fa"]["welcome"] == "متن فارسی ذخیره‌شده $name"
+
+    saved["locale"] = "zh"
+    saved["texts"]["zh"]["welcome"] = "已保存的中文 $name"
+    changed = client.put(
+        root, {"expected_revision": response.json()["revision"], **saved}, format="json"
+    )
+    assert changed.status_code == 200
+    persisted = changed.json()["definition"]["texts"]
+    assert set(persisted) == {"en", "fa", "ru", "zh"}
+    assert persisted["en"]["welcome"] == "Existing English $name"
+    assert persisted["fa"]["welcome"] == "متن فارسی ذخیره‌شده $name"
+    assert persisted["zh"]["welcome"] == "已保存的中文 $name"
+
+
 def test_shop_schedule_reinitialization_preserves_operator_pause_and_interval() -> None:
     from papilio_panel.modules.shop.infra.schedules import initialize_shop
 

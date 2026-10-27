@@ -4,12 +4,17 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 from uuid import UUID
 
 from papilio_panel.modules.bots.domain import BotEventRead, TelegramReply
 from papilio_panel.modules.customers.domain import CustomerRead
 from papilio_panel.modules.payments.domain import ReceiptContent
 from papilio_panel.shared.errors import Conflict
+
+type ShopLocale = Literal["en", "fa", "ru", "zh"]
+type ShopTextCatalog = dict[ShopLocale, dict[str, str]]
+SHOP_LOCALES: tuple[ShopLocale, ...] = ("en", "fa", "ru", "zh")
 
 
 class ReceiptDownloadFailure(Conflict):
@@ -54,7 +59,7 @@ class RecoveryAction(StrEnum):
 RECOVERY_ACTION_CHOICES = tuple((action.value, action.value) for action in RecoveryAction)
 
 
-DEFAULT_TEXTS = {
+DEFAULT_TEXTS: ShopTextCatalog = {
     "en": {
         "welcome": "Welcome, $name. Choose an action.",
         ("help"): (
@@ -149,11 +154,109 @@ DEFAULT_TEXTS = {
         "orders": "خریدهای شما · صفحه $page",
         "empty": "در این صفحه موردی وجود ندارد.",
     },
+    "ru": {
+        "welcome": "Добро пожаловать, $name. Выберите действие.",
+        "help": (
+            "Выберите товар, проверьте цену и подтвердите покупку из кошелька. Чтобы "
+            "пополнить баланс, отправьте /topup и сумму в риалах. Ответьте на счёт "
+            "фотографией чека или отправьте /receipt ID_СЧЁТА НОМЕР_ПЕРЕВОДА. Средства "
+            "зачисляются только после проверки оператором."
+        ),
+        "catalogue": "Товары · страница $page",
+        "wallet": "Баланс кошелька: $balance IRR (риалов).",
+        "offer": (
+            "$product\nЦена: $amount IRR (риалов). Подтвердите покупку из кошелька. "
+            "Начальный сервис — безлимитный VLESS/TCP без TLS. Если условия изменились, "
+            "выберите товар заново."
+        ),
+        "invoice": (
+            "Счёт на оплату: $invoice_id\nТочная сумма: $amount IRR (риалов)\n"
+            "Владелец счёта: $name\nСчёт получателя: $destination\nСтатус: $status\n"
+            "Ответьте на это сообщение фотографией чека или отправьте /receipt "
+            "$invoice_id НОМЕР_ПЕРЕВОДА."
+        ),
+        "receipt": "Платёжные данные получены и ожидают проверки. Счёт: $invoice_id",
+        "paid": "Платёж подтверждён: $amount IRR зачислено один раз. Счёт: $invoice_id",
+        "queued": (
+            "Покупка зарегистрирована: $order_id\nСумма: $amount IRR. Подготовка сервиса "
+            "продолжается в фоне. После завершения нажмите кнопку статуса, чтобы получить "
+            "подписку."
+        ),
+        "order": "Заказ: $order_id\nСумма: $amount IRR\nСтатус сервиса: $status",
+        "subscription": "Ваша приватная подписка:\n$url",
+        "error": "Не удалось выполнить действие: $reason",
+        "admin_receipt": (
+            "Чек ожидает проверки. Счёт: $invoice_id\nСумма: $amount IRR\nНомер "
+            "перевода: $reference\nОткройте панель, чтобы просмотреть чек и проверить "
+            "перевод:\n$url"
+        ),
+        "products_button": "Товары",
+        "wallet_button": "Кошелёк",
+        "help_button": "Пополнение и помощь",
+        "orders_button": "Мои покупки",
+        "next_button": "Следующая страница",
+        "previous_button": "Предыдущая страница",
+        "buy_button": "Подтвердить покупку",
+        "status_button": "Статус сервиса / подписка",
+        "menu_button": "Главное меню",
+        "orders": "Ваши покупки · страница $page",
+        "empty": "На этой странице нет записей.",
+    },
+    "zh": {
+        "welcome": "欢迎，$name。请选择一项操作。",
+        "help": (
+            "选择商品，查看价格并确认使用钱包购买。充值请发送 /topup 和里亚尔金额。"
+            "请回复账单发送收据照片，或发送 /receipt 账单编号 转账参考号。只有管理员"
+            "核实付款后才会入账。"
+        ),
+        "catalogue": "商品 · 第 $page 页",
+        "wallet": "钱包余额：$balance IRR（里亚尔）。",
+        "offer": (
+            "$product\n价格：$amount IRR（里亚尔）。确认后使用钱包购买。当前服务为不限量 "
+            "VLESS/TCP，无 TLS。如条款已变更，请重新选择商品。"
+        ),
+        "invoice": (
+            "付款账单：$invoice_id\n准确金额：$amount IRR（里亚尔）\n账户持有人：$name\n"
+            "收款账户：$destination\n状态：$status\n请回复此消息发送收据照片，或发送 "
+            "/receipt $invoice_id 转账参考号。"
+        ),
+        "receipt": "付款凭证已收到，等待审核。账单：$invoice_id",
+        "paid": "付款已确认：$amount IRR 已一次性入账。账单：$invoice_id",
+        "queued": (
+            "购买已记录：$order_id\n金额：$amount IRR。服务正在后台配置。完成后请点击状态"
+            "按钮获取订阅。"
+        ),
+        "order": "订单：$order_id\n金额：$amount IRR\n服务状态：$status",
+        "subscription": "您的专属订阅：\n$url",
+        "error": "操作未能完成：$reason",
+        "admin_receipt": (
+            "收据等待审核。账单：$invoice_id\n金额：$amount IRR\n转账参考号：$reference\n"
+            "请打开管理面板查看收据并核实转账：\n$url"
+        ),
+        "products_button": "商品",
+        "wallet_button": "钱包",
+        "help_button": "充值与帮助",
+        "orders_button": "我的购买",
+        "next_button": "下一页",
+        "previous_button": "上一页",
+        "buy_button": "确认购买",
+        "status_button": "服务状态 / 订阅",
+        "menu_button": "主菜单",
+        "orders": "您的购买 · 第 $page 页",
+        "empty": "此页没有记录。",
+    },
 }
 
 
-def default_texts() -> dict[str, dict[str, str]]:
+def default_texts() -> ShopTextCatalog:
     return deepcopy(DEFAULT_TEXTS)
+
+
+def complete_texts(values: dict[str, dict[str, str]]) -> ShopTextCatalog:
+    texts = default_texts()
+    for locale in SHOP_LOCALES:
+        texts[locale].update(values.get(locale, {}))
+    return texts
 
 
 @dataclass(frozen=True)
@@ -161,14 +264,14 @@ class ShopDefinition:
     public_origin: str = ""
     enabled: bool = False
     delivery_enabled: bool = True
-    locale: str = "fa"
+    locale: ShopLocale = "fa"
     page_size: int = 10
     retry_seconds: int = 30
     lease_seconds: int = 120
     max_attempts: int = 5
     confirmation_ttl_seconds: int = 900
     ambiguous_delivery: str = "hold"
-    texts: dict[str, dict[str, str]] = field(default_factory=default_texts)
+    texts: ShopTextCatalog = field(default_factory=default_texts)
 
 
 @dataclass(frozen=True)

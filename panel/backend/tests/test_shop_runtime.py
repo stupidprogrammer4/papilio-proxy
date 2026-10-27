@@ -15,8 +15,17 @@ pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.runtime]
 
 
 @pytest.mark.timeout(75)
+@pytest.mark.parametrize(
+    ("locale", "welcome_prefix", "wallet_prefix"),
+    [
+        ("en", "Welcome,", "Wallet:"),
+        ("fa", "987654، خوش آمدید", "موجودی کیف پول:"),
+        ("ru", "Добро пожаловать", "Баланс кошелька:"),
+        ("zh", "欢迎", "钱包余额："),
+    ],
+)
 def test_native_scheduler_registers_customer_and_delivers_private_menu_and_wallet(
-    runtime: None,
+    runtime: None, locale: str, welcome_prefix: str, wallet_prefix: str
 ) -> None:
     server = TelegramServer()
     with server.running() as address:
@@ -38,7 +47,7 @@ def test_native_scheduler_registers_customer_and_delivers_private_menu_and_walle
         bot = created.json()
         definition = client.get("/api/v1/bot-shop-defaults").json() | {
             "enabled": True,
-            "locale": "en",
+            "locale": locale,
             "public_origin": "http://panel.example.invalid",
         }
         assert (
@@ -49,7 +58,7 @@ def test_native_scheduler_registers_customer_and_delivers_private_menu_and_walle
         server.push(30, "/start", chat_id=987654)
         until(lambda: any(values["chat_id"] == 987654 for _, values in server.messages), timeout=12)
         menu = next(values for _, values in server.messages if values["chat_id"] == 987654)
-        assert menu["text"].startswith("Welcome")
+        assert menu["text"].startswith(welcome_prefix)
         assert any(
             button["callback_data"] == "wallet"
             for row in menu["reply_markup"]["inline_keyboard"]
@@ -63,7 +72,10 @@ def test_native_scheduler_registers_customer_and_delivers_private_menu_and_walle
         assert b"Welcome" not in bytes(message.payload_ciphertext)
         server.push(31, "/wallet", chat_id=987654)
         until(
-            lambda: any("Wallet: 0 IRR" in values["text"] for _, values in server.messages),
+            lambda: any(
+                wallet_prefix in values["text"] and "0" in values["text"]
+                for _, values in server.messages
+            ),
             timeout=12,
         )
         assert (

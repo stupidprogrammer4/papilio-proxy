@@ -1,5 +1,5 @@
 /** Shared per-bot shop policy; revision values use exact decimal strings. */
-export type ShopLocale = "en" | "fa";
+export type ShopLocale = "en" | "fa" | "ru" | "zh";
 export interface BotShopDefinition {
   public_origin: string;
   enabled: boolean;

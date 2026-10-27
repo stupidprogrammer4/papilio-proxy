@@ -43,6 +43,10 @@ export async function exerciseBotShopSettings(page, base) {
   await page.getByTestId("shop-text-wallet_button").fill("My balance");
   await page.getByTestId("shop-text-locale").selectOption("fa");
   await page.getByTestId("shop-text-welcome").fill("فروشگاه $name");
+  await page.getByTestId("shop-text-locale").selectOption("ru");
+  await page.getByTestId("shop-text-welcome").fill("Магазин $name");
+  await page.getByTestId("shop-text-locale").selectOption("zh");
+  await page.getByTestId("shop-text-welcome").fill("商店 $name");
   const saved = await save(page, first.id, "POST");
   assert.equal(saved.status(), 201);
   const initial = await saved.json();
@@ -52,6 +56,8 @@ export async function exerciseBotShopSettings(page, base) {
   assert.equal(initial.definition.ambiguous_delivery, "retry");
   assert.equal(initial.definition.texts.en.welcome, "Private shop $name");
   assert.equal(initial.definition.texts.fa.welcome, "فروشگاه $name");
+  assert.equal(initial.definition.texts.ru.welcome, "Магазин $name");
+  assert.equal(initial.definition.texts.zh.welcome, "商店 $name");
   assert.equal(initial.definition.texts.en.wallet_button, "My balance");
   await expect(page.getByTestId("shop-settings").locator("textarea")).toHaveCount(Object.keys(initial.definition.texts.fa).length);
   await page.getByTestId("shop-text-welcome").fill("$unsupported_placeholder");

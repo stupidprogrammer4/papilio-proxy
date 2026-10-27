@@ -7,7 +7,13 @@ from django.db.models import F
 
 from papilio_panel.shared.errors import Conflict, Missing
 
-from ..domain import ShopDefinition, ShopSettingsChange, ShopSettingsCreate, ShopSettingsRead
+from ..domain import (
+    ShopDefinition,
+    ShopSettingsChange,
+    ShopSettingsCreate,
+    ShopSettingsRead,
+    complete_texts,
+)
 from ..models import ShopConfiguration
 
 
@@ -27,7 +33,7 @@ def settings_read(row: ShopConfiguration) -> ShopSettingsRead:
             row.max_attempts,
             row.confirmation_ttl_seconds,
             row.ambiguous_delivery,
-            row.texts,
+            complete_texts(row.texts),
         ),
     )
 

@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 from papilio_panel.shared.errors import InvalidInput
 from papilio_panel.shared.money import MAX_MONEY_MINOR
 
-from ..domain import DEFAULT_TEXTS, ShopDefinition, ShopTextContext
+from ..domain import DEFAULT_TEXTS, SHOP_LOCALES, ShopDefinition, ShopTextCatalog, ShopTextContext
 
 
 def definition(values: ShopDefinition, max_page_size: int) -> None:
@@ -45,11 +45,12 @@ def definition(values: ShopDefinition, max_page_size: int) -> None:
     texts(values.texts)
 
 
-def texts(values: dict[str, dict[str, str]]) -> None:
-    if set(values) != set(DEFAULT_TEXTS):
-        raise InvalidInput("Provide the complete English and Persian shop text catalogues.")
+def texts(values: ShopTextCatalog) -> None:
+    if set(values) != set(SHOP_LOCALES):
+        raise InvalidInput("Provide the complete supported shop text catalogues.")
     allowed = {item.name for item in fields(ShopTextContext)}
-    for locale, messages in values.items():
+    for locale in SHOP_LOCALES:
+        messages = values[locale]
         if set(messages) != set(DEFAULT_TEXTS[locale]):
             raise InvalidInput("Provide every supported shop message and button label.")
         for value in messages.values():
